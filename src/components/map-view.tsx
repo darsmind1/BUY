@@ -55,9 +55,9 @@ const walkingPathOptions = {
 };
 
 const transitPathOptions = {
-    strokeColor: 'hsl(var(--accent))',
-    strokeOpacity: 0.8,
-    strokeWeight: 6
+    strokeColor: '#4285F4', // Un color azul más profesional
+    strokeOpacity: 0.9,
+    strokeWeight: 5
 };
 
 
