@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { Bus, ArrowLeft, Loader2 } from 'lucide-react';
+import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
 import RouteOptionsList from '@/components/route-options-list';
@@ -20,7 +21,7 @@ const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute & { routeIndex?: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -48,11 +49,15 @@ export default function Home() {
           setDirectionsResponse(result);
           setView('options');
         } else {
-          console.error(`error fetching directions ${result}`);
+          console.error(`Error fetching directions, status: ${status}`);
+          let description = "No se pudo calcular la ruta. Intenta con otras direcciones.";
+          if (status === 'NOT_FOUND' || status === 'ZERO_RESULTS') {
+            description = "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.";
+          }
           toast({
             variant: "destructive",
             title: "Error al buscar ruta",
-            description: "No se encontraron rutas de ómnibus para el origen y destino ingresados.",
+            description: description,
           });
         }
       }
@@ -128,7 +133,7 @@ export default function Home() {
         <div className="flex-1 hidden md:block">
            <MapView 
             directionsResponse={directionsResponse} 
-            selectedRouteIndex={selectedRoute ? (selectedRoute as any).routeIndex : 0}
+            selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex : 0}
           />
         </div>
       </div>
