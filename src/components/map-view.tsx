@@ -1,10 +1,12 @@
 
 "use client";
 
-import { GoogleMap, MarkerF, Polyline } from '@react-google-maps/api';
-import React, { useEffect, useRef } from 'react';
+import { GoogleMap, MarkerF, Polyline, useJsApiLoader } from '@react-google-maps/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface MapViewProps {
+  isLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
   selectedRouteIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
@@ -38,8 +40,16 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-export default function MapView({ directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
+
+  const onLoad = React.useCallback(function callback(map: google.maps.Map) {
+    mapRef.current = map;
+  }, [])
+
+  const onUnmount = React.useCallback(function callback(map: google.maps.Map) {
+    mapRef.current = null;
+  }, [])
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -68,29 +78,16 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
   }, [directionsResponse, selectedRouteIndex, userLocation]);
 
 
+  if (!isLoaded) {
+    return (
+      <div className="w-full h-full bg-muted flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
   
-  const walkingPathOptions = {
-      strokeOpacity: 0,
-      strokeWeight: 2,
-      icons: [{
-          icon: {
-              path: 'M 0,-1 0,1',
-              strokeColor: '#4285F4',
-              strokeOpacity: 1,
-              scale: 3
-          },
-          offset: '0',
-          repeat: '15px'
-      }],
-  };
-
-  const transitPathOptions = {
-      strokeColor: '#4285F4',
-      strokeOpacity: 0.9,
-      strokeWeight: 5
-  };
-
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
         <GoogleMap
@@ -98,7 +95,8 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
           center={defaultCenter}
           zoom={13}
           options={mapOptions}
-          onLoad={(map) => { mapRef.current = map; }}
+          onLoad={onLoad}
+          onUnmount={onUnmount}
         >
           {userLocation && (
              <MarkerF 
@@ -117,13 +115,36 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
 
           {selectedRoute && selectedRoute.legs[0] && (
             <>
-                {selectedRoute.legs[0].steps.map((step, index) => (
+                {selectedRoute.legs[0].steps.map((step, index) => {
+                  const walkingPathOptions = {
+                      strokeOpacity: 0,
+                      strokeWeight: 2,
+                      icons: [{
+                          icon: {
+                              path: 'M 0,-1 0,1',
+                              strokeColor: '#4285F4',
+                              strokeOpacity: 1,
+                              scale: 3
+                          },
+                          offset: '0',
+                          repeat: '15px'
+                      }],
+                  };
+
+                  const transitPathOptions = {
+                      strokeColor: '#4285F4',
+                      strokeOpacity: 0.9,
+                      strokeWeight: 5
+                  };
+
+                  return (
                     <Polyline
                         key={index}
                         path={step.path}
                         options={step.travel_mode === 'WALKING' ? walkingPathOptions : transitPathOptions}
                     />
-                ))}
+                  )
+                })}
 
                 <MarkerF position={selectedRoute.legs[0].start_location} title="Origen" />
                 <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />

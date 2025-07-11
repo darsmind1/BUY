@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bus, ArrowLeft, Loader2 } from 'lucide-react';
 import React from 'react';
 
@@ -11,7 +11,7 @@ import RouteDetailsPanel from '@/components/route-details-panel';
 import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { LoadScript, useJsApiLoader } from '@react-google-maps/api';
+import { useJsApiLoader } from '@react-google-maps/api';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -146,17 +146,12 @@ export default function Home() {
         </aside>
         
         <div className="flex-1 hidden md:block">
-           {isLoaded ? (
             <MapView 
+              isLoaded={isLoaded}
               directionsResponse={directionsResponse} 
               selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex : 0}
               userLocation={currentUserLocation}
             />
-           ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-           )}
         </div>
       </div>
   );
