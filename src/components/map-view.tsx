@@ -46,9 +46,7 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
 
     if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
-        if (userLocation) {
-          bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
-        }
+        
         directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
             leg.steps.forEach(step => {
                 step.path.forEach(point => {
@@ -56,7 +54,14 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
                 });
             });
         });
+
+        // Ensure user location is included in bounds if it exists
+        if (userLocation) {
+            bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
+        }
+        
         mapRef.current.fitBounds(bounds);
+
     } else if (userLocation) {
         mapRef.current.panTo(userLocation);
         mapRef.current.setZoom(15);
