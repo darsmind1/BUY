@@ -64,12 +64,12 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
 
   const walkingPathOptions: google.maps.PolylineOptions = {
-      strokeColor: 'hsl(var(--primary))',
       strokeOpacity: 0,
       strokeWeight: 2,
       icons: [{
           icon: {
               path: 'M 0,-1 0,1',
+              strokeColor: '#4285F4',
               strokeOpacity: 1,
               scale: 3
           },
