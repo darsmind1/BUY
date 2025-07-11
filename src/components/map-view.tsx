@@ -44,7 +44,7 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
   useEffect(() => {
     if (!mapRef.current) return;
 
-    if (directionsResponse) {
+    if (directionsResponse && directionsResponse.routes.length > 0) {
         const bounds = new window.google.maps.LatLngBounds();
         
         directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
@@ -55,7 +55,6 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
             });
         });
 
-        // Ensure user location is included in bounds if it exists
         if (userLocation) {
             bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
         }
