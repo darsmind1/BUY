@@ -42,25 +42,24 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
   const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
-    if (userLocation && mapRef.current && !directionsResponse) {
-        mapRef.current.panTo(userLocation);
-        mapRef.current.setZoom(15);
-    }
-  }, [userLocation, directionsResponse]);
-  
-  useEffect(() => {
-    if (directionsResponse && mapRef.current) {
-        const bounds = new window.google.maps.LatLngBounds();
-        directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
-            leg.steps.forEach(step => {
-                step.path.forEach(point => {
-                    bounds.extend(point);
+    if (mapRef.current) {
+        if (directionsResponse) {
+            const bounds = new window.google.maps.LatLngBounds();
+            directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
+                leg.steps.forEach(step => {
+                    step.path.forEach(point => {
+                        bounds.extend(point);
+                    });
                 });
             });
-        });
-        mapRef.current.fitBounds(bounds);
+            mapRef.current.fitBounds(bounds);
+        } else if (userLocation) {
+            mapRef.current.panTo(userLocation);
+            mapRef.current.setZoom(15);
+        }
     }
-  }, [directionsResponse, selectedRouteIndex]);
+  }, [directionsResponse, selectedRouteIndex, userLocation]);
+
 
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
 
