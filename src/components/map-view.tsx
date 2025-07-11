@@ -1,12 +1,13 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer } from '@react-google-maps/api';
-import React, { useState, useEffect } from 'react';
+import { GoogleMap, DirectionsRenderer, MarkerF } from '@react-google-maps/api';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface MapViewProps {
   directionsResponse: google.maps.DirectionsResult | null;
   selectedRouteIndex: number;
+  userLocation: google.maps.LatLngLiteral | null;
 }
 
 const mapContainerStyle = {
@@ -14,7 +15,7 @@ const mapContainerStyle = {
   height: '100%',
 };
 
-const center = {
+const defaultCenter = {
   lat: -34.9011,
   lng: -56.1645
 };
@@ -37,21 +38,45 @@ const mapOptions = {
   },
 };
 
-export default function MapView({ directionsResponse, selectedRouteIndex }: MapViewProps) {
+export default function MapView({ directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(directionsResponse);
-  
+  const mapRef = useRef<google.maps.Map | null>(null);
+
   useEffect(() => {
     setDirections(directionsResponse);
   }, [directionsResponse]);
+
+  useEffect(() => {
+    if (userLocation && mapRef.current) {
+        mapRef.current.panTo(userLocation);
+        mapRef.current.setZoom(15);
+    }
+  }, [userLocation]);
+
 
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
-          center={center}
+          center={defaultCenter}
           zoom={13}
           options={mapOptions}
+          onLoad={(map) => { mapRef.current = map; }}
         >
+          {userLocation && (
+             <MarkerF 
+                position={userLocation}
+                title="Tu ubicación"
+                icon={{
+                    path: window.google.maps.SymbolPath.CIRCLE,
+                    scale: 7,
+                    fillColor: '#4285F4',
+                    fillOpacity: 1,
+                    strokeColor: 'white',
+                    strokeWeight: 2,
+                }}
+             />
+          )}
           {directions && (
              <DirectionsRenderer 
               directions={directions} 
@@ -62,7 +87,7 @@ export default function MapView({ directionsResponse, selectedRouteIndex }: MapV
                   strokeOpacity: 0.8,
                   strokeWeight: 6,
                 },
-                suppressMarkers: true, // We can add custom markers later
+                suppressMarkers: true,
               }}
             />
           )}

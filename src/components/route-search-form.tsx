@@ -10,9 +10,10 @@ import { useToast } from '@/hooks/use-toast';
 
 interface RouteSearchFormProps {
   onSearch: (origin: string, destination: string) => void;
+  onLocationObtained: (location: google.maps.LatLngLiteral) => void;
 }
 
-export default function RouteSearchForm({ onSearch }: RouteSearchFormProps) {
+export default function RouteSearchForm({ onSearch, onLocationObtained }: RouteSearchFormProps) {
   const [origin, setOrigin] = useState('Mi ubicación actual');
   const [destination, setDestination] = useState('');
   const { toast } = useToast();
@@ -29,6 +30,11 @@ export default function RouteSearchForm({ onSearch }: RouteSearchFormProps) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setOrigin('Mi ubicación actual');
+          const coords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          onLocationObtained(coords);
           toast({
             title: "Ubicación obtenida",
             description: "Se usará tu ubicación actual como punto de partida.",

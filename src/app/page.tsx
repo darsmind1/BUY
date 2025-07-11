@@ -23,18 +23,33 @@ export default function Home() {
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute & { routeIndex?: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const { toast } = useToast();
 
 
   const handleSearch = (origin: string, destination: string) => {
-    if (!origin || !destination) return;
+    let originParam: string | google.maps.LatLngLiteral = origin;
+    if (origin === 'Mi ubicación actual') {
+      if (!currentUserLocation) {
+        toast({
+            variant: "destructive",
+            title: "Error de ubicación",
+            description: "No se pudo obtener tu ubicación. Por favor, habilita los permisos e intenta de nuevo.",
+        });
+        return;
+      }
+      originParam = currentUserLocation;
+    }
 
+    if (!originParam || !destination) return;
+    
+    setDirectionsResponse(null);
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
     directionsService.route(
       {
-        origin: origin,
+        origin: originParam,
         destination: destination,
         travelMode: window.google.maps.TravelMode.TRANSIT,
         transitOptions: {
@@ -115,7 +130,7 @@ export default function Home() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               )}
-              {view === 'search' && <RouteSearchForm onSearch={handleSearch} />}
+              {view === 'search' && <RouteSearchForm onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} />}
               {view === 'options' && directionsResponse && (
                 <RouteOptionsList 
                   routes={directionsResponse.routes} 
@@ -134,6 +149,7 @@ export default function Home() {
            <MapView 
             directionsResponse={directionsResponse} 
             selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex : 0}
+            userLocation={currentUserLocation}
           />
         </div>
       </div>
