@@ -10,6 +10,7 @@ interface MapViewProps {
   directionsResponse: google.maps.DirectionsResult | null;
   selectedRouteIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
+  hasRouteBeenSelected: boolean;
 }
 
 const mapContainerStyle = {
@@ -40,9 +41,8 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-export default function MapView({ isLoaded, directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, selectedRouteIndex, userLocation, hasRouteBeenSelected }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
-  const [hasZoomedToStart, setHasZoomedToStart] = useState(false);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -53,38 +53,38 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
   }, [])
 
   useEffect(() => {
-    if (!mapRef.current || !isLoaded) return;
-  
     const map = mapRef.current;
+    if (!map || !isLoaded) return;
   
+    // 1. A route was just selected: Zoom in on user's location
+    if (hasRouteBeenSelected && userLocation) {
+      map.panTo(userLocation);
+      map.setZoom(18);
+      return; // Stop further processing
+    }
+
+    // 2. A route is active: Fit map to route bounds
     if (directionsResponse && directionsResponse.routes.length > 0) {
-      if (userLocation && !hasZoomedToStart) {
-        map.panTo(userLocation);
-        map.setZoom(18);
-        setHasZoomedToStart(true);
-      } else if (hasZoomedToStart) {
-        const bounds = new window.google.maps.LatLngBounds();
-        
-        directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
-          leg.steps.forEach(step => {
-            step.path.forEach(point => {
-              bounds.extend(point);
-            });
+      const bounds = new window.google.maps.LatLngBounds();
+      directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
+        leg.steps.forEach(step => {
+          step.path.forEach(point => {
+            bounds.extend(point);
           });
         });
-    
-        if (userLocation) {
-          bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
-        }
-        
-        map.fitBounds(bounds);
+      });
+      if (userLocation) {
+        bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
       }
-    } else if (userLocation) {
+      map.fitBounds(bounds, 50);
+    } 
+    // 3. No route, but user location is present: Center on user
+    else if (userLocation) {
       map.panTo(userLocation);
       map.setZoom(15);
-      setHasZoomedToStart(false); // Reset when we go back to search
     }
-  }, [directionsResponse, selectedRouteIndex, userLocation, isLoaded, hasZoomedToStart]);
+  
+  }, [directionsResponse, selectedRouteIndex, userLocation, isLoaded, hasRouteBeenSelected]);
 
 
   if (!isLoaded) {
@@ -126,27 +126,6 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
           options={mapOptions}
           onLoad={onLoad}
           onUnmount={onUnmount}
-          onBoundsChanged={() => {
-            if (hasZoomedToStart) {
-                const map = mapRef.current;
-                if (map) {
-                    const bounds = new window.google.maps.LatLngBounds();
-                    if (directionsResponse && selectedRoute) {
-                        selectedRoute.legs.forEach(leg => {
-                            leg.steps.forEach(step => {
-                                step.path.forEach(point => {
-                                    bounds.extend(point);
-                                });
-                            });
-                        });
-                        if (userLocation) {
-                           bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
-                        }
-                        map.fitBounds(bounds, 50);
-                    }
-                }
-            }
-          }}
         >
           {userLocation && (
              <MarkerF 

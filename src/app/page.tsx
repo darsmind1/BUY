@@ -24,6 +24,7 @@ export default function Home() {
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute & { routeIndex?: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
+  const [hasRouteBeenSelected, setHasRouteBeenSelected] = useState(false);
   const { toast } = useToast();
 
   const { isLoaded } = useJsApiLoader({
@@ -48,6 +49,7 @@ export default function Home() {
     if (!originParam || !destination) return;
     
     setDirectionsResponse(null);
+    setHasRouteBeenSelected(false);
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
@@ -85,10 +87,12 @@ export default function Home() {
 
   const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number) => {
     setSelectedRoute({...route, routeIndex: index});
+    setHasRouteBeenSelected(true);
     setView('details');
   };
 
   const handleBack = () => {
+    setHasRouteBeenSelected(false);
     if (view === 'details') {
       setSelectedRoute(null);
       setView('options');
@@ -149,8 +153,9 @@ export default function Home() {
             <MapView 
               isLoaded={isLoaded}
               directionsResponse={directionsResponse} 
-              selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex : 0}
+              selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex ?? 0 : 0}
               userLocation={currentUserLocation}
+              hasRouteBeenSelected={hasRouteBeenSelected}
             />
         </div>
       </div>
