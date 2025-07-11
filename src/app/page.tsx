@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Bus, ArrowLeft } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2 } from 'lucide-react';
 
 import RouteSearchForm from '@/components/route-search-form';
 import RouteOptionsList from '@/components/route-options-list';
@@ -11,71 +11,55 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { LoadScript } from '@react-google-maps/api';
+import { useToast } from '@/hooks/use-toast';
 
-// Mock data for routes
-const mockRoutes = [
-  {
-    id: 1,
-    name: "Ruta 1",
-    duration: 25,
-    buses: ["183"],
-    steps: [
-      { type: 'walk', instruction: 'Camina 300m a la parada Av. 8 de Octubre', duration: 4 },
-      { type: 'bus', instruction: 'Toma el 183 hacia Pocitos', duration: 15, bus: '183' },
-      { type: 'walk', instruction: 'Camina 400m a tu destino', duration: 6 },
-    ],
-    arrivals: ["En 2 min", "En 14 min"],
-    busPositions: [{ id: 'bus-183-1', position: { lat: -34.89, lng: -56.16 } }],
-  },
-  {
-    id: 2,
-    name: "Ruta 2",
-    duration: 35,
-    buses: ["149", "17"],
-    steps: [
-      { type: 'walk', instruction: 'Camina 100m a la parada Av. Italia', duration: 2 },
-      { type: 'bus', instruction: 'Toma el 149 hacia Ciudad Vieja', duration: 10, bus: '149' },
-      { type: 'bus', instruction: 'Transbordo en Av. 18 de Julio al 17', duration: 15, bus: '17' },
-      { type: 'walk', instruction: 'Camina 250m a tu destino', duration: 8 },
-    ],
-    arrivals: ["149: En 5 min", "17: En 8 min"],
-    busPositions: [
-      { id: 'bus-149-1', position: { lat: -34.905, lng: -56.17 } }, 
-      { id: 'bus-17-1', position: { lat: -34.91, lng: -56.18 } }
-    ],
-  },
-  {
-    id: 3,
-    name: "Ruta 3",
-    duration: 28,
-    buses: ["CA1"],
-    steps: [
-      { type: 'walk', instruction: 'Camina 50m a la parada Plaza Independencia', duration: 1 },
-      { type: 'bus', instruction: 'Toma el CA1 hacia Tres Cruces', duration: 20, bus: 'CA1' },
-      { type: 'walk', instruction: 'Camina 350m a tu destino', duration: 7 },
-    ],
-    arrivals: ["En 1 min", "En 9 min"],
-    busPositions: [{ id: 'bus-CA1-1', position: { lat: -34.89, lng: -56.14 } }],
-  }
-];
 
 const libraries: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ['places'];
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<any | null>(null);
+  const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
 
   const handleSearch = (origin: string, destination: string) => {
-    // Simulate API call
-    console.log(`Searching from ${origin} to ${destination}`);
-    setRoutes(mockRoutes);
-    setView('options');
+    if (!origin || !destination) return;
+
+    setIsLoading(true);
+    const directionsService = new window.google.maps.DirectionsService();
+
+    directionsService.route(
+      {
+        origin: origin,
+        destination: destination,
+        travelMode: window.google.maps.TravelMode.TRANSIT,
+        transitOptions: {
+          modes: [window.google.maps.TransitMode.BUS],
+        },
+        provideRouteAlternatives: true,
+      },
+      (result, status) => {
+        setIsLoading(false);
+        if (status === window.google.maps.DirectionsStatus.OK && result) {
+          setDirectionsResponse(result);
+          setView('options');
+        } else {
+          console.error(`error fetching directions ${result}`);
+          toast({
+            variant: "destructive",
+            title: "Error al buscar ruta",
+            description: "No se encontraron rutas de ómnibus para el origen y destino ingresados.",
+          });
+        }
+      }
+    );
   };
 
-  const handleSelectRoute = (route: any) => {
-    setSelectedRoute(route);
+  const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number) => {
+    setSelectedRoute({...route, routeIndex: index});
     setView('details');
   };
 
@@ -84,7 +68,7 @@ export default function Home() {
       setSelectedRoute(null);
       setView('options');
     } else if (view === 'options') {
-      setRoutes([]);
+      setDirectionsResponse(null);
       setView('search');
     }
   };
@@ -119,15 +103,32 @@ export default function Home() {
           </header>
           <Separator />
           
-          <main className="flex-1 overflow-y-auto p-4">
+          <main className="flex-1 overflow-y-auto p-4 relative">
+              {isLoading && (
+                <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              )}
               {view === 'search' && <RouteSearchForm onSearch={handleSearch} />}
-              {view === 'options' && <RouteOptionsList routes={routes} onSelectRoute={handleSelectRoute} />}
-              {view === 'details' && selectedRoute && <RouteDetailsPanel route={selectedRoute} />}
+              {view === 'options' && directionsResponse && (
+                <RouteOptionsList 
+                  routes={directionsResponse.routes} 
+                  onSelectRoute={handleSelectRoute} 
+                />
+              )}
+              {view === 'details' && selectedRoute && (
+                <RouteDetailsPanel 
+                  route={selectedRoute}
+                />
+              )}
           </main>
         </aside>
         
         <div className="flex-1 hidden md:block">
-           <MapView route={selectedRoute} />
+           <MapView 
+            directionsResponse={directionsResponse} 
+            selectedRouteIndex={selectedRoute ? (selectedRoute as any).routeIndex : 0}
+          />
         </div>
       </div>
     </LoadScript>
