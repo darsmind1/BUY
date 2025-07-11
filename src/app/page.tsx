@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import RouteDetailsPanel from '@/components/route-details-panel';
 import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { LoadScript } from '@react-google-maps/api';
 
 // Mock data for routes
 const mockRoutes = [
@@ -23,7 +25,7 @@ const mockRoutes = [
       { type: 'walk', instruction: 'Camina 400m a tu destino', duration: 6 },
     ],
     arrivals: ["En 2 min", "En 14 min"],
-    busPositions: [{ id: 'bus-183-1', top: '25%', left: '20%' }],
+    busPositions: [{ id: 'bus-183-1', position: { lat: -34.89, lng: -56.16 } }],
   },
   {
     id: 2,
@@ -37,7 +39,10 @@ const mockRoutes = [
       { type: 'walk', instruction: 'Camina 250m a tu destino', duration: 8 },
     ],
     arrivals: ["149: En 5 min", "17: En 8 min"],
-    busPositions: [{ id: 'bus-149-1', top: '55%', left: '50%'}, {id: 'bus-17-1', top: '70%', left: '60%'}],
+    busPositions: [
+      { id: 'bus-149-1', position: { lat: -34.905, lng: -56.17 } }, 
+      { id: 'bus-17-1', position: { lat: -34.91, lng: -56.18 } }
+    ],
   },
   {
     id: 3,
@@ -50,9 +55,12 @@ const mockRoutes = [
       { type: 'walk', instruction: 'Camina 350m a tu destino', duration: 7 },
     ],
     arrivals: ["En 1 min", "En 9 min"],
-    busPositions: [{ id: 'bus-CA1-1', top: '40%', left: '80%' }],
+    busPositions: [{ id: 'bus-CA1-1', position: { lat: -34.89, lng: -56.14 } }],
   }
 ];
+
+const libraries: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ['places'];
+const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
@@ -91,32 +99,37 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-dvh w-full bg-background text-foreground">
-      <aside className="w-full md:w-[390px] md:border-r md:shadow-2xl flex flex-col h-full">
-        <header className="p-4 flex items-center gap-4">
-          {view !== 'search' ? (
-              <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            ) : (
-              <div className="p-2 bg-primary text-primary-foreground rounded-lg">
-                <Bus className="h-5 w-5"/>
-              </div>
-          )}
-          <h1 className="text-xl font-medium tracking-tight">{getHeaderTitle()}</h1>
-        </header>
-        <Separator />
+    <LoadScript
+      googleMapsApiKey={googleMapsApiKey}
+      libraries={libraries}
+    >
+      <div className="flex h-dvh w-full bg-background text-foreground">
+        <aside className="w-full md:w-[390px] md:border-r md:shadow-2xl flex flex-col h-full">
+          <header className="p-4 flex items-center gap-4">
+            {view !== 'search' ? (
+                <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              ) : (
+                <div className="p-2 bg-primary text-primary-foreground rounded-lg">
+                  <Bus className="h-5 w-5"/>
+                </div>
+            )}
+            <h1 className="text-xl font-medium tracking-tight">{getHeaderTitle()}</h1>
+          </header>
+          <Separator />
+          
+          <main className="flex-1 overflow-y-auto p-4">
+              {view === 'search' && <RouteSearchForm onSearch={handleSearch} />}
+              {view === 'options' && <RouteOptionsList routes={routes} onSelectRoute={handleSelectRoute} />}
+              {view === 'details' && selectedRoute && <RouteDetailsPanel route={selectedRoute} />}
+          </main>
+        </aside>
         
-        <main className="flex-1 overflow-y-auto p-4">
-            {view === 'search' && <RouteSearchForm onSearch={handleSearch} />}
-            {view === 'options' && <RouteOptionsList routes={routes} onSelectRoute={handleSelectRoute} />}
-            {view === 'details' && selectedRoute && <RouteDetailsPanel route={selectedRoute} />}
-        </main>
-      </aside>
-      
-      <div className="flex-1 hidden md:block">
-         <MapView route={selectedRoute} />
+        <div className="flex-1 hidden md:block">
+           <MapView route={selectedRoute} />
+        </div>
       </div>
-    </div>
+    </LoadScript>
   );
 }

@@ -1,46 +1,180 @@
+
 "use client";
 
-import Image from 'next/image';
+import { GoogleMap, MarkerF } from '@react-google-maps/api';
 import { Bus } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface MapViewProps {
   route: any | null;
 }
 
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+};
+
+const center = {
+  lat: -34.9011,
+  lng: -56.1645
+};
+
+const mapOptions = {
+  disableDefaultUI: true,
+  zoomControl: true,
+  styles: [
+    {
+      "featureType": "all",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        { "color": "#7c93a3" },
+        { "lightness": "-10" }
+      ]
+    },
+    {
+      "featureType": "administrative.country",
+      "elementType": "geometry",
+      "stylers": [
+        { "visibility": "on" }
+      ]
+    },
+    {
+      "featureType": "administrative.country",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        { "color": "#a0a4a5" }
+      ]
+    },
+    {
+      "featureType": "administrative.province",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        { "color": "#a0a4a5" }
+      ]
+    },
+    {
+      "featureType": "landscape",
+      "elementType": "labels",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "landscape.natural",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#f2f4f6" }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.icon",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#e6f3d6" }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#ffffff" }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#c1d1d6" }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        { "color": "#a0a4a5" }
+      ]
+    },
+    {
+      "featureType": "road.arterial",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#e6e6e6" }
+      ]
+    },
+    {
+      "featureType": "road.local",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#f2f2f2" }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry.fill",
+      "stylers": [
+        { "color": "#b5dff4" }
+      ]
+    }
+  ]
+};
+
+const busIcon = {
+  path: 'M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11C5.84 5 5.28 5.42 5.08 6.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z',
+  fillColor: 'hsl(var(--primary-foreground))',
+  fillOpacity: 1,
+  strokeWeight: 0,
+  rotation: 0,
+  scale: 1.1,
+  anchor: new google.maps.Point(12, 12),
+};
+
+const busIconBackground = {
+  path: google.maps.SymbolPath.CIRCLE,
+  fillColor: 'hsl(var(--primary))',
+  fillOpacity: 1,
+  strokeWeight: 2,
+  strokeColor: 'hsl(var(--primary-foreground))',
+  scale: 12,
+  anchor: new google.maps.Point(0, 0)
+}
+
 export default function MapView({ route }: MapViewProps) {
-  const busPositions = route ? route.busPositions : [
-    { id: 'bus-1', top: '25%', left: '20%', animation: 'animate-move-bus-1' },
-    { id: 'bus-2', top: '55%', left: '50%', animation: 'animate-move-bus-2' },
-    { id: 'bus-3', top: '40%', left: '80%', animation: 'animate-move-bus-3' },
-  ];
+  const busPositions = route ? route.busPositions : [];
 
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
-      <Image
-        src="https://placehold.co/1200x1800.png"
-        alt="Map of Montevideo"
-        layout="fill"
-        objectFit="cover"
-        className="opacity-70"
-        data-ai-hint="map montevideo satellite"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-background/30 to-transparent" />
-      
-      {busPositions.map((bus: any, index: number) => (
-        <div
-          key={bus.id}
-          className={cn(
-            "absolute transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500",
-            route ? 'opacity-100' : 'opacity-50'
-          )}
-          style={{ top: bus.top, left: bus.left, animation: route ? `moveBus${route.id} ${20 + index*5}s linear infinite alternate` : bus.animation }}
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={center}
+          zoom={13}
+          options={mapOptions}
         >
-          <div className="p-1.5 bg-primary rounded-full shadow-lg ring-2 ring-white/50">
-            <Bus className="h-4 w-4 text-primary-foreground" />
-          </div>
-        </div>
-      ))}
+          {busPositions.map((bus: any) => (
+            <MarkerF
+              key={bus.id}
+              position={bus.position}
+              icon={busIcon}
+              // This is a simple way to stack icons. The background circle is one marker.
+              // A better implementation might use a single custom SVG icon.
+            >
+               <MarkerF position={bus.position} icon={busIconBackground} zIndex={1} />
+               <MarkerF position={bus.position} icon={busIcon} zIndex={2} />
+            </MarkerF>
+          ))}
+        </GoogleMap>
     </div>
   );
 }
