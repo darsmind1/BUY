@@ -88,10 +88,25 @@ export default {
             height: '0',
           },
         },
+        moveBus1: {
+          '0%': { top: '25%', left: '20%' },
+          '100%': { top: '60%', left: '75%' }
+        },
+        moveBus2: {
+          '0%': { top: '55%', left: '50%' },
+          '100%': { top: '30%', left: '15%' }
+        },
+        moveBus3: {
+          '0%': { top: '40%', left: '80%' },
+          '100%': { top: '80%', left: '30%' }
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'move-bus-1': 'moveBus1 25s linear infinite alternate',
+        'move-bus-2': 'moveBus2 30s linear infinite alternate',
+        'move-bus-3': 'moveBus3 20s linear infinite alternate',
       },
     },
   },
