@@ -11,7 +11,7 @@ import RouteDetailsPanel from '@/components/route-details-panel';
 import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { LoadScript } from '@react-google-maps/api';
+import { LoadScript, useJsApiLoader } from '@react-google-maps/api';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -26,6 +26,10 @@ export default function Home() {
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const { toast } = useToast();
 
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: googleMapsApiKey,
+    libraries: libraries,
+  });
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -104,10 +108,6 @@ export default function Home() {
   }
 
   return (
-    <LoadScript
-      googleMapsApiKey={googleMapsApiKey}
-      libraries={libraries}
-    >
       <div className="flex h-dvh w-full bg-background text-foreground">
         <aside className="w-full md:w-[390px] md:border-r md:shadow-2xl flex flex-col h-full">
           <header className="p-4 flex items-center gap-4">
@@ -130,7 +130,7 @@ export default function Home() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               )}
-              {view === 'search' && <RouteSearchForm onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} />}
+              {view === 'search' && <RouteSearchForm onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} isMapLoaded={isLoaded} />}
               {view === 'options' && directionsResponse && (
                 <RouteOptionsList 
                   routes={directionsResponse.routes} 
@@ -146,13 +146,18 @@ export default function Home() {
         </aside>
         
         <div className="flex-1 hidden md:block">
-           <MapView 
-            directionsResponse={directionsResponse} 
-            selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex : 0}
-            userLocation={currentUserLocation}
-          />
+           {isLoaded ? (
+            <MapView 
+              directionsResponse={directionsResponse} 
+              selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex : 0}
+              userLocation={currentUserLocation}
+            />
+           ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+           )}
         </div>
       </div>
-    </LoadScript>
   );
 }

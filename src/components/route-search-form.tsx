@@ -1,27 +1,32 @@
 
 "use client";
 
-import { useState, type FormEvent, useRef, useEffect } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, LocateFixed } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useJsApiLoader } from '@react-google-maps/api';
 
 interface RouteSearchFormProps {
   onSearch: (origin: string, destination: string) => void;
   onLocationObtained: (location: google.maps.LatLngLiteral) => void;
+  isMapLoaded: boolean;
 }
 
-const libraries: ("places")[] = ['places'];
-
-export default function RouteSearchForm({ onSearch, onLocationObtained }: RouteSearchFormProps) {
-  const [origin, setOrigin] = useState('Mi ubicación actual');
+export default function RouteSearchForm({ onSearch, onLocationObtained, isMapLoaded }: RouteSearchFormProps) {
+  const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const { toast } = useToast();
   
   const handleGetLocation = () => {
+    if (!isMapLoaded) {
+      toast({
+        title: "Mapa cargando",
+        description: "Por favor espera a que el mapa termine de cargar.",
+      });
+      return;
+    }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -71,7 +76,7 @@ export default function RouteSearchForm({ onSearch, onLocationObtained }: RouteS
             value={origin}
             onChange={(e) => setOrigin(e.target.value)}
             className="pl-9 pr-10"
-            placeholder="Punto de partida"
+            placeholder="Mi ubicación actual"
           />
           <Button 
             type="button" 

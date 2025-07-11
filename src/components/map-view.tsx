@@ -69,8 +69,8 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
 
 
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
-
-  const walkingPathOptions: google.maps.PolylineOptions = {
+  
+  const walkingPathOptions = {
       strokeOpacity: 0,
       strokeWeight: 2,
       icons: [{
@@ -85,7 +85,7 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
       }],
   };
 
-  const transitPathOptions: google.maps.PolylineOptions = {
+  const transitPathOptions = {
       strokeColor: '#4285F4',
       strokeOpacity: 0.9,
       strokeWeight: 5
