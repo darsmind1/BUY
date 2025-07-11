@@ -21,7 +21,7 @@ const center = {
 const mapOptions = {
   disableDefaultUI: true,
   zoomControl: false,
-  mapId: '6579f49a03449c66'
+  mapId: '6579f49a03449c66ec2a188b'
 };
 
 export default function MapView({ route }: MapViewProps) {
