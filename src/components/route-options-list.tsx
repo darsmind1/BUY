@@ -49,14 +49,27 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5">
-                    {busLines.map((line, lineIndex) => (
-                      <React.Fragment key={line}>
-                        <Badge variant="secondary" className="font-mono">{line}</Badge>
-                        {lineIndex < busLines.length - 1 && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
-                      </React.Fragment>
-                    ))}
-                    {busLines.length === 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {route.legs[0].steps.map((step, stepIndex) => {
+                      if (step.travel_mode === 'TRANSIT') {
+                        return (
+                          <React.Fragment key={stepIndex}>
+                            <Badge variant="secondary" className="font-mono">{step.transit?.line.short_name}</Badge>
+                            {stepIndex < route.legs[0].steps.length - 1 && route.legs[0].steps[stepIndex+1].travel_mode ==='TRANSIT' && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
+                          </React.Fragment>
+                        );
+                      }
+                      if (step.travel_mode === 'WALKING') {
+                         return (
+                          <React.Fragment key={stepIndex}>
+                            <Footprints className="h-4 w-4 text-muted-foreground" />
+                             {stepIndex < route.legs[0].steps.length - 1 && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
+                          </React.Fragment>
+                         )
+                      }
+                      return null;
+                    })}
+                     {busLines.length === 0 && route.legs[0].steps.some(s => s.travel_mode === 'WALKING') && (
                       <div className="flex items-center gap-2">
                         <Footprints className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Solo a pie</span>
