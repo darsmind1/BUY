@@ -1,9 +1,8 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, MarkerF, Polyline } from '@react-google-maps/api';
-import React, { useState, useEffect, useRef } from 'react';
-import { Pin } from 'lucide-react';
+import { GoogleMap, MarkerF, Polyline } from '@react-google-maps/api';
+import React, { useEffect, useRef } from 'react';
 
 interface MapViewProps {
   directionsResponse: google.maps.DirectionsResult | null;
@@ -39,28 +38,6 @@ const mapOptions = {
   },
 };
 
-const walkingPathOptions = {
-    strokeColor: 'hsl(var(--primary))',
-    strokeOpacity: 0,
-    strokeWeight: 2,
-    icons: [{
-        icon: {
-            path: 'M 0,-1 0,1',
-            strokeOpacity: 1,
-            scale: 3
-        },
-        offset: '0',
-        repeat: '15px'
-    }],
-};
-
-const transitPathOptions = {
-    strokeColor: '#4285F4', // Un color azul más profesional
-    strokeOpacity: 0.9,
-    strokeWeight: 5
-};
-
-
 export default function MapView({ directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
 
@@ -86,6 +63,28 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
   }, [directionsResponse, selectedRouteIndex]);
 
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
+
+  // Define styles inside the component to avoid issues on re-render
+  const walkingPathOptions: google.maps.PolylineOptions = {
+      strokeColor: 'hsl(var(--primary))',
+      strokeOpacity: 0,
+      strokeWeight: 2,
+      icons: [{
+          icon: {
+              path: 'M 0,-1 0,1',
+              strokeOpacity: 1,
+              scale: 3
+          },
+          offset: '0',
+          repeat: '15px'
+      }],
+  };
+
+  const transitPathOptions: google.maps.PolylineOptions = {
+      strokeColor: '#4285F4',
+      strokeOpacity: 0.9,
+      strokeWeight: 5
+  };
 
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
