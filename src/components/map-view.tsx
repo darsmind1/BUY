@@ -2,7 +2,7 @@
 "use client";
 
 import { GoogleMap, MarkerF, Polyline } from '@react-google-maps/api';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface MapViewProps {
   directionsResponse: google.maps.DirectionsResult | null;
@@ -42,28 +42,27 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
   const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
-    if (mapRef.current) {
-        if (directionsResponse) {
-            const bounds = new window.google.maps.LatLngBounds();
-            directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
-                leg.steps.forEach(step => {
-                    step.path.forEach(point => {
-                        bounds.extend(point);
-                    });
+    if (!mapRef.current) return;
+
+    if (directionsResponse) {
+        const bounds = new window.google.maps.LatLngBounds();
+        directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
+            leg.steps.forEach(step => {
+                step.path.forEach(point => {
+                    bounds.extend(point);
                 });
             });
-            mapRef.current.fitBounds(bounds);
-        } else if (userLocation) {
-            mapRef.current.panTo(userLocation);
-            mapRef.current.setZoom(15);
-        }
+        });
+        mapRef.current.fitBounds(bounds);
+    } else if (userLocation) {
+        mapRef.current.panTo(userLocation);
+        mapRef.current.setZoom(15);
     }
   }, [directionsResponse, selectedRouteIndex, userLocation]);
 
 
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
 
-  // Define styles inside the component to avoid issues on re-render
   const walkingPathOptions: google.maps.PolylineOptions = {
       strokeColor: 'hsl(var(--primary))',
       strokeOpacity: 0,
@@ -111,7 +110,6 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
 
           {selectedRoute && selectedRoute.legs[0] && (
             <>
-                {/* Custom Polylines */}
                 {selectedRoute.legs[0].steps.map((step, index) => (
                     <Polyline
                         key={index}
@@ -120,7 +118,6 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
                     />
                 ))}
 
-                {/* Start and End Markers */}
                 <MarkerF position={selectedRoute.legs[0].start_location} title="Origen" />
                 <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />
             </>
