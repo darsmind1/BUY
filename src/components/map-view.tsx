@@ -2,7 +2,7 @@
 "use client";
 
 import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface MapViewProps {
@@ -20,15 +20,15 @@ const mapContainerStyle = {
 };
 
 const defaultCenter = {
-  lat: -34.9011,
-  lng: -56.1645
+  lat: -34.83,
+  lng: -56.17
 };
 
 const montevideoBounds = {
-  north: -34.75,
-  south: -34.95,
-  west: -56.3,
-  east: -56.0,
+  north: -34.7,
+  south: -35.0,
+  west: -56.5,
+  east: -55.9,
 };
 
 const mapOptions: google.maps.MapOptions = {
@@ -71,26 +71,16 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !isLoaded) return;
 
-    // Scenario 1: A route has been selected.
     if (directionsResponse && userLocation) {
-        // Zoom in to user's location to start the trip.
         map.panTo(userLocation);
         map.setZoom(16);
-        return; // Important to stop further execution
-    }
-    
-    // Scenario 2: No route selected, but we have user location.
-    if (userLocation) {
-        // Center on user's location.
+    } else if (userLocation) {
         map.panTo(userLocation);
         map.setZoom(15);
-        return; // Important to stop further execution
+    } else {
+        map.panTo(defaultCenter);
+        map.setZoom(12);
     }
-
-    // Fallback: No route, no user location, just show default Montevideo view.
-    map.panTo(defaultCenter);
-    map.setZoom(13);
-
   }, [directionsResponse, userLocation, isLoaded]);
 
   if (!isLoaded) {
@@ -106,7 +96,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           center={defaultCenter}
-          zoom={13}
+          zoom={12}
           options={mapOptions}
           onLoad={onLoad}
           onUnmount={onUnmount}
@@ -137,3 +127,4 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     </div>
   );
 }
+
