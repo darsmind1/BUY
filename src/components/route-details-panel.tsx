@@ -57,7 +57,7 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
         <AccordionItem value="item-1">
           <AccordionTrigger className="px-1 text-sm font-semibold text-muted-foreground">Próximos arribos</AccordionTrigger>
           <AccordionContent>
-            <Card className="bg-transparent shadow-none">
+            <Card className="bg-transparent shadow-none border-0">
               <CardContent className="p-4 space-y-2">
                 {route.arrivals.map((arrival: string, index: number) => (
                   <p key={index} className="text-sm">{arrival}</p>

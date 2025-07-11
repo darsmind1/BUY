@@ -91,9 +91,13 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-dvh bg-background text-foreground overflow-hidden">
-      <aside className="w-full md:w-[380px] md:flex-shrink-0 bg-card/80 backdrop-blur-sm md:bg-card md:border-r flex flex-col">
-        <header className="p-4 flex items-center gap-4">
+    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
+      <div className="absolute inset-0 h-full w-full">
+         <MapView route={selectedRoute} />
+      </div>
+
+      <div className="relative z-10 flex flex-col flex-1">
+        <header className="p-4 flex items-center gap-4 bg-background/80 backdrop-blur-sm">
           {view !== 'search' ? (
               <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
                 <ArrowLeft className="h-5 w-5" />
@@ -107,18 +111,14 @@ export default function Home() {
         </header>
         <Separator />
         
-        <div className="flex-1 overflow-y-auto p-1 subtle-scrollbar">
+        <main className="flex-1 overflow-y-auto p-1 subtle-scrollbar bg-background/80 backdrop-blur-sm">
           <div className="p-3">
             {view === 'search' && <RouteSearchForm onSearch={handleSearch} />}
             {view === 'options' && <RouteOptionsList routes={routes} onSelectRoute={handleSelectRoute} />}
             {view === 'details' && selectedRoute && <RouteDetailsPanel route={selectedRoute} />}
           </div>
-        </div>
-      </aside>
-
-      <main className="flex-1 h-full relative">
-        <MapView route={selectedRoute} />
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

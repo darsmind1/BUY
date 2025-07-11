@@ -18,7 +18,11 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;700&display=swap" rel="stylesheet" />
       </head>
-      <body className="font-body font-light antialiased">{children}</body>
+      <body className="font-body font-light antialiased bg-gray-900 flex items-center justify-center min-h-dvh">
+        <div className="w-[390px] h-[844px] bg-background shadow-2xl rounded-3xl overflow-hidden">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
