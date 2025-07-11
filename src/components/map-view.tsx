@@ -2,7 +2,7 @@
 "use client";
 
 import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface MapViewProps {
@@ -24,11 +24,12 @@ const defaultCenter = {
   lng: -56.17
 };
 
+// Expanded bounds for Montevideo metropolitan area
 const montevideoBounds = {
-  north: -34.7,
-  south: -35.0,
-  west: -56.5,
-  east: -55.9,
+  north: -34.5,
+  south: -35.1,
+  west: -56.8,
+  east: -55.6,
 };
 
 const mapOptions: google.maps.MapOptions = {
@@ -58,30 +59,36 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
+    setMapLoaded(true);
   }, []);
 
   const onUnmount = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
+    setMapLoaded(false);
   }, []);
   
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isLoaded) return;
+    if (!map || !mapLoaded) return;
 
+    // Zoom to user location when a route is selected
     if (directionsResponse && userLocation) {
         map.panTo(userLocation);
         map.setZoom(16);
+    // Center on user location if available and no route is active
     } else if (userLocation) {
         map.panTo(userLocation);
         map.setZoom(15);
+    // Fallback to default view
     } else {
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [directionsResponse, userLocation, isLoaded]);
+  }, [directionsResponse, userLocation, mapLoaded]);
 
   if (!isLoaded) {
     return (
@@ -127,4 +134,3 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     </div>
   );
 }
-
