@@ -1,16 +1,15 @@
 
 "use client";
 
-import { GoogleMap, MarkerF, Polyline } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, DirectionsRenderer } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface MapViewProps {
   isLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
-  selectedRouteIndex: number;
+  routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
-  hasRouteBeenSelected: boolean;
 }
 
 const mapContainerStyle = {
@@ -41,51 +40,52 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-export default function MapView({ isLoaded, directionsResponse, selectedRouteIndex, userLocation, hasRouteBeenSelected }: MapViewProps) {
+const directionsRendererOptions = {
+    suppressMarkers: true,
+    polylineOptions: {
+        strokeColor: '#4285F4',
+        strokeOpacity: 0.8,
+        strokeWeight: 6,
+    }
+};
+
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
-  }, [])
+    if (userLocation) {
+        map.panTo(userLocation);
+        map.setZoom(15);
+    }
+  }, [userLocation])
 
   const onUnmount = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
   }, [])
-
+  
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
-  
-    // 1. A route was just selected: Zoom in on user's location
-    if (hasRouteBeenSelected && userLocation) {
-      map.panTo(userLocation);
-      map.setZoom(18);
-      return; // Stop further processing
+    
+    // If no route response, center on user location if available, otherwise do nothing.
+    if (!directionsResponse) {
+        if (userLocation) {
+            map.panTo(userLocation);
+            map.setZoom(15);
+        }
+        return;
     }
 
-    // 2. A route is active: Fit map to route bounds
-    if (directionsResponse && directionsResponse.routes.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds();
-      directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
-        leg.steps.forEach(step => {
-          step.path.forEach(point => {
-            bounds.extend(point);
-          });
-        });
-      });
-      if (userLocation) {
-        bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
-      }
-      map.fitBounds(bounds, 50);
-    } 
-    // 3. No route, but user location is present: Center on user
-    else if (userLocation) {
-      map.panTo(userLocation);
-      map.setZoom(15);
+    // If there is a route, fit map to its bounds.
+    if (directionsResponse.routes.length > 0) {
+        const route = directionsResponse.routes[routeIndex];
+        if (route.bounds) {
+            map.fitBounds(route.bounds);
+        }
     }
-  
-  }, [directionsResponse, selectedRouteIndex, userLocation, isLoaded, hasRouteBeenSelected]);
 
+  }, [directionsResponse, routeIndex, userLocation, isLoaded]);
 
   if (!isLoaded) {
     return (
@@ -95,27 +95,7 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
     );
   }
 
-  const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
-  
-  const transitPathOptions = {
-      strokeColor: '#4285F4',
-      strokeOpacity: 0.8,
-      strokeWeight: 6
-  };
-  
-  const walkingPathOptions = {
-      strokeOpacity: 0,
-      icons: [{
-          icon: {
-              path: 'M 0,-1 0,1',
-              strokeColor: '#4285F4',
-              strokeOpacity: 1,
-              scale: 4,
-          },
-          offset: '0',
-          repeat: '20px'
-      }],
-  };
+  const selectedRoute = directionsResponse?.routes[routeIndex];
   
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
@@ -142,22 +122,21 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
              />
           )}
 
-          {selectedRoute && selectedRoute.legs[0] && (
-            <>
-                {selectedRoute.legs[0].steps.map((step, index) => {
-                  return (
-                    <Polyline
-                        key={index}
-                        path={step.path}
-                        options={step.travel_mode === 'WALKING' ? walkingPathOptions : transitPathOptions}
-                    />
-                  )
-                })}
+          {directionsResponse && (
+            <DirectionsRenderer
+                directions={directionsResponse}
+                routeIndex={routeIndex}
+                options={directionsRendererOptions}
+            />
+          )}
 
-                <MarkerF position={selectedRoute.legs[0].start_location} title="Origen" />
-                <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />
+          {selectedRoute && (
+            <>
+              <MarkerF position={selectedRoute.legs[0].start_location} title="Origen" />
+              <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />
             </>
           )}
+
         </GoogleMap>
     </div>
   );

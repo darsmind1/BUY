@@ -21,10 +21,10 @@ const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute & { routeIndex?: number } | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
-  const [hasRouteBeenSelected, setHasRouteBeenSelected] = useState(false);
   const { toast } = useToast();
 
   const { isLoaded } = useJsApiLoader({
@@ -49,7 +49,8 @@ export default function Home() {
     if (!originParam || !destination) return;
     
     setDirectionsResponse(null);
-    setHasRouteBeenSelected(false);
+    setSelectedRoute(null);
+    setSelectedRouteIndex(0);
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
@@ -86,13 +87,12 @@ export default function Home() {
   };
 
   const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number) => {
-    setSelectedRoute({...route, routeIndex: index});
-    setHasRouteBeenSelected(true);
+    setSelectedRoute(route);
+    setSelectedRouteIndex(index);
     setView('details');
   };
 
   const handleBack = () => {
-    setHasRouteBeenSelected(false);
     if (view === 'details') {
       setSelectedRoute(null);
       setView('options');
@@ -153,9 +153,8 @@ export default function Home() {
             <MapView 
               isLoaded={isLoaded}
               directionsResponse={directionsResponse} 
-              selectedRouteIndex={selectedRoute ? selectedRoute.routeIndex ?? 0 : 0}
+              routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
-              hasRouteBeenSelected={hasRouteBeenSelected}
             />
         </div>
       </div>
