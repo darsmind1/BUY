@@ -11,11 +11,9 @@ import RouteDetailsPanel from '@/components/route-details-panel';
 import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { useJsApiLoader } from '@react-google-maps/api';
 import { useToast } from '@/hooks/use-toast';
 
 
-const libraries: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ['places'];
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 
 export default function Home() {
@@ -26,11 +24,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const { toast } = useToast();
-
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: googleMapsApiKey,
-    libraries: libraries,
-  });
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -95,7 +88,8 @@ export default function Home() {
   const handleBack = () => {
     if (view === 'details') {
       setSelectedRoute(null);
-      setView('options');
+      setDirectionsResponse(null); 
+      setView('search');
     } else if (view === 'options') {
       setDirectionsResponse(null);
       setView('search');
@@ -134,7 +128,7 @@ export default function Home() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               )}
-              {view === 'search' && <RouteSearchForm onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} isMapLoaded={isLoaded} />}
+              {view === 'search' && <RouteSearchForm onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} />}
               {view === 'options' && directionsResponse && (
                 <RouteOptionsList 
                   routes={directionsResponse.routes} 
@@ -151,7 +145,7 @@ export default function Home() {
         
         <div className="flex-1 hidden md:block">
             <MapView 
-              isLoaded={isLoaded}
+              apiKey={googleMapsApiKey}
               directionsResponse={directionsResponse} 
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}

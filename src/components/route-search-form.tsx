@@ -11,22 +11,14 @@ import { useToast } from '@/hooks/use-toast';
 interface RouteSearchFormProps {
   onSearch: (origin: string, destination: string) => void;
   onLocationObtained: (location: google.maps.LatLngLiteral) => void;
-  isMapLoaded: boolean;
 }
 
-export default function RouteSearchForm({ onSearch, onLocationObtained, isMapLoaded }: RouteSearchFormProps) {
+export default function RouteSearchForm({ onSearch, onLocationObtained }: RouteSearchFormProps) {
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const { toast } = useToast();
   
   const handleGetLocation = () => {
-    if (!isMapLoaded) {
-      toast({
-        title: "Mapa cargando",
-        description: "Por favor espera a que el mapa termine de cargar.",
-      });
-      return;
-    }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {

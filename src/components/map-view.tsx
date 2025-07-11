@@ -1,16 +1,18 @@
 
 "use client";
 
-import { GoogleMap, MarkerF, DirectionsRenderer } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface MapViewProps {
-  isLoaded: boolean;
+  apiKey: string;
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
 }
+
+const libraries: ("places")[] = ['places'];
 
 const mapContainerStyle = {
   width: '100%',
@@ -49,43 +51,47 @@ const directionsRendererOptions = {
     }
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation }: MapViewProps) {
+export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation }: MapViewProps) {
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: apiKey,
+    libraries: libraries,
+  });
+
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
-    if (userLocation) {
-        map.panTo(userLocation);
-        map.setZoom(15);
-    }
-  }, [userLocation])
+  }, []);
 
   const onUnmount = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
-  }, [])
+  }, []);
   
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
+
+    // Scenario 1: A route has been selected.
+    if (directionsResponse && userLocation) {
+        // Zoom in to user's location to start the trip.
+        map.panTo(userLocation);
+        map.setZoom(16);
+        return; // Important to stop further execution
+    }
     
-    // If no route response, center on user location if available, otherwise do nothing.
-    if (!directionsResponse) {
-        if (userLocation) {
-            map.panTo(userLocation);
-            map.setZoom(15);
-        }
-        return;
+    // Scenario 2: No route selected, but we have user location.
+    if (userLocation) {
+        // Center on user's location.
+        map.panTo(userLocation);
+        map.setZoom(15);
+        return; // Important to stop further execution
     }
 
-    // If there is a route, fit map to its bounds.
-    if (directionsResponse.routes.length > 0) {
-        const route = directionsResponse.routes[routeIndex];
-        if (route.bounds) {
-            map.fitBounds(route.bounds);
-        }
-    }
+    // Fallback: No route, no user location, just show default Montevideo view.
+    map.panTo(defaultCenter);
+    map.setZoom(13);
 
-  }, [directionsResponse, routeIndex, userLocation, isLoaded]);
+  }, [directionsResponse, userLocation, isLoaded]);
 
   if (!isLoaded) {
     return (
@@ -94,8 +100,6 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
       </div>
     );
   }
-
-  const selectedRoute = directionsResponse?.routes[routeIndex];
   
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
@@ -129,14 +133,6 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
                 options={directionsRendererOptions}
             />
           )}
-
-          {selectedRoute && (
-            <>
-              <MarkerF position={selectedRoute.legs[0].start_location} title="Origen" />
-              <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />
-            </>
-          )}
-
         </GoogleMap>
     </div>
   );
