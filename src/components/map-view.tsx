@@ -52,30 +52,32 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
   }, [])
 
   useEffect(() => {
-    if (!mapRef.current) return;
-
+    if (!mapRef.current || !isLoaded) return;
+  
+    const map = mapRef.current;
+  
     if (directionsResponse && directionsResponse.routes.length > 0) {
-        const bounds = new window.google.maps.LatLngBounds();
-        
-        directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
-            leg.steps.forEach(step => {
-                step.path.forEach(point => {
-                    bounds.extend(point);
-                });
-            });
+      const bounds = new window.google.maps.LatLngBounds();
+      
+      directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
+        leg.steps.forEach(step => {
+          step.path.forEach(point => {
+            bounds.extend(point);
+          });
         });
-
-        if (userLocation) {
-            bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
-        }
-        
-        mapRef.current.fitBounds(bounds);
-
+      });
+  
+      if (userLocation) {
+        bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
+      }
+      
+      map.fitBounds(bounds);
+  
     } else if (userLocation) {
-        mapRef.current.panTo(userLocation);
-        mapRef.current.setZoom(15);
+      map.panTo(userLocation);
+      map.setZoom(15);
     }
-  }, [directionsResponse, selectedRouteIndex, userLocation]);
+  }, [directionsResponse, selectedRouteIndex, userLocation, isLoaded]);
 
 
   if (!isLoaded) {
@@ -118,7 +120,6 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
                 {selectedRoute.legs[0].steps.map((step, index) => {
                   const walkingPathOptions = {
                       strokeOpacity: 0,
-                      strokeWeight: 2,
                       icons: [{
                           icon: {
                               path: 'M 0,-1 0,1',
@@ -150,7 +151,6 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
                 <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />
             </>
           )}
-
         </GoogleMap>
     </div>
   );
