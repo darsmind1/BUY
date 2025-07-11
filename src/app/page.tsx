@@ -92,11 +92,7 @@ export default function Home() {
 
   return (
     <div className="flex h-dvh w-full bg-background text-foreground">
-      <div className="flex-1 hidden md:block">
-         <MapView route={selectedRoute} />
-      </div>
-
-      <aside className="w-full md:w-[390px] md:border-l md:shadow-2xl flex flex-col h-full">
+      <aside className="w-full md:w-[390px] md:border-r md:shadow-2xl flex flex-col h-full">
         <header className="p-4 flex items-center gap-4">
           {view !== 'search' ? (
               <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
@@ -117,6 +113,10 @@ export default function Home() {
             {view === 'details' && selectedRoute && <RouteDetailsPanel route={selectedRoute} />}
         </main>
       </aside>
+      
+      <div className="flex-1 hidden md:block">
+         <MapView route={selectedRoute} />
+      </div>
     </div>
   );
 }
