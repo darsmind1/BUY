@@ -1,8 +1,9 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, DirectionsRenderer, MarkerF, Polyline } from '@react-google-maps/api';
 import React, { useState, useEffect, useRef } from 'react';
+import { Pin } from 'lucide-react';
 
 interface MapViewProps {
   directionsResponse: google.maps.DirectionsResult | null;
@@ -38,21 +39,53 @@ const mapOptions = {
   },
 };
 
+const walkingPathOptions = {
+    strokeColor: 'hsl(var(--primary))',
+    strokeOpacity: 0,
+    strokeWeight: 2,
+    icons: [{
+        icon: {
+            path: 'M 0,-1 0,1',
+            strokeOpacity: 1,
+            scale: 3
+        },
+        offset: '0',
+        repeat: '15px'
+    }],
+};
+
+const transitPathOptions = {
+    strokeColor: 'hsl(var(--accent))',
+    strokeOpacity: 0.8,
+    strokeWeight: 6
+};
+
+
 export default function MapView({ directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(directionsResponse);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
-    setDirections(directionsResponse);
-  }, [directionsResponse]);
-
-  useEffect(() => {
-    if (userLocation && mapRef.current) {
+    if (userLocation && mapRef.current && !directionsResponse) {
         mapRef.current.panTo(userLocation);
         mapRef.current.setZoom(15);
     }
-  }, [userLocation]);
+  }, [userLocation, directionsResponse]);
+  
+  useEffect(() => {
+    if (directionsResponse && mapRef.current) {
+        const bounds = new window.google.maps.LatLngBounds();
+        directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
+            leg.steps.forEach(step => {
+                step.path.forEach(point => {
+                    bounds.extend(point);
+                });
+            });
+        });
+        mapRef.current.fitBounds(bounds);
+    }
+  }, [directionsResponse, selectedRouteIndex]);
 
+  const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
 
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
@@ -77,20 +110,24 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
                 }}
              />
           )}
-          {directions && (
-             <DirectionsRenderer 
-              directions={directions} 
-              routeIndex={selectedRouteIndex}
-              options={{
-                polylineOptions: {
-                  strokeColor: 'hsl(var(--accent))',
-                  strokeOpacity: 0.8,
-                  strokeWeight: 6,
-                },
-                suppressMarkers: true,
-              }}
-            />
+
+          {selectedRoute && selectedRoute.legs[0] && (
+            <>
+                {/* Custom Polylines */}
+                {selectedRoute.legs[0].steps.map((step, index) => (
+                    <Polyline
+                        key={index}
+                        path={step.path}
+                        options={step.travel_mode === 'WALKING' ? walkingPathOptions : transitPathOptions}
+                    />
+                ))}
+
+                {/* Start and End Markers */}
+                <MarkerF position={selectedRoute.legs[0].start_location} title="Origen" />
+                <MarkerF position={selectedRoute.legs[0].end_location} title="Destino" />
+            </>
           )}
+
         </GoogleMap>
     </div>
   );
