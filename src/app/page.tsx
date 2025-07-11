@@ -91,13 +91,13 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
-      <div className="absolute inset-0 h-full w-full">
+    <div className="flex h-dvh w-full bg-background text-foreground">
+      <div className="flex-1 hidden md:block">
          <MapView route={selectedRoute} />
       </div>
 
-      <div className="relative z-10 flex flex-col flex-1">
-        <header className="p-4 flex items-center gap-4 bg-background/80 backdrop-blur-sm">
+      <aside className="w-full md:w-[390px] md:border-l md:shadow-2xl flex flex-col h-full">
+        <header className="p-4 flex items-center gap-4">
           {view !== 'search' ? (
               <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
                 <ArrowLeft className="h-5 w-5" />
@@ -111,14 +111,12 @@ export default function Home() {
         </header>
         <Separator />
         
-        <main className="flex-1 overflow-y-auto p-1 subtle-scrollbar bg-background/80 backdrop-blur-sm">
-          <div className="p-3">
+        <main className="flex-1 overflow-y-auto p-4">
             {view === 'search' && <RouteSearchForm onSearch={handleSearch} />}
             {view === 'options' && <RouteOptionsList routes={routes} onSelectRoute={handleSelectRoute} />}
             {view === 'details' && selectedRoute && <RouteDetailsPanel route={selectedRoute} />}
-          </div>
         </main>
-      </div>
+      </aside>
     </div>
   );
 }
