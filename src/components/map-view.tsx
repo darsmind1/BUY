@@ -20,7 +20,7 @@ const center = {
 
 const mapOptions = {
   disableDefaultUI: true,
-  zoomControl: true,
+  zoomControl: false,
   styles: [
     {
       "featureType": "all",
