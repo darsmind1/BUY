@@ -29,7 +29,7 @@ const montevideoBounds = {
 
 const mapOptions = {
   disableDefaultUI: true,
-  zoomControl: false,
+  zoomControl: true,
   mapId: '6579f49a03449c66ec2a188b',
   gestureHandling: 'greedy',
   restriction: {
@@ -46,6 +46,9 @@ export default function MapView({ directionsResponse, selectedRouteIndex, userLo
 
     if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
+        if (userLocation) {
+          bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
+        }
         directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
             leg.steps.forEach(step => {
                 step.path.forEach(point => {
