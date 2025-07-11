@@ -1,8 +1,10 @@
+
 "use client";
 
+import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Bus, Clock, ArrowRight, Footprints, ChevronsRight } from 'lucide-react';
+import { Clock, ArrowRight, Footprints, ChevronsRight } from 'lucide-react';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
