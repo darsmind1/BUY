@@ -2,7 +2,7 @@
 "use client";
 
 import { GoogleMap, MarkerF, Polyline } from '@react-google-maps/api';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface MapViewProps {
@@ -42,6 +42,7 @@ const mapOptions: google.maps.MapOptions = {
 
 export default function MapView({ isLoaded, directionsResponse, selectedRouteIndex, userLocation }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [hasZoomedToStart, setHasZoomedToStart] = useState(false);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -57,27 +58,33 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
     const map = mapRef.current;
   
     if (directionsResponse && directionsResponse.routes.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds();
-      
-      directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
-        leg.steps.forEach(step => {
-          step.path.forEach(point => {
-            bounds.extend(point);
+      if (userLocation && !hasZoomedToStart) {
+        map.panTo(userLocation);
+        map.setZoom(18);
+        setHasZoomedToStart(true);
+      } else if (hasZoomedToStart) {
+        const bounds = new window.google.maps.LatLngBounds();
+        
+        directionsResponse.routes[selectedRouteIndex].legs.forEach(leg => {
+          leg.steps.forEach(step => {
+            step.path.forEach(point => {
+              bounds.extend(point);
+            });
           });
         });
-      });
-  
-      if (userLocation) {
-        bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
+    
+        if (userLocation) {
+          bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
+        }
+        
+        map.fitBounds(bounds);
       }
-      
-      map.fitBounds(bounds);
-  
     } else if (userLocation) {
       map.panTo(userLocation);
       map.setZoom(15);
+      setHasZoomedToStart(false); // Reset when we go back to search
     }
-  }, [directionsResponse, selectedRouteIndex, userLocation, isLoaded]);
+  }, [directionsResponse, selectedRouteIndex, userLocation, isLoaded, hasZoomedToStart]);
 
 
   if (!isLoaded) {
@@ -90,6 +97,26 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
 
   const selectedRoute = directionsResponse?.routes[selectedRouteIndex];
   
+  const transitPathOptions = {
+      strokeColor: '#4285F4',
+      strokeOpacity: 0.8,
+      strokeWeight: 6
+  };
+  
+  const walkingPathOptions = {
+      strokeOpacity: 0,
+      icons: [{
+          icon: {
+              path: 'M 0,-1 0,1',
+              strokeColor: '#4285F4',
+              strokeOpacity: 1,
+              scale: 4,
+          },
+          offset: '0',
+          repeat: '20px'
+      }],
+  };
+  
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
         <GoogleMap
@@ -99,6 +126,27 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
           options={mapOptions}
           onLoad={onLoad}
           onUnmount={onUnmount}
+          onBoundsChanged={() => {
+            if (hasZoomedToStart) {
+                const map = mapRef.current;
+                if (map) {
+                    const bounds = new window.google.maps.LatLngBounds();
+                    if (directionsResponse && selectedRoute) {
+                        selectedRoute.legs.forEach(leg => {
+                            leg.steps.forEach(step => {
+                                step.path.forEach(point => {
+                                    bounds.extend(point);
+                                });
+                            });
+                        });
+                        if (userLocation) {
+                           bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
+                        }
+                        map.fitBounds(bounds, 50);
+                    }
+                }
+            }
+          }}
         >
           {userLocation && (
              <MarkerF 
@@ -118,26 +166,6 @@ export default function MapView({ isLoaded, directionsResponse, selectedRouteInd
           {selectedRoute && selectedRoute.legs[0] && (
             <>
                 {selectedRoute.legs[0].steps.map((step, index) => {
-                  const walkingPathOptions = {
-                      strokeOpacity: 0,
-                      icons: [{
-                          icon: {
-                              path: 'M 0,-1 0,1',
-                              strokeColor: '#4285F4',
-                              strokeOpacity: 1,
-                              scale: 3
-                          },
-                          offset: '0',
-                          repeat: '15px'
-                      }],
-                  };
-
-                  const transitPathOptions = {
-                      strokeColor: '#4285F4',
-                      strokeOpacity: 0.9,
-                      strokeWeight: 5
-                  };
-
                   return (
                     <Polyline
                         key={index}
