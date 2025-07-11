@@ -1,29 +1,25 @@
 
 "use client";
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, LocateFixed } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useJsApiLoader } from '@react-google-maps/api';
 
 interface RouteSearchFormProps {
   onSearch: (origin: string, destination: string) => void;
   onLocationObtained: (location: google.maps.LatLngLiteral) => void;
 }
 
+const libraries: ("places")[] = ['places'];
+
 export default function RouteSearchForm({ onSearch, onLocationObtained }: RouteSearchFormProps) {
   const [origin, setOrigin] = useState('Mi ubicación actual');
   const [destination, setDestination] = useState('');
   const { toast } = useToast();
-
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (destination) {
-      onSearch(origin, destination);
-    }
-  };
   
   const handleGetLocation = () => {
     if (navigator.geolocation) {
@@ -54,6 +50,13 @@ export default function RouteSearchForm({ onSearch, onLocationObtained }: RouteS
         title: "Navegador no compatible",
         description: "Tu navegador no soporta la geolocalización.",
       })
+    }
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (destination) {
+        onSearch(origin, destination);
     }
   };
 

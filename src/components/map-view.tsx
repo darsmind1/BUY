@@ -1,7 +1,7 @@
 
 "use client";
 
-import { GoogleMap, MarkerF, Polyline } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, Polyline, useJsApiLoader } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState } from 'react';
 
 interface MapViewProps {
@@ -27,10 +27,10 @@ const montevideoBounds = {
   east: -56.0,
 };
 
-const mapOptions = {
+const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: true,
-  mapId: '6579f49a03449c66ec2a188b',
+  mapId: '6579f49a03449c66',
   gestureHandling: 'greedy',
   restriction: {
     latLngBounds: montevideoBounds,
