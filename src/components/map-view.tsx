@@ -19,11 +19,22 @@ const center = {
   lng: -56.1645
 };
 
+const montevideoBounds = {
+  north: -34.75,
+  south: -34.95,
+  west: -56.3,
+  east: -56.0,
+};
+
 const mapOptions = {
   disableDefaultUI: true,
   zoomControl: false,
   mapId: '6579f49a03449c66ec2a188b',
-  gestureHandling: 'greedy'
+  gestureHandling: 'greedy',
+  restriction: {
+    latLngBounds: montevideoBounds,
+    strictBounds: false,
+  },
 };
 
 export default function MapView({ directionsResponse, selectedRouteIndex }: MapViewProps) {
