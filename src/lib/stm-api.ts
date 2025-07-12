@@ -4,8 +4,8 @@
 import config from './config';
 
 // Validar credenciales al inicio. Si no están, el servidor no debería ni arrancar.
-if (!config.stm.clientId || !config.stm.clientSecret) {
-  const errorMessage = 'CRITICAL: STM API credentials (STM_CLIENT_ID, STM_CLIENT_SECRET) are not defined in the environment. Please check your .env file.';
+if (config.stm.credentials.length === 0) {
+  const errorMessage = 'CRITICAL: No STM API credentials found. Please check your .env file for STM_CLIENT_ID_1, STM_CLIENT_SECRET_1, etc.';
   console.error(errorMessage);
   // No lanzamos error para no bloquear el build, pero la API no funcionará.
 }
@@ -38,13 +38,26 @@ export interface StmLineInfo {
     description: string;
 }
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+// Cache tokens for each credential set. The key is the index in the config array.
+let cachedTokens = new Map<number, { token: string; expiresAt: number }>();
+let credentialIndex = 0;
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
 async function getAccessToken(): Promise<string> {
+  if (config.stm.credentials.length === 0) {
+      throw new Error("No STM credentials configured.");
+  }
+  
+  // Round-robin selection of credentials
+  const currentIndex = credentialIndex;
+  credentialIndex = (credentialIndex + 1) % config.stm.credentials.length;
+  
+  const selectedCredential = config.stm.credentials[currentIndex];
+  
   const now = Date.now();
+  const cachedToken = cachedTokens.get(currentIndex);
 
   if (cachedToken && now < cachedToken.expiresAt) {
     return cachedToken.token;
@@ -56,29 +69,31 @@ async function getAccessToken(): Promise<string> {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: config.stm.clientId,
-        client_secret: config.stm.clientSecret,
+        client_id: selectedCredential.clientId,
+        client_secret: selectedCredential.clientSecret,
       }),
       cache: 'no-store',
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`CRITICAL: Error fetching STM token. Status: ${response.status}. Body: ${errorText}. This might be due to invalid credentials.`);
+      console.error(`CRITICAL: Error fetching STM token for client ID ending in ...${selectedCredential.clientId.slice(-4)}. Status: ${response.status}. Body: ${errorText}.`);
       throw new Error(`Failed to fetch STM token: ${response.status} ${errorText}`);
     }
 
     const tokenData: StmToken = await response.json();
 
-    cachedToken = {
+    const newCachedToken = {
       token: tokenData.access_token,
       expiresAt: now + (tokenData.expires_in - 60) * 1000,
     };
+    
+    cachedTokens.set(currentIndex, newCachedToken);
 
-    return cachedToken.token;
+    return newCachedToken.token;
   } catch (error) {
-    console.error('CRITICAL: Network or other exception while fetching STM access token.', error);
-    cachedToken = null;
+    console.error(`CRITICAL: Network or other exception while fetching STM access token for client ID ...${selectedCredential.clientId.slice(-4)}.`, error);
+    cachedTokens.delete(currentIndex);
     throw new Error(`Exception fetching access token: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -142,6 +157,7 @@ export async function checkApiConnection(): Promise<boolean> {
 }
 
 export async function getBusLocation(line: string): Promise<BusLocation[]> {
+    if (!line) return [];
     const data = await stmApiFetch(`/buses?lines=${line}`);
     // The check for data being null is no longer needed as stmApiFetch will throw on error.
     return data.map((bus: any) => {
