@@ -104,7 +104,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
       customPolylinesRef.current.push(polyline);
     });
   
-    setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: false });
+    setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: true });
   }, [directionsResponse, routeIndex, mapLoaded, isLoaded]);
 
   useEffect(() => {
