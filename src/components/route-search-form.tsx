@@ -7,19 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, LocateFixed, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useJsApiLoader } from '@react-google-maps/api';
 
 interface RouteSearchFormProps {
-  apiKey: string;
+  isGoogleMapsLoaded: boolean;
   onSearch: (origin: string, destination: string) => void;
   onLocationObtained: (location: google.maps.LatLngLiteral) => void;
   isApiChecking: boolean;
   isApiError: boolean;
 }
 
-const libraries: ("places")[] = ['places'];
-
-export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, isApiChecking, isApiError }: RouteSearchFormProps) {
+export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocationObtained, isApiChecking, isApiError }: RouteSearchFormProps) {
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const { toast } = useToast();
@@ -29,13 +26,8 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
   const originAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const destinationAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: apiKey,
-    libraries: libraries,
-  });
-
   useEffect(() => {
-    if (isLoaded && originInputRef.current && !originAutocompleteRef.current) {
+    if (isGoogleMapsLoaded && originInputRef.current && !originAutocompleteRef.current) {
         originAutocompleteRef.current = new window.google.maps.places.Autocomplete(originInputRef.current, {
             componentRestrictions: { country: "uy" },
             fields: ["formatted_address"],
@@ -48,7 +40,7 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
         });
     }
 
-    if (isLoaded && destinationInputRef.current && !destinationAutocompleteRef.current) {
+    if (isGoogleMapsLoaded && destinationInputRef.current && !destinationAutocompleteRef.current) {
         destinationAutocompleteRef.current = new window.google.maps.places.Autocomplete(destinationInputRef.current, {
             componentRestrictions: { country: "uy" },
             fields: ["formatted_address"],
@@ -60,7 +52,7 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
             }
         });
     }
-  }, [isLoaded]);
+  }, [isGoogleMapsLoaded]);
   
   const handleGetLocation = () => {
     if (navigator.geolocation) {
@@ -101,7 +93,7 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
     }
   };
   
-  if (!isLoaded) {
+  if (!isGoogleMapsLoaded) {
     return (
         <div className="flex flex-col items-center justify-center space-y-4 h-full">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />

@@ -12,7 +12,7 @@ interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
   busLocations?: BusLocation[];
   // Props for embedded map on mobile
-  apiKey: string;
+  isGoogleMapsLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
@@ -67,7 +67,7 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
-  apiKey,
+  isGoogleMapsLoaded,
   directionsResponse,
   routeIndex,
   userLocation
@@ -84,8 +84,8 @@ export default function RouteDetailsPanel({
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
       <div className="md:hidden">
           <MapView 
+            isLoaded={isGoogleMapsLoaded}
             containerClassName="h-[250px] w-full"
-            apiKey={apiKey}
             directionsResponse={directionsResponse}
             routeIndex={routeIndex}
             userLocation={userLocation}

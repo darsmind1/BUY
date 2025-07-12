@@ -2,7 +2,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bus, ArrowLeft, Loader2, Map, AlertTriangle } from 'lucide-react';
+import { useJsApiLoader } from '@react-google-maps/api';
+import { Bus, ArrowLeft, Loader2, Map } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -18,6 +19,7 @@ import { haversineDistance } from '@/lib/utils';
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 const MAX_BUS_DISTANCE_METERS = 2500; // 2.5km
+const LIBRARIES: ("places" | "marker")[] = ['places', 'marker'];
 
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
@@ -30,6 +32,12 @@ export default function Home() {
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const { toast } = useToast();
+  
+  const { isLoaded: isGoogleMapsLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: googleMapsApiKey,
+    libraries: LIBRARIES
+  });
 
   useEffect(() => {
     const verifyApiConnection = async () => {
@@ -262,8 +270,8 @@ export default function Home() {
                 </div>
               )}
               {view === 'search' && (
-                <RouteSearchForm 
-                    apiKey={googleMapsApiKey} 
+                <RouteSearchForm
+                    isGoogleMapsLoaded={isGoogleMapsLoaded}
                     onSearch={handleSearch} 
                     onLocationObtained={setCurrentUserLocation} 
                     isApiChecking={apiStatus === 'checking'}
@@ -281,7 +289,7 @@ export default function Home() {
                 <RouteDetailsPanel 
                   route={selectedRoute}
                   busLocations={busLocations}
-                  apiKey={googleMapsApiKey}
+                  isGoogleMapsLoaded={isGoogleMapsLoaded}
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
@@ -292,8 +300,8 @@ export default function Home() {
         
         <div className={`${mobileView === 'panel' && view !== 'details' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
             <MapView 
+              isLoaded={isGoogleMapsLoaded}
               containerClassName={view === 'details' ? 'hidden md:block' : ''}
-              apiKey={googleMapsApiKey}
               directionsResponse={directionsResponse} 
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
@@ -304,5 +312,4 @@ export default function Home() {
       </div>
   );
 }
-
     

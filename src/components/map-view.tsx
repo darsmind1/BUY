@@ -1,14 +1,14 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, useJsApiLoader, AdvancedMarker, Pin } from '@react-google-maps/api';
+import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { cn } from '@/lib/utils';
 
 interface MapViewProps {
-  apiKey: string;
+  isLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
@@ -16,8 +16,6 @@ interface MapViewProps {
   busLocations: BusLocation[];
   containerClassName?: string;
 }
-
-const libraries: ("places" | "marker")[] = ['places', 'marker'];
 
 const mapContainerStyle = {
   width: '100%',
@@ -47,33 +45,26 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-const PulsingUserMarker = () => {
-    return (
-        <div className="relative w-8 h-8">
-            <style>
-                {`
-                @keyframes blink { 0%, 100% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1); opacity: 1; } }
-                .pulsing-dot { position: absolute; top: 50%; left: 50%; width: 32px; height: 32px; transform: translate(-50%, -50%); border-radius: 50%; background-color: #4285F450; animation: blink 2s infinite ease-out; }
-                .user-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; border-radius: 50%; background-color: #4285F4; border: 2px solid #ffffff; }
-                `}
-            </style>
-            <div className="pulsing-dot" />
-            <div className="user-pin" />
-        </div>
-    )
-}
-
-export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName }: MapViewProps) {
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: apiKey,
-    libraries: libraries,
-  });
-
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const [directionsRendererOptions, setDirectionsRendererOptions] = useState<google.maps.DirectionsRendererOptions | null>(null);
+  const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
+
+  useEffect(() => {
+    // This code runs only on the client, where `window` is available.
+    if (window.google) {
+        setUserMarkerIcon({
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#4285F4",
+            fillOpacity: 1,
+            strokeWeight: 2,
+            strokeColor: "#ffffff",
+        });
+    }
+  }, []);
 
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -88,9 +79,11 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   }, []);
   
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !directionsResponse) {
-        customPolylinesRef.current.forEach(p => p.setMap(null));
-        customPolylinesRef.current = [];
+    if (!isLoaded || !mapLoaded || !mapRef.current || !directionsResponse) {
+        if (mapRef.current) {
+            customPolylinesRef.current.forEach(p => p.setMap(null));
+            customPolylinesRef.current = [];
+        }
         return;
     }
   
@@ -112,8 +105,8 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
       customPolylinesRef.current.push(polyline);
     });
   
-    setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: true });
-  }, [directionsResponse, routeIndex, mapLoaded]);
+    setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: false });
+  }, [directionsResponse, routeIndex, mapLoaded, isLoaded]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -145,9 +138,6 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     );
   }
   
-  const startLocation = directionsResponse?.routes[routeIndex]?.legs[0]?.start_location;
-  const endLocation = directionsResponse?.routes[routeIndex]?.legs[0]?.end_location;
-
   return (
     <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden", containerClassName)}>
         <GoogleMap
@@ -159,40 +149,35 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
           onUnmount={onUnmount}
         >
           {directionsResponse && directionsRendererOptions && (
-             <DirectionsRenderer directions={directionsResponse} routeIndex={routeIndex} options={directionsRendererOptions} />
+             <DirectionsRenderer 
+                directions={directionsResponse} 
+                routeIndex={routeIndex} 
+                options={{
+                    ...directionsRendererOptions,
+                }} 
+             />
           )}
 
-          {userLocation && (
-            <AdvancedMarker position={userLocation}>
-                <PulsingUserMarker />
-            </AdvancedMarker>
-          )}
-          
-          {directionsResponse && (
-            <>
-              {startLocation && (
-                <AdvancedMarker position={startLocation} title="Punto de partida">
-                   <Pin background={'#10B981'} borderColor={'#059669'} glyphColor={'#ffffff'} />
-                </AdvancedMarker>
-              )}
-              {endLocation && (
-                 <AdvancedMarker position={endLocation} title="Punto de destino">
-                    <Pin background={'#EF4444'} borderColor={'#DC2626'} glyphColor={'#ffffff'} />
-                 </AdvancedMarker>
-              )}
-            </>
+          {userLocation && userMarkerIcon && (
+            <Marker position={userLocation} icon={userMarkerIcon} />
           )}
 
           {busLocations.map((bus) => (
-             <AdvancedMarker 
+             <Marker 
                 key={`${bus.line}-${bus.id}`}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 zIndex={100}
-             >
-                <div className="bg-primary text-primary-foreground font-bold text-sm rounded-md px-2 py-1 shadow-lg border-2 border-background">
-                  {bus.line}
-                </div>
-             </AdvancedMarker>
+                icon={{
+                    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="24">
+                            <rect x="0" y="0" width="100%" height="100%" rx="8" ry="8" fill="#212F3D" stroke="#ffffff" stroke-width="2"/>
+                            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#ffffff">${bus.line}</text>
+                        </svg>
+                    `)}`,
+                    scaledSize: new window.google.maps.Size(40, 24),
+                    anchor: new window.google.maps.Point(20, 12),
+                }}
+             />
           ))}
 
         </GoogleMap>
