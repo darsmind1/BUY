@@ -5,21 +5,11 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
-import { getArrivals } from '@/lib/stm-api';
+import { getArrivals, getAllBusStops } from '@/lib/stm-api';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void;
-}
-
-const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
-  let totalSeconds = 0;
-  legs.forEach(leg => {
-    if (leg.duration) {
-      totalSeconds += leg.duration.value;
-    }
-  });
-  return Math.round(totalSeconds / 60);
 }
 
 interface StmLineArrivalInfo {
@@ -28,8 +18,32 @@ interface StmLineArrivalInfo {
     distance: number;
 }
 
+interface StmBusStop {
+    busstopId: number;
+    location: {
+        coordinates: [number, number]; // [lng, lat]
+    };
+}
 
-const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
+function haversineDistance(
+  coords1: { lat: number, lng: number },
+  coords2: { lat: number, lng: number }
+): number {
+  const R = 6371e3; // metres
+  const φ1 = coords1.lat * Math.PI / 180;
+  const φ2 = coords2.lat * Math.PI / 180;
+  const Δφ = (coords2.lat - coords1.lat) * Math.PI / 180;
+  const Δλ = (coords2.lng - coords1.lng) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // in metres
+}
+
+const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void, allStops: StmBusStop[] }) => {
   const [stmLineInfo, setStmLineInfo] = useState<StmLineArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
@@ -39,39 +53,67 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
   const googleTransitLine = firstTransitStep?.transit?.line.short_name;
 
   useEffect(() => {
+    let isMounted = true;
+    let intervalId: NodeJS.Timeout;
+
     const fetchArrival = async () => {
-      if (!firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
+      if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location || allStops.length === 0) {
         setIsLoadingArrival(false);
         return;
       }
       
       setIsLoadingArrival(true);
 
-      const stopLocation = firstTransitStep.transit.departure_stop.location;
+      const departureStopLocation = {
+          lat: firstTransitStep.transit.departure_stop.location.lat(),
+          lng: firstTransitStep.transit.departure_stop.location.lng()
+      };
+      
+      let nearestStop: StmBusStop | null = null;
+      let minDistance = Infinity;
+
+      allStops.forEach(stop => {
+        const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
+        const distance = haversineDistance(departureStopLocation, stopCoords);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestStop = stop;
+        }
+      });
+      
+      if (!nearestStop) {
+          if(isMounted) setIsLoadingArrival(false);
+          return;
+      }
 
       try {
-        const arrivalData = await getArrivals(googleTransitLine, stopLocation.lat(), stopLocation.lng());
-        if (arrivalData) {
-            console.log("STM Arrival Info:", arrivalData);
-            setStmLineInfo(arrivalData);
-        } else {
-            setStmLineInfo(null);
+        const arrivalData = await getArrivals(nearestStop.busstopId, googleTransitLine);
+        if (isMounted) {
+            if (arrivalData) {
+                console.log("STM Arrival Info:", arrivalData);
+                setStmLineInfo(arrivalData);
+            } else {
+                setStmLineInfo(null);
+            }
         }
       } catch (error) {
         console.error("Error fetching arrivals:", error);
-        setStmLineInfo(null);
+        if(isMounted) setStmLineInfo(null);
       } finally {
-        setIsLoadingArrival(false);
+        if(isMounted) setIsLoadingArrival(false);
       }
     };
 
     fetchArrival();
     
-    const intervalId = setInterval(fetchArrival, 20000); // 20 seconds
+    intervalId = setInterval(fetchArrival, 20000); // 20 seconds
 
-    return () => clearInterval(intervalId);
+    return () => {
+        isMounted = false;
+        clearInterval(intervalId);
+    };
 
-  }, [firstTransitStep, googleTransitLine]);
+  }, [firstTransitStep, googleTransitLine, allStops]);
 
   const getArrivalText = () => {
     if (!stmLineInfo) return null;
@@ -127,7 +169,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              <span>{duration} min</span>
+              <span>{getTotalDuration(route.legs)} min</span>
             </div>
             {isLoadingArrival && firstTransitStep && (
                  <div className="flex items-center gap-2 text-xs text-blue-400">
@@ -155,12 +197,39 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
   )
 }
 
+const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
+  let totalSeconds = 0;
+  legs.forEach(leg => {
+    if (leg.duration) {
+      totalSeconds += leg.duration.value;
+    }
+  });
+  return Math.round(totalSeconds / 60);
+}
 
 export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptionsListProps) {
+    const [allStops, setAllStops] = useState<StmBusStop[]>([]);
+
+    useEffect(() => {
+        getAllBusStops()
+            .then(stops => {
+                if (stops) {
+                    setAllStops(stops);
+                }
+            })
+            .catch(err => console.error("Could not load bus stops", err));
+    }, []);
+
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
       {routes.map((route, index) => (
-        <RouteOptionItem key={index} route={route} index={index} onSelectRoute={onSelectRoute} />
+        <RouteOptionItem 
+            key={index} 
+            route={route} 
+            index={index} 
+            onSelectRoute={onSelectRoute}
+            allStops={allStops}
+        />
       ))}
     </div>
   );
