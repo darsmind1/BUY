@@ -20,7 +20,6 @@ type Freshness = 'fresh' | 'stale' | 'old' | null;
 interface BusArrivalInfo {
     eta: number; // in seconds
     distance: number; // in meters
-    freshness: Freshness;
 }
 
 interface StmStopMapping {
@@ -102,7 +101,7 @@ const RouteOptionItem = ({
 
             if (!isLineValidForStop) {
                 if(isInitialFetch) setIsLoadingArrival(false);
-                setArrivalInfo(null);
+                // Don't clear arrival info here, to let stale data persist
                 return;
             }
             
@@ -128,26 +127,16 @@ const RouteOptionItem = ({
                 if (nearestBus) {
                     const averageSpeedMetersPerSecond = 4.5; // ~16 km/h
                     const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
-
-                    const now = new Date();
-                    const busTimestamp = new Date(nearestBus.timestamp);
-                    const ageSeconds = (now.getTime() - busTimestamp.getTime()) / 1000;
-
-                    let freshness: Freshness = 'old';
-                    if (ageSeconds < 45) {
-                        freshness = 'fresh';
-                    } else if (ageSeconds < 120) {
-                        freshness = 'stale';
-                    }
                     
                     setArrivalInfo({
                         distance: nearestBusDistance,
                         eta: etaSeconds,
-                        freshness,
                     });
                     setLastRealtimeUpdate(Date.now());
                 }
-            } 
+            } else {
+                 // No buses found, don't clear arrival info, let it get stale
+            }
 
         } catch (error) {
             console.error("Error fetching bus arrival info:", error);
@@ -157,14 +146,12 @@ const RouteOptionItem = ({
     };
     
     if (stmStopId !== null && isApiConnected) {
-      // Stagger the initial fetch to avoid burst requests
       const initialFetchTimeoutId = setTimeout(() => {
         if(isMounted) {
             fetchArrival(true);
-            // Set up the recurring fetch after the first one
             intervalId = setInterval(() => fetchArrival(false), 20000); 
         }
-      }, index * 300); // 300ms delay per item
+      }, index * 300); 
 
       return () => {
         isMounted = false;
@@ -189,18 +176,24 @@ const RouteOptionItem = ({
     return `A ${arrivalMinutes} min`;
   };
 
+  const getArrivalColorClass = () => {
+    if (!arrivalInfo) return 'text-primary';
+    
+    const etaSeconds = arrivalInfo.eta;
+
+    if (etaSeconds <= 180) { // 3 minutes or less
+        return 'text-green-500';
+    } else if (etaSeconds > 180 && etaSeconds < 600) { // More than 3 mins, up to 10 mins
+        return 'text-yellow-500';
+    } else { // 10 minutes or more
+        return 'text-red-500';
+    }
+  };
+
   const arrivalText = getArrivalText();
   
   const isRealtimeStale = lastRealtimeUpdate === null || (Date.now() - lastRealtimeUpdate > REALTIME_INFO_TIMEOUT_MS);
   const showRealtime = arrivalInfo !== null && !isRealtimeStale;
-
-  const arrivalColorClass = {
-      fresh: 'text-green-500',
-      stale: 'text-yellow-500',
-      old: 'text-red-500',
-      null: 'text-primary'
-  }[arrivalInfo?.freshness ?? null];
-
 
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.travel_mode === 'WALKING' && step.distance && step.distance.value > 0));
 
@@ -255,7 +248,7 @@ const RouteOptionItem = ({
                 </div>
             )}
              {!isLoadingArrival && showRealtime && arrivalText && (
-              <div className={cn("flex items-center gap-2 text-xs font-medium", arrivalColorClass)}>
+              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
