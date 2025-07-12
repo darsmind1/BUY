@@ -32,7 +32,6 @@ export interface StmLineInfo {
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
-let cachedStops: { stops: StmBusStop[]; expiresAt: number } | null = null;
 
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
@@ -152,19 +151,9 @@ export async function getBusLocation(line: string): Promise<BusLocation[] | null
 }
 
 export async function getAllBusStops(): Promise<StmBusStop[] | null> {
-    const now = Date.now();
-    if (cachedStops && now < cachedStops.expiresAt) {
-      return cachedStops.stops;
-    }
-    
     const data = await stmApiFetch('/buses/busstops');
     if (data && Array.isArray(data)) {
-        const stops = data as StmBusStop[];
-        cachedStops = {
-            stops,
-            expiresAt: now + 24 * 60 * 60 * 1000, // Cache for 24 hours
-        };
-        return stops;
+        return data as StmBusStop[];
     }
     return null;
 }
