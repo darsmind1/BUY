@@ -40,15 +40,19 @@ export default function Home() {
       }
       
       const lines = new Set<string>();
-      let departureStopLocation: google.maps.LatLng | null = null;
+      const departureStops: { line: string, location: google.maps.LatLng }[] = [];
       
-      const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-
-      if (firstTransitStep && firstTransitStep.transit) {
-          lines.add(firstTransitStep.transit.line.short_name || firstTransitStep.transit.line.name);
-          departureStopLocation = firstTransitStep.transit.departure_stop.location;
-      }
-
+      // Get all transit lines and their departure stops from the selected route
+      selectedRoute.legs[0]?.steps.forEach(step => {
+        if (step.travel_mode === 'TRANSIT' && step.transit) {
+          const lineName = step.transit.line.short_name || step.transit.line.name;
+          lines.add(lineName);
+          departureStops.push({
+            line: lineName,
+            location: step.transit.departure_stop.location
+          });
+        }
+      });
 
       if (lines.size === 0) {
         setBusLocations([]);
@@ -60,16 +64,18 @@ export default function Home() {
         const results = await Promise.all(promises);
         let allBuses = results.flat().filter((bus): bus is BusLocation => bus !== null);
 
-        if (departureStopLocation) {
-          const stopCoords = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
-          allBuses = allBuses.filter(bus => {
-            const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-            const distance = haversineDistance(stopCoords, busCoords);
-            return distance <= MAX_BUS_DISTANCE_METERS;
-          });
-        }
+        // Filter buses to only show those near their corresponding departure stop
+        const relevantBuses = allBuses.filter(bus => {
+          const relevantStop = departureStops.find(stop => stop.line === bus.line);
+          if (!relevantStop) return false;
 
-        setBusLocations(allBuses);
+          const stopCoords = { lat: relevantStop.location.lat(), lng: relevantStop.location.lng() };
+          const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+          const distance = haversineDistance(stopCoords, busCoords);
+          return distance <= MAX_BUS_DISTANCE_METERS;
+        });
+
+        setBusLocations(relevantBuses);
 
       } catch (error) {
         console.error("Error fetching bus locations for map:", error);
