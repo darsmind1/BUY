@@ -242,7 +242,7 @@ export default function Home() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               )}
-              {view === 'search' && <RouteSearchForm onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} />}
+              {view === 'search' && <RouteSearchForm apiKey={googleMapsApiKey} onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} />}
               {view === 'options' && directionsResponse && (
                 <RouteOptionsList 
                   routes={directionsResponse.routes} 
