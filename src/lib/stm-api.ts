@@ -106,6 +106,28 @@ export async function findStopByLocation(lat: number, lon: number) {
         stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=500`);
     }
 
+    if (!stops || stops.length === 0) {
+        console.log(`No stop found at 500m for ${lat}, ${lon}. Retrying with buses endpoint.`);
+        const buses = await stmApiFetch(`/buses`);
+        if(buses && buses.length > 0) {
+            const closestBus = buses.reduce((prev, curr) => {
+                const prevDist = Math.sqrt(Math.pow(prev.location.coordinates[1] - lat, 2) + Math.pow(prev.location.coordinates[0] - lon, 2));
+                const currDist = Math.sqrt(Math.pow(curr.location.coordinates[1] - lat, 2) + Math.pow(curr.location.coordinates[0] - lon, 2));
+                return prevDist < currDist ? prev : curr;
+            });
+            if(closestBus && closestBus.lineVariantId) {
+                const lineVariant = await stmApiFetch(`/buses/linevariants/${closestBus.lineVariantId}`);
+                if(lineVariant && lineVariant.length > 0) {
+                    const busStop = await stmApiFetch(`/buses/busstops?street1Id=${lineVariant[0].street1Id}&street2Id=${lineVariant[0].street2Id}`);
+                    if(busStop && busStop.length > 0) {
+                        return busStop;
+                    }
+                }
+            }
+        }
+    }
+
+
     return stops;
 }
 
