@@ -1,6 +1,16 @@
 
 'use server';
 
+import config from './config';
+
+// Validar credenciales al inicio. Si no están, el servidor no debería ni arrancar.
+if (!config.stm.clientId || !config.stm.clientSecret) {
+  const errorMessage = 'CRITICAL: STM API credentials (STM_CLIENT_ID, STM_CLIENT_SECRET) are not defined in the environment. Please check your .env file.';
+  console.error(errorMessage);
+  throw new Error(errorMessage);
+}
+
+
 interface StmToken {
   access_token: string;
   expires_in: number;
@@ -30,13 +40,8 @@ export interface StmLineInfo {
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
-
-const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
-const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
-
 
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
@@ -45,19 +50,14 @@ async function getAccessToken(): Promise<string | null> {
     return cachedToken.token;
   }
   
-  if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
-    console.error('CRITICAL: STM API credentials (STM_CLIENT_ID, STM_CLIENT_SECRET) are not defined in the environment. Please check your .env file.');
-    return null;
-  }
-
   try {
     const response = await fetch(STM_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: STM_CLIENT_ID,
-        client_secret: STM_CLIENT_SECRET,
+        client_id: config.stm.clientId,
+        client_secret: config.stm.clientSecret,
       }),
       cache: 'no-store',
     });
@@ -114,13 +114,12 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
     
     const data = await response.json();
 
-    // Defensive check: if data is not an array (e.g., an empty object {}), return an empty array.
     if (!Array.isArray(data)) {
         if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
             return []; // API returned an empty object, treat as no results.
         }
         console.warn(`STM API response for ${path} was not an array:`, data);
-        return null; // Unexpected format, return null to indicate an error.
+        return []; // Return empty array to prevent crashes down the line
     }
     
     return data;
@@ -138,7 +137,7 @@ export async function checkApiConnection(): Promise<boolean> {
 
 export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
     const data = await stmApiFetch(`/buses?lines=${line}`);
-    if (data) { // data is guaranteed to be an array or null here
+    if (data) {
         return data.map((bus: any) => {
             const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
             return {
