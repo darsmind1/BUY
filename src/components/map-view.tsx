@@ -47,37 +47,6 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-const transitDirectionsRendererOptions = {
-    suppressMarkers: true,
-    preserveViewport: true, 
-    polylineOptions: {
-        strokeColor: '#A40034', // Accent color
-        strokeOpacity: 0.8,
-        strokeWeight: 6,
-        zIndex: 1,
-    }
-};
-const walkingDirectionsRendererOptions = {
-    suppressMarkers: true,
-    preserveViewport: true, 
-    polylineOptions: {
-        strokeColor: '#212F3D', // Primary color
-        strokeOpacity: 0,
-        strokeWeight: 2,
-        zIndex: 2,
-        icons: [{
-            icon: {
-                path: 'M 0,-1 0,1',
-                strokeOpacity: 1,
-                strokeWeight: 3,
-                scale: 3,
-            },
-            offset: '0',
-            repeat: '15px'
-        }]
-    }
-};
-
 const busIconSvg = (line: string) => `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg width="42" height="28" viewBox="0 0 42 28" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect x="0.5" y="0.5" width="41" height="27" rx="6" fill="#212F3D" stroke="#F0F4F8" stroke-width="1"/>
@@ -110,11 +79,7 @@ const PulsingUserMarker = () => (
         </style>
         <div 
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4] border-2 border-white shadow-lg"
-            style={{ width: '16px', height: '16px' }}
-        />
-         <div 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4]/50"
-            style={{ width: '24px', height: '24px', animation: 'blink 1.5s infinite ease-in-out' }}
+            style={{ width: '16px', height: '16px', animation: 'blink 1.5s infinite ease-in-out' }}
         />
     </div>
 )
@@ -128,9 +93,8 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-
-  const [walkingDirections, setWalkingDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [transitDirections, setTransitDirections] = useState<google.maps.DirectionsResult | null>(null);
+  
+  const [customDirections, setCustomDirections] = useState<google.maps.DirectionsResult | null>(null);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -144,51 +108,81 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   
   useEffect(() => {
     if (!directionsResponse) {
-      setWalkingDirections(null);
-      setTransitDirections(null);
+      setCustomDirections(null);
       return;
     }
-
-    const route = directionsResponse.routes[routeIndex];
-    if (!route) return;
-
-    // Create a deep copy of the original directions response to modify
-    const directionsCopy: google.maps.DirectionsResult = JSON.parse(JSON.stringify(directionsResponse));
-
-    const walkingRoute = JSON.parse(JSON.stringify(directionsCopy.routes[routeIndex]));
-    const transitRoute = JSON.parse(JSON.stringify(directionsCopy.routes[routeIndex]));
-
-    walkingRoute.legs.forEach((leg: google.maps.DirectionsLeg) => {
-        leg.steps = leg.steps.filter(step => step.travel_mode === 'WALKING');
-    });
-
-    transitRoute.legs.forEach((leg: google.maps.DirectionsLeg) => {
-        leg.steps = leg.steps.filter(step => step.travel_mode === 'TRANSIT');
-    });
-    
-    const walkingResult = { ...directionsCopy, routes: [walkingRoute]};
-    const transitResult = { ...directionsCopy, routes: [transitRoute]};
-
-    if (walkingRoute.legs.some((l: google.maps.DirectionsLeg) => l.steps.length > 0)) {
-        setWalkingDirections(walkingResult);
-    } else {
-        setWalkingDirections(null);
+  
+    // Create a deep copy to avoid mutating the original response
+    const directionsCopy = JSON.parse(JSON.stringify(directionsResponse));
+    const route = directionsCopy.routes[routeIndex];
+  
+    if (!route || !route.legs) {
+      setCustomDirections(directionsCopy);
+      return;
     }
+  
+    // This will hold the single DirectionsRenderer instance
+    const renderer = new window.google.maps.DirectionsRenderer({
+      suppressMarkers: true,
+      map: mapRef.current,
+    });
+  
+    const transitPolylineOptions = {
+        strokeColor: '#A40034',
+        strokeOpacity: 0.8,
+        strokeWeight: 6,
+        zIndex: 1,
+    };
+  
+    const walkingPolylineOptions = {
+        strokeColor: '#212F3D',
+        strokeOpacity: 0, // The main line is invisible
+        strokeWeight: 2,
+        zIndex: 2, // Higher zIndex to appear above transit line
+        icons: [{
+            icon: {
+                path: 'M 0,-1 0,1',
+                strokeOpacity: 1,
+                strokeWeight: 3,
+                scale: 3,
+            },
+            offset: '0',
+            repeat: '15px'
+        }]
+    };
+  
+    // We create a new DirectionsResult where each step has its own polyline.
+    // This is a workaround to style parts of the same route differently.
+    const leg = route.legs[0];
+    const newSteps: any[] = [];
+  
+    leg.steps.forEach((step: google.maps.DirectionsStep) => {
+      const polyline = new window.google.maps.Polyline(
+        step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions
+      );
+      polyline.setPath(step.path);
+      newSteps.push({ ...step, polyline: polyline });
+    });
+  
+    leg.steps = newSteps;
     
-    if (transitRoute.legs.some((l: google.maps.DirectionsLeg) => l.steps.length > 0)) {
-        setTransitDirections(transitResult);
-    } else {
-        setTransitDirections(null);
-    }
+    renderer.setDirections(directionsCopy);
 
-  }, [directionsResponse, routeIndex]);
-
+    // Since we are manually handling the rendering via polylines, we clear the state
+    setCustomDirections(null); 
+  
+    return () => {
+      // Clean up the renderer when the component/effect re-runs
+      renderer.setMap(null);
+    };
+  
+  }, [directionsResponse, routeIndex, mapRef.current]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (selectedRoute) { // Don't pan with user location to allow map exploration
+    if (selectedRoute) { 
         const bounds = new window.google.maps.LatLngBounds();
         directionsResponse?.routes[routeIndex].legs.forEach(leg => {
             leg.steps.forEach(step => {
@@ -198,7 +192,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         if(userLocation){
             bounds.extend(userLocation);
         }
-        map.fitBounds(bounds);
+        map.fitBounds(bounds, 50); // 50px padding
     }
     else if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
@@ -207,7 +201,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
                 step.path.forEach(point => bounds.extend(point));
             });
         });
-        map.fitBounds(bounds);
+        map.fitBounds(bounds, 50); // 50px padding
     }
     else if (userLocation) {
         map.panTo(userLocation);
@@ -216,7 +210,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]); // removed userLocation
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]);
 
   if (!isLoaded) {
     return (
@@ -249,19 +243,11 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
             </OverlayViewF>
           )}
           
-          {transitDirections && (
+          {customDirections && (
             <DirectionsRenderer
-                directions={transitDirections}
-                routeIndex={0} // We've already filtered to one route
-                options={transitDirectionsRendererOptions}
-            />
-           )}
-           
-          {walkingDirections && (
-            <DirectionsRenderer
-                directions={walkingDirections}
-                routeIndex={0}
-                options={walkingDirectionsRendererOptions}
+              directions={customDirections}
+              routeIndex={0} 
+              options={{ suppressMarkers: true, preserveViewport: true }}
             />
           )}
 
