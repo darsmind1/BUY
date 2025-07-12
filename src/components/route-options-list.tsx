@@ -307,30 +307,29 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
     const fetchAllArrivals = async () => {
         const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndex, info]) => {
-            if (!info.isLineValid || !info.line || !info.stopId || isNaN(parseInt(info.line))) {
-                return { routeIndex, arrival: null };
-            }
-            try {
-                const lineId = parseInt(info.line);
-                const arrivalsData = await getArrivalsForStop(info.stopId, lineId);
-                
-                if (arrivalsData && arrivalsData.length > 0) {
-                    const nextArrival = arrivalsData.find(a => a.eta > 0);
-                    return { routeIndex, arrival: nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null };
+            if (info.isLineValid && info.line && info.stopId && !isNaN(parseInt(info.line))) {
+                try {
+                    const lineId = parseInt(info.line);
+                    const arrivalsData = await getArrivalsForStop(info.stopId, lineId);
+                    return { routeIndex: parseInt(routeIndex), arrivals: arrivalsData };
+                } catch (error) {
+                    console.error(`Error fetching arrival info for route ${routeIndex}:`, error);
+                    return { routeIndex: parseInt(routeIndex), arrivals: null };
                 }
-                return { routeIndex, arrival: null };
-            } catch (error) {
-                console.error(`Error fetching bus arrival info for line ${info.line} at stop ${info.stopId}:`, error);
-                return { routeIndex, arrival: null };
             }
+            return { routeIndex: parseInt(routeIndex), arrivals: null };
         });
 
         const results = await Promise.allSettled(arrivalPromises);
         const newArrivals: BusArrivalsState = {};
         
         results.forEach(result => {
-            if (result.status === 'fulfilled' && result.value) {
-                newArrivals[parseInt(result.value.routeIndex)] = result.value.arrival;
+            if (result.status === 'fulfilled' && result.value && result.value.arrivals) {
+                const { routeIndex, arrivals } = result.value;
+                const nextArrival = arrivals.find(a => a.eta > 0);
+                newArrivals[routeIndex] = nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null;
+            } else if (result.status === 'rejected') {
+                console.error("A promise for fetching arrivals was rejected:", result.reason);
             }
         });
         
