@@ -176,5 +176,3 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
     }
     return null;
 }
-
-    
