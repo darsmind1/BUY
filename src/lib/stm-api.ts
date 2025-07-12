@@ -38,6 +38,11 @@ const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
 const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
 
+if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
+  console.error('CRITICAL: STM API credentials are not configured in environment variables. Please check your .env file in the project root.');
+}
+
+
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
 
@@ -45,8 +50,8 @@ async function getAccessToken(): Promise<string | null> {
     return cachedToken.token;
   }
   
-  if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
-    console.error('STM API credentials are not set in environment variables. Please add STM_CLIENT_ID and STM_CLIENT_SECRET.');
+  if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
+    console.error('STM API credentials are not set. Cannot fetch access token.');
     return null;
   }
 
@@ -64,7 +69,7 @@ async function getAccessToken(): Promise<string | null> {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Error fetching STM token:', response.status, errorText);
+      console.error('CRITICAL: Error fetching STM token:', response.status, errorText);
       throw new Error(`Failed to fetch access token, status: ${response.status}`);
     }
 
@@ -77,7 +82,7 @@ async function getAccessToken(): Promise<string | null> {
 
     return cachedToken.token;
   } catch (error) {
-    console.error('Exception while fetching STM access token:', error);
+    console.error('CRITICAL: Exception while fetching STM access token.', error);
     cachedToken = null;
     return null;
   }
