@@ -46,7 +46,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         const stopData = await findStopByLocation(stopLocation.lat(), stopLocation.lng());
         
         if (stopData && stopData.length > 0) {
-          const stopId = stopData[0].codigo;
+          const stopId = stopData[0].busstopId;
           const arrivals = await getArrivals(Number(line), stopId);
           
           if (arrivals && arrivals.length > 0) {

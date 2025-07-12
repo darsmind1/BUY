@@ -87,7 +87,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
  */
 export async function getBusLocationsByLine(linea: number) {
     if (!linea) return null;
-    return stmApiFetch(`/buses?linea=${linea}`);
+    return stmApiFetch(`/buses?lines=${linea}`);
 }
 
 /**
@@ -99,7 +99,7 @@ export async function getBusLocationsByLine(linea: number) {
 export async function findStopByLocation(lat: number, lon: number) {
     if (lat === undefined || lon === undefined) return null;
      // The API expects a short distance to find the *closest* stop.
-    return stmApiFetch(`/paradas?lat=${lat}&lon=${lon}&dist=50`);
+    return stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=50`);
 }
 
 
@@ -115,12 +115,13 @@ export async function getArrivals(line: number, stopId: number) {
     const upcomingBuses = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
 
     if (upcomingBuses && Array.isArray(upcomingBuses) && upcomingBuses.length > 0) {
-        // Find the arrival for the specific line we are interested in.
-        // Although we only query for one, the API might return info for other lines at the same stop.
-        const arrival = upcomingBuses.find(bus => bus.line === String(line));
-        if (arrival && arrival.arribos && arrival.arribos.length > 0) {
-            // Return the first arrival for that line
-            return [arrival.arribos[0]];
+        // The API returns an array of lines. We need to find the one we're interested in.
+        const arrivalForLine = upcomingBuses.find(bus => bus.line === String(line));
+        
+        // Check if that line has upcoming arrivals in the 'arribos' array.
+        if (arrivalForLine && arrivalForLine.arribos && Array.isArray(arrivalForLine.arribos) && arrivalForLine.arribos.length > 0) {
+            // Return the first upcoming bus from the 'arribos' list.
+            return [arrivalForLine.arribos[0]];
         }
     }
     
