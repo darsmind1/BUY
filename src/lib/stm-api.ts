@@ -19,6 +19,13 @@ interface StmLineArrivalInfo extends StmArrivalInfo {
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
+const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
+const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
+
+// It's very important to replace these with your actual credentials.
+const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
+const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
+
 async function getAccessToken(): Promise<string | null> {
     const now = Date.now();
 
@@ -26,14 +33,19 @@ async function getAccessToken(): Promise<string | null> {
         return cachedToken.token;
     }
 
+    if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
+        console.error("STM API credentials are not set. Please check your environment variables.");
+        return null;
+    }
+
     try {
-        const response = await fetch(process.env.STM_TOKEN_URL!, {
+        const response = await fetch(STM_TOKEN_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 'grant_type': 'client_credentials',
-                'client_id': process.env.STM_CLIENT_ID!,
-                'client_secret': process.env.STM_CLIENT_SECRET!,
+                'client_id': STM_CLIENT_ID,
+                'client_secret': STM_CLIENT_SECRET,
             }),
             cache: 'no-store'
         });
@@ -67,7 +79,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
             throw new Error("Could not retrieve access token for STM API.");
         }
 
-        const url = `${process.env.STM_API_BASE_URL}${path}`;
+        const url = `${STM_API_BASE_URL}${path}`;
 
         const response = await fetch(url, {
             ...options,
@@ -89,7 +101,13 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
             return [];
         }
 
-        return await response.json();
+        const data = await response.json();
+        // The API might return an empty object {} on some cases instead of an array []
+        if (!Array.isArray(data)) {
+            return [];
+        }
+
+        return data;
 
     } catch (error) {
         console.error(`Exception during STM API fetch for path ${path}:`, error);
@@ -123,6 +141,7 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
     const firstArrival = upcomingData[0];
     
     if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
+        console.log("STM Arrival Info:", firstArrival);
          return {
             line: firstArrival.line,
             eta: firstArrival.eta,
