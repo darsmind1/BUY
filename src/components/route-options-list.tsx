@@ -55,13 +55,13 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
 
-    const fetchArrival = async () => {
+    const fetchArrival = async (isInitialFetch = false) => {
       if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
-        setIsLoadingArrival(false);
+        if(isInitialFetch) setIsLoadingArrival(false);
         return;
       }
       
-      setIsLoadingArrival(true);
+      if(isInitialFetch) setIsLoadingArrival(true);
 
       const departureStopLocation = {
           lat: firstTransitStep.transit.departure_stop.location.lat(),
@@ -104,13 +104,13 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         console.error("Error fetching bus locations:", error);
         if(isMounted) setArrivalInfo(null);
       } finally {
-        if(isMounted) setIsLoadingArrival(false);
+        if(isMounted && isInitialFetch) setIsLoadingArrival(false);
       }
     };
 
-    fetchArrival();
+    fetchArrival(true);
     
-    intervalId = setInterval(fetchArrival, 20000); // 20 seconds
+    intervalId = setInterval(() => fetchArrival(false), 20000); // 20 seconds, background refresh
 
     return () => {
         isMounted = false;
