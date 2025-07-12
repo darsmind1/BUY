@@ -128,12 +128,15 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     if (!directionsRendererRef.current) {
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
         suppressMarkers: true,
-        map: mapRef.current, // Associate with map on creation
+        map: mapRef.current,
       });
     }
   
     if (!directionsResponse) {
-      directionsRendererRef.current.setDirections(null);
+      // Check if renderer exists before trying to clear it
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setDirections(null);
+      }
       return;
     }
   
@@ -210,7 +213,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]);
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
 
   if (!isLoaded) {
     return (
