@@ -55,7 +55,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         
         if (stopData && stopData.length > 0) {
           const stopId = stopData[0].busstopId;
-          const arrivalData = await getArrivals(Number(line), stopId);
+          const arrivalData = await getArrivals(String(line), stopId);
           
           if (arrivalData) {
             setStmLineInfo({
@@ -66,6 +66,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
              setStmLineInfo(null);
           }
         } else {
+          console.error(`No STM stop found for location:`, stopLocation.lat(), stopLocation.lng());
           setStmLineInfo(null);
         }
       } catch (error) {

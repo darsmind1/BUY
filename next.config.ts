@@ -22,7 +22,11 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/transportepublico/:path*',
-        destination: 'https://api.montevideo.gub.uy/:path*',
+        destination: 'https://api.montevideo.gub.uy/api/transportepublico/:path*',
+      },
+       {
+        source: '/token',
+        destination: 'https://mvdapi-auth.montevideo.gub.uy/token',
       },
     ]
   },

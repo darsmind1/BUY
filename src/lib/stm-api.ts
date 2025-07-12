@@ -1,58 +1,66 @@
 // @ts-nocheck
 'use server';
 
-import { unstable_cache } from "next/cache";
-
 interface StmToken {
     access_token: string;
     expires_in: number;
-    token_type: string;
-    scope: string;
 }
 
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
 // Function to get the access token, cached for its expiration time.
-const getAccessToken = unstable_cache(
-    async (): Promise<string> => {
-        try {
-            console.log("Fetching new STM API access token...");
-            const response = await fetch(process.env.STM_TOKEN_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    'grant_type': 'client_credentials',
-                    'client_id': process.env.STM_CLIENT_ID,
-                    'client_secret': process.env.STM_CLIENT_SECRET,
-                }),
-                cache: 'no-store'
-            });
+async function getAccessToken(): Promise<string> {
+    const now = Date.now();
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error("Error fetching STM token:", response.status, errorText);
-                throw new Error(`Failed to fetch access token, status: ${response.status}`);
-            }
+    if (cachedToken && now < cachedToken.expiresAt) {
+        return cachedToken.token;
+    }
 
-            const tokenData: StmToken = await response.json();
-            console.log("Successfully fetched new STM API access token.");
-            return tokenData.access_token;
-        } catch (error) {
-            console.error("Exception while fetching STM access token:", error);
-            throw error;
+    try {
+        console.log("Fetching new STM API access token...");
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                'grant_type': 'client_credentials',
+                'client_id': process.env.STM_CLIENT_ID,
+                'client_secret': process.env.STM_CLIENT_SECRET,
+            }),
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Error fetching STM token:", response.status, errorText);
+            throw new Error(`Failed to fetch access token, status: ${response.status}`);
         }
-    },
-    ['stm_access_token'],
-    // We revalidate a bit before the token actually expires to avoid issues.
-    { revalidate: 3500 }
-);
+
+        const tokenData: StmToken = await response.json();
+        
+        cachedToken = {
+            token: tokenData.access_token,
+            // We set expiration 60 seconds before it actually expires to be safe
+            expiresAt: now + (tokenData.expires_in - 60) * 1000,
+        };
+        
+        console.log("Successfully fetched new STM API access token.");
+        return cachedToken.token;
+
+    } catch (error) {
+        console.error("Exception while fetching STM access token:", error);
+        cachedToken = null; // Reset cache on error
+        throw error;
+    }
+}
 
 
 async function stmApiFetch(path: string, options: RequestInit = {}) {
-    const accessToken = await getAccessToken();
-    const url = `/api/transportepublico${path}`;
-
     try {
+        const accessToken = await getAccessToken();
+        const url = `/api/transportepublico${path}`;
+
         const response = await fetch(url, {
             ...options,
             headers: {
@@ -60,7 +68,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json',
             },
-            next: { revalidate: 0 } // No cache for API calls
+            cache: 'no-store', // Use cache: 'no-store' for real-time data
         });
 
         if (!response.ok) {
@@ -69,25 +77,16 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
             return null;
         }
 
-        if (response.status === 204) {
+        if (response.status === 204) { // No Content
             return [];
         }
 
         return await response.json();
+
     } catch (error) {
         console.error(`Exception during STM API fetch for path ${path}:`, error);
         return null;
     }
-}
-
-/**
- * Gets the real-time locations for all buses of a specific line.
- * @param linea The bus line number.
- * @returns A promise that resolves to the API response or null if an error occurs.
- */
-export async function getBusLocationsByLine(linea: number) {
-    if (!linea) return null;
-    return stmApiFetch(`/buses?lines=${linea}`);
 }
 
 /**
@@ -109,7 +108,7 @@ export async function findStopByLocation(lat: number, lon: number) {
  * @param stopId The ID of the bus stop.
  * @returns A promise that resolves to an object containing line info and arrivals.
  */
-export async function getArrivals(line: number, stopId: number) {
+export async function getArrivals(line: string, stopId: number) {
     if (!line || !stopId) return null;
 
     const upcomingBuses = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
@@ -119,7 +118,7 @@ export async function getArrivals(line: number, stopId: number) {
         const arrivalForLine = upcomingBuses.find(bus => bus.line === String(line));
         
         // Check if that line has upcoming arrivals in the 'arribos' array.
-        if (arrivalForLine && arrivalForLine.arribos && Array.isArray(arrivalForLine.arribos)) {
+        if (arrivalForLine && arrivalForLine.arribos && Array.isArray(arrivalForLine.arribos) && arrivalForLine.arribos.length > 0) {
             // Return the line info and its arrivals
             return arrivalForLine;
         }
