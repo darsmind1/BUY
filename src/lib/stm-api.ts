@@ -39,73 +39,69 @@ export interface StmLineInfo {
 
 // Cache tokens for each credential set. The key is the index in the config array.
 const cachedTokens = new Map<number, { token: string; expiresAt: number }>();
-let credentialIndex = 0;
+let currentCredentialIndex = 0;
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
+async function getAccessToken(): Promise<string> {
+  const credentialsCount = config.stm.credentials.length;
+  if (credentialsCount === 0) {
+    console.error("CRITICAL: No STM credentials configured.");
+    throw new Error("No STM credentials configured.");
+  }
 
-async function getAccessToken(attempt = 0): Promise<string> {
-    const credentialsCount = config.stm.credentials.length;
-    if (credentialsCount === 0) {
-        console.error("CRITICAL: No STM credentials configured to attempt token fetching.");
-        throw new Error("No STM credentials configured.");
-    }
-    
-    // Prevent infinite loops if all credentials fail
-    if (attempt >= credentialsCount) {
-        console.error("CRITICAL: All STM credentials failed to fetch an access token.");
-        throw new Error("All configured STM credentials failed.");
-    }
+  // Check cache for the current working credential
+  const now = Date.now();
+  const cachedToken = cachedTokens.get(currentCredentialIndex);
+  if (cachedToken && now < cachedToken.expiresAt) {
+    return cachedToken.token;
+  }
 
-    // Select current credential and prepare for next
-    const currentIndex = credentialIndex;
-    const selectedCredential = config.stm.credentials[currentIndex];
-    credentialIndex = (credentialIndex + 1) % credentialsCount;
+  // Iterate through all credentials if the cached one is expired or doesn't exist
+  for (let i = 0; i < credentialsCount; i++) {
+    const credentialIndexToTry = (currentCredentialIndex + i) % credentialsCount;
+    const selectedCredential = config.stm.credentials[credentialIndexToTry];
 
-    // Check cache
-    const now = Date.now();
-    const cachedToken = cachedTokens.get(currentIndex);
-    if (cachedToken && now < cachedToken.expiresAt) {
-        return cachedToken.token;
-    }
-
-    // Fetch new token
     try {
-        const response = await fetch(STM_TOKEN_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                grant_type: 'client_credentials',
-                client_id: selectedCredential.clientId,
-                client_secret: selectedCredential.clientSecret,
-            }),
-            cache: 'no-store',
-        });
+      const response = await fetch(STM_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: selectedCredential.clientId,
+          client_secret: selectedCredential.clientSecret,
+        }),
+        cache: 'no-store',
+      });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Error fetching STM token for client ID ending in ...${selectedCredential.clientId.slice(-4)}. Status: ${response.status}. Body: ${errorText}. Retrying with next credential...`);
-            cachedTokens.delete(currentIndex); // Invalidate cache for this credential
-            // Rotation is handled by the next call, so we just retry
-            return await getAccessToken(attempt + 1);
-        }
-
+      if (response.ok) {
         const tokenData: StmToken = await response.json();
         const newCachedToken = {
-            token: tokenData.access_token,
-            expiresAt: now + (tokenData.expires_in - 60) * 1000, // 60-second buffer
+          token: tokenData.access_token,
+          expiresAt: Date.now() + (tokenData.expires_in - 60) * 1000, // 60-second buffer
         };
         
-        cachedTokens.set(currentIndex, newCachedToken);
+        // Success! Update cache and set this as the current working credential index
+        cachedTokens.set(credentialIndexToTry, newCachedToken);
+        currentCredentialIndex = credentialIndexToTry;
         return newCachedToken.token;
+      }
+
+      // If response is not ok, log it and the loop will try the next credential
+      const errorText = await response.text();
+      console.error(`Failed to fetch STM token for client ID ending in ...${selectedCredential.clientId.slice(-4)}. Status: ${response.status}. Body: ${errorText}. Trying next credential...`);
+      cachedTokens.delete(credentialIndexToTry); // Invalidate cache for this credential
 
     } catch (error) {
-        console.error(`CRITICAL: Network or other exception while fetching STM access token for client ID ...${selectedCredential.clientId.slice(-4)}. Retrying with next credential...`, error);
-        cachedTokens.delete(currentIndex); // Invalidate cache
-        // Rotation is handled by the next call, so we just retry
-        return await getAccessToken(attempt + 1);
+      console.error(`CRITICAL: Network or other exception while fetching STM access token for client ID ...${selectedCredential.clientId.slice(-4)}. Trying next credential...`, error);
+      cachedTokens.delete(credentialIndexToTry); // Invalidate cache
     }
+  }
+
+  // If the loop completes without returning, all credentials have failed.
+  console.error("CRITICAL: All STM credentials failed to fetch an access token.");
+  throw new Error("All configured STM credentials failed.");
 }
 
 
