@@ -1,13 +1,13 @@
 
 "use client";
 
-import { useState, type FormEvent, useRef } from 'react';
+import { useState, type FormEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, LocateFixed, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useJsApiLoader, Autocomplete } from '@react-google-maps/api';
+import { useJsApiLoader } from '@react-google-maps/api';
 
 interface RouteSearchFormProps {
   apiKey: string;
@@ -19,49 +19,48 @@ interface RouteSearchFormProps {
 
 const libraries: ("places")[] = ['places'];
 
-const autocompleteOptions = {
-    componentRestrictions: { country: "uy" },
-    fields: ["formatted_address"],
-};
-
 export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, isApiChecking, isApiError }: RouteSearchFormProps) {
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const { toast } = useToast();
 
-  const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [destinationAutocomplete, setDestinationAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const originInputRef = useRef<HTMLInputElement>(null);
+  const destinationInputRef = useRef<HTMLInputElement>(null);
+  const originAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const destinationAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: apiKey,
     libraries: libraries,
   });
 
-  const onOriginLoad = (autocomplete: google.maps.places.Autocomplete) => {
-    setOriginAutocomplete(autocomplete);
-  };
-
-  const onDestinationLoad = (autocomplete: google.maps.places.Autocomplete) => {
-    setDestinationAutocomplete(autocomplete);
-  };
-
-  const onOriginPlaceChanged = () => {
-    if (originAutocomplete !== null) {
-      const place = originAutocomplete.getPlace();
-      setOrigin(place.formatted_address || '');
-    } else {
-      console.error('Autocomplete is not loaded yet!');
+  useEffect(() => {
+    if (isLoaded && originInputRef.current && !originAutocompleteRef.current) {
+        originAutocompleteRef.current = new window.google.maps.places.Autocomplete(originInputRef.current, {
+            componentRestrictions: { country: "uy" },
+            fields: ["formatted_address"],
+        });
+        originAutocompleteRef.current.addListener('place_changed', () => {
+            const place = originAutocompleteRef.current?.getPlace();
+            if (place?.formatted_address) {
+                setOrigin(place.formatted_address);
+            }
+        });
     }
-  };
 
-  const onDestinationPlaceChanged = () => {
-    if (destinationAutocomplete !== null) {
-        const place = destinationAutocomplete.getPlace();
-        setDestination(place.formatted_address || '');
-    } else {
-      console.error('Autocomplete is not loaded yet!');
+    if (isLoaded && destinationInputRef.current && !destinationAutocompleteRef.current) {
+        destinationAutocompleteRef.current = new window.google.maps.places.Autocomplete(destinationInputRef.current, {
+            componentRestrictions: { country: "uy" },
+            fields: ["formatted_address"],
+        });
+        destinationAutocompleteRef.current.addListener('place_changed', () => {
+            const place = destinationAutocompleteRef.current?.getPlace();
+            if (place?.formatted_address) {
+                setDestination(place.formatted_address);
+            }
+        });
     }
-  };
+  }, [isLoaded]);
   
   const handleGetLocation = () => {
     if (navigator.geolocation) {
@@ -120,19 +119,14 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
             <Label htmlFor="origin">Desde</Label>
             <div className="relative flex items-center">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-                <Autocomplete
-                    onLoad={onOriginLoad}
-                    onPlaceChanged={onOriginPlaceChanged}
-                    options={autocompleteOptions}
-                >
                 <Input 
+                    ref={originInputRef}
                     id="origin" 
                     value={origin}
                     onChange={(e) => setOrigin(e.target.value)}
                     className="pl-9 pr-10"
                     placeholder="Mi ubicación actual"
                 />
-                </Autocomplete>
                 <Button 
                     type="button" 
                     variant="ghost"
@@ -149,20 +143,15 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
             <Label htmlFor="destination">Hasta</Label>
             <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-                <Autocomplete
-                    onLoad={onDestinationLoad}
-                    onPlaceChanged={onDestinationPlaceChanged}
-                    options={autocompleteOptions}
-                >
-                    <Input 
-                        id="destination" 
-                        value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                        className="pl-9"
-                        placeholder="Escribe una dirección o lugar"
-                        required
-                    />
-                </Autocomplete>
+                <Input 
+                    ref={destinationInputRef}
+                    id="destination" 
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                    className="pl-9"
+                    placeholder="Escribe una dirección o lugar"
+                    required
+                />
             </div>
         </div>
         <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground group-disabled:bg-accent/50">
@@ -187,5 +176,3 @@ export default function RouteSearchForm({ apiKey, onSearch, onLocationObtained, 
     </form>
   );
 }
-
-    
