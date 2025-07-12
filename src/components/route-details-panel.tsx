@@ -42,7 +42,7 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
     const street = parts[0];
     const rest = parts.slice(1).join(',');
     return (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
             {prefix}: <span className="font-semibold">{street}</span>{rest && `, ${rest}`}
         </p>
     )
@@ -93,13 +93,13 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                      </div>
                      <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
                         <div className="flex-1 space-y-1">
-                          <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                          <p className="font-medium text-sm leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
                           <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
                         </div>
                      </AccordionTrigger>
                    </div>
                   <AccordionContent className="py-2 pl-12 pr-4 border-l ml-5">
-                      <div className="space-y-3 text-xs">
+                      <div className="space-y-3 text-sm">
                         {step.steps.map((subStep, subIndex) => (
                            <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
                         ))}
@@ -114,7 +114,7 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                       <StepIcon type={step.travel_mode} />
                   </div>
                   <div className="flex-1 space-y-1">
-                      <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                      <p className="font-medium text-sm leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
                       <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
                   </div>
                   {step.travel_mode === 'TRANSIT' && step.transit && (
