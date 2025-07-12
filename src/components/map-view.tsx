@@ -113,17 +113,20 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     if (!map || !mapLoaded) return;
   
     if (view === 'details' && selectedRoute && userLocation) {
-        map.panTo(userLocation);
-        map.setZoom(16.5);
+      map.panTo(userLocation);
+      map.setZoom(16.5);
     } else if (directionsResponse) {
       const bounds = new window.google.maps.LatLngBounds();
       directionsResponse.routes.forEach(route => {
         route.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
       });
-      if (view === 'options' && userLocation) {
+      if (userLocation) {
         bounds.extend(userLocation);
       }
       map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+    } else if (view === 'search' && userLocation) {
+      map.panTo(userLocation);
+      map.setZoom(15);
     } else {
       map.panTo(defaultCenter);
       map.setZoom(12);
@@ -164,7 +167,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
 
           {busLocations.map((bus) => (
              <Marker 
-                key={`${bus.line}-${bus.id}`}
+                key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 zIndex={100}
                 icon={{
