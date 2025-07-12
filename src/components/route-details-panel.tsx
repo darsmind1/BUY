@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Map } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Map, Snowflake, Wheelchair } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { Button } from './ui/button';
 
@@ -65,6 +65,30 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
     )
 }
 
+const BusFeatures = ({ bus }: { bus: BusLocation }) => {
+    const hasAccessibility = bus.access === "PLATAFORMA ELEVADORA";
+    const hasAC = bus.thermalConfort === "Aire Acondicionado";
+
+    if (!hasAccessibility && !hasAC) return null;
+
+    return (
+        <div className="flex items-center gap-4 pt-2">
+            {hasAccessibility && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Wheelchair className="h-4 w-4" />
+                    <span>Accesible</span>
+                </div>
+            )}
+            {hasAC && (
+                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Snowflake className="h-4 w-4" />
+                    <span>Aire Acond.</span>
+                </div>
+            )}
+        </div>
+    )
+}
+
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
@@ -75,6 +99,7 @@ export default function RouteDetailsPanel({
   const duration = getTotalDuration(route.legs);
 
   const isBusLive = busLocations.length > 0;
+  const liveBusData = isBusLive ? busLocations[0] : null; // Assuming we care about the first bus in the list
   
   if (!leg) return null;
 
@@ -122,6 +147,7 @@ export default function RouteDetailsPanel({
           <CardContent className="pt-0 space-y-1">
             <AddressText prefix="Desde" fullAddress={leg.start_address} />
             <AddressText prefix="Hasta" fullAddress={leg.end_address} />
+            {liveBusData && <BusFeatures bus={liveBusData} />}
           </CardContent>
         </Card>
 

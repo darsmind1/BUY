@@ -23,6 +23,8 @@ export interface BusLocation {
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
+    access?: string;
+    thermalConfort?: string;
 }
 
 export interface BusArrival {
@@ -178,7 +180,9 @@ export async function getBusLocation(line: string, destination?: string): Promis
         return {
             ...bus,
             line: busLine.toString(),
-            id: bus.id?.toString() // Ensure id is a string
+            id: bus.id?.toString(), // Ensure id is a string
+            access: bus.access,
+            thermalConfort: bus.thermalConfort,
         };
     }) as BusLocation[];
 }
