@@ -57,8 +57,9 @@ async function getAccessToken(): Promise<string> {
   }
   
   // Rotate to the next credential for the next call
-  currentCredentialIndex = (currentCredentialIndex + 1) % credentials.length;
   const credential = credentials[currentCredentialIndex];
+  currentCredentialIndex = (currentCredentialIndex + 1) % credentials.length;
+  
 
   const now = Date.now();
   const cached = tokenCache.get(credential.clientId);
@@ -122,6 +123,10 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
     }
 
     if (!response.ok) {
+        if (response.status === 404) {
+            console.warn(`STM API request to ${path} resulted in a 404 Not Found. This likely means the requested resource (e.g., line/stop combination) doesn't exist. Returning empty array.`);
+            return []; // Gracefully handle 404s as "no data"
+        }
       const errorText = await response.text();
       console.error(`STM API request to ${path} failed:`, response.status, errorText);
       throw new Error(`STM API request failed for ${path}: ${response.status} ${errorText}`);
