@@ -87,7 +87,6 @@ const RouteOptionItem = ({
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
-    let initialFetchTimeoutId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
         if (!isMounted || !firstTransitStep || !googleTransitLine || stmStopId === null || !isApiConnected) {
@@ -108,7 +107,9 @@ const RouteOptionItem = ({
             }
             
             const buses = await getBusLocation(googleTransitLine);
-            if (isMounted && buses && buses.length > 0) {
+            if (!isMounted) return;
+
+            if (buses && buses.length > 0) {
                 let nearestBusDistance = Infinity;
                 let nearestBus: BusLocation | null = null;
                 
@@ -139,18 +140,14 @@ const RouteOptionItem = ({
                         freshness = 'stale';
                     }
                     
-                    setLastRealtimeUpdate(Date.now());
                     setArrivalInfo({
                         distance: nearestBusDistance,
                         eta: etaSeconds,
                         freshness,
                     });
-                } else {
-                    // No bus found, do not clear arrivalInfo immediately, let the timeout handle it
+                    setLastRealtimeUpdate(Date.now());
                 }
-            } else if (isMounted) {
-                // No buses found for the line, let timeout handle it
-            }
+            } 
 
         } catch (error) {
             console.error("Error fetching bus arrival info:", error);
@@ -158,32 +155,26 @@ const RouteOptionItem = ({
             if(isMounted && isInitialFetch) setIsLoadingArrival(false);
         }
     };
-
-    // This effect checks if the real-time data is stale
-    const timer = setInterval(() => {
-        if (lastRealtimeUpdate && (Date.now() - lastRealtimeUpdate > REALTIME_INFO_TIMEOUT_MS)) {
-            setArrivalInfo(null); // Data is stale, clear it to show scheduled time
-            setLastRealtimeUpdate(null);
-        }
-    }, 10000); // Check every 10 seconds
     
     if (stmStopId !== null && isApiConnected) {
       // Stagger the initial fetch to avoid burst requests
-      initialFetchTimeoutId = setTimeout(() => {
-        fetchArrival(true);
-        // Set up the recurring fetch after the first one
-        intervalId = setInterval(() => fetchArrival(false), 20000); 
+      const initialFetchTimeoutId = setTimeout(() => {
+        if(isMounted) {
+            fetchArrival(true);
+            // Set up the recurring fetch after the first one
+            intervalId = setInterval(() => fetchArrival(false), 20000); 
+        }
       }, index * 300); // 300ms delay per item
+
+      return () => {
+        isMounted = false;
+        clearTimeout(initialFetchTimeoutId);
+        if (intervalId) clearInterval(intervalId);
+      };
+
     } else {
         setIsLoadingArrival(false);
     }
-
-    return () => {
-        isMounted = false;
-        if (initialFetchTimeoutId) clearTimeout(initialFetchTimeoutId);
-        if (intervalId) clearInterval(intervalId);
-        if (timer) clearInterval(timer);
-    };
 
   }, [firstTransitStep, googleTransitLine, stmStopId, index, isApiConnected]);
 
@@ -199,8 +190,9 @@ const RouteOptionItem = ({
   };
 
   const arrivalText = getArrivalText();
-
-  const isRealtimeActive = arrivalInfo !== null && lastRealtimeUpdate !== null && (Date.now() - lastRealtimeUpdate < REALTIME_INFO_TIMEOUT_MS);
+  
+  const isRealtimeStale = lastRealtimeUpdate === null || (Date.now() - lastRealtimeUpdate > REALTIME_INFO_TIMEOUT_MS);
+  const showRealtime = arrivalInfo !== null && !isRealtimeStale;
 
   const arrivalColorClass = {
       fresh: 'text-green-500',
@@ -262,19 +254,19 @@ const RouteOptionItem = ({
                     <span>Buscando...</span>
                 </div>
             )}
-             {!isLoadingArrival && isRealtimeActive && arrivalText && (
+             {!isLoadingArrival && showRealtime && arrivalText && (
               <div className={cn("flex items-center gap-2 text-xs font-medium", arrivalColorClass)}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
             )}
-            {!isLoadingArrival && !isRealtimeActive && scheduledDepartureTime && (
+            {!isLoadingArrival && !showRealtime && scheduledDepartureTime && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
                     <span>Sale a las {scheduledDepartureTime}</span>
                 </div>
             )}
-            {!isLoadingArrival && !isRealtimeActive && !scheduledDepartureTime && firstTransitStep && isApiConnected && (
+            {!isLoadingArrival && !showRealtime && !scheduledDepartureTime && firstTransitStep && isApiConnected && (
                 <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             )}
           </div>
@@ -391,3 +383,5 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
+
+    
