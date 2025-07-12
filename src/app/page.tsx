@@ -13,9 +13,11 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation } from '@/lib/stm-api';
+import { haversineDistance } from '@/lib/utils';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
+const MAX_BUS_DISTANCE_METERS = 2500; // 2.5km
 
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
@@ -31,21 +33,21 @@ export default function Home() {
     let intervalId: NodeJS.Timeout | null = null;
 
     const fetchBusLocations = async () => {
-      // Only fetch bus locations if a specific route is selected (details view)
       if (!selectedRoute) {
         setBusLocations([]);
         return;
       }
       
       const lines = new Set<string>();
+      let departureStopLocation: google.maps.LatLng | null = null;
       
-      selectedRoute.legs.forEach(leg => {
-        leg.steps.forEach(step => {
-          if (step.travel_mode === 'TRANSIT' && step.transit) {
-            lines.add(step.transit.line.short_name || step.transit.line.name);
-          }
-        });
-      });
+      const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+
+      if (firstTransitStep && firstTransitStep.transit) {
+          lines.add(firstTransitStep.transit.line.short_name || firstTransitStep.transit.line.name);
+          departureStopLocation = firstTransitStep.transit.departure_stop.location;
+      }
+
 
       if (lines.size === 0) {
         setBusLocations([]);
@@ -55,15 +57,26 @@ export default function Home() {
       try {
         const promises = Array.from(lines).map(line => getBusLocation(line));
         const results = await Promise.all(promises);
-        const allBuses = results.flat().filter((bus): bus is BusLocation => bus !== null);
+        let allBuses = results.flat().filter((bus): bus is BusLocation => bus !== null);
+
+        if (departureStopLocation) {
+          const stopCoords = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
+          allBuses = allBuses.filter(bus => {
+            const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+            const distance = haversineDistance(stopCoords, busCoords);
+            return distance <= MAX_BUS_DISTANCE_METERS;
+          });
+        }
+
         setBusLocations(allBuses);
+
       } catch (error) {
         console.error("Error fetching bus locations for map:", error);
       }
     };
     
-    fetchBusLocations(); // Initial fetch
-    intervalId = setInterval(fetchBusLocations, 10000); // Refresh every 10 seconds
+    fetchBusLocations(); 
+    intervalId = setInterval(fetchBusLocations, 10000); 
 
     return () => {
       if (intervalId) {

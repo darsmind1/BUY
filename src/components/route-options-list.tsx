@@ -6,40 +6,16 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
 import { getBusLocation } from '@/lib/stm-api';
+import { haversineDistance } from '@/lib/utils';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void;
 }
 
-interface BusLocation {
-    line: string;
-    location: {
-        coordinates: [number, number]; // [lng, lat]
-    };
-}
-
 interface BusArrivalInfo {
     eta: number; // in seconds
     distance: number; // in meters
-}
-
-function haversineDistance(
-  coords1: { lat: number, lng: number },
-  coords2: { lat: number, lng: number }
-): number {
-  const R = 6371e3; // metres
-  const φ1 = coords1.lat * Math.PI / 180;
-  const φ2 = coords2.lat * Math.PI / 180;
-  const Δφ = (coords2.lat - coords1.lat) * Math.PI / 180;
-  const Δλ = (coords2.lng - coords1.lng) * Math.PI / 180;
-
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // in metres
 }
 
 const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
@@ -110,7 +86,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
 
     fetchArrival(true);
     
-    intervalId = setInterval(() => fetchArrival(false), 20000); // 20 seconds, background refresh
+    intervalId = setInterval(() => fetchArrival(false), 20000); 
 
     return () => {
         isMounted = false;
