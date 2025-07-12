@@ -45,6 +45,7 @@ const mapOptions: google.maps.MapOptions = {
 
 const directionsRendererOptions = {
     suppressMarkers: true,
+    preserveViewport: true, // This is the key change to prevent auto-zoom
     polylineOptions: {
         strokeColor: '#4285F4',
         strokeOpacity: 0.8,
