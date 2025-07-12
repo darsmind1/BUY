@@ -315,16 +315,18 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
           });
 
           if (linesToFetch.size === 0) return;
+          
+          const linesQueryString = Array.from(linesToFetch).join(',');
 
           try {
-              const promises = Array.from(linesToFetch).map(line => getBusLocation(line).then(buses => ({ line, buses })));
-              const results = await Promise.all(promises);
+              const allBuses = await getBusLocation(linesQueryString);
               
               const busesByLine = new Map<string, BusLocation[]>();
-              results.forEach(result => {
-                  if (result.buses) {
-                      busesByLine.set(result.line, result.buses);
+              allBuses.forEach(bus => {
+                  if (!busesByLine.has(bus.line)) {
+                      busesByLine.set(bus.line, []);
                   }
+                  busesByLine.get(bus.line)!.push(bus);
               });
 
               const newArrivals: BusArrivalsState = {};
@@ -332,6 +334,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
               for (const routeIndex in stmStopMappings) {
                   const info = stmStopMappings[routeIndex];
                   if (!info.isLineValid || !info.line || !info.departureStopLocation) {
+                      newArrivals[routeIndex] = null;
                       continue;
                   }
 
@@ -357,13 +360,17 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                               eta: etaSeconds,
                               lastUpdate: Date.now()
                           };
+                      } else {
+                        newArrivals[routeIndex] = null;
                       }
+                  } else {
+                     newArrivals[routeIndex] = null;
                   }
               }
               setBusArrivals(prev => ({...prev, ...newArrivals}));
 
           } catch (error) {
-              console.error("Error fetching bus arrival info for all routes:", error);
+              console.error(`Error fetching bus arrival info for lines ${linesQueryString}:`, error);
           }
       };
 
