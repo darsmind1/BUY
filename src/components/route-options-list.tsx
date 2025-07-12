@@ -155,13 +155,13 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
             {isLoadingArrival && firstTransitStep && (
-                 <div className="flex items-center gap-2 text-xs text-blue-400">
+                 <div className="flex items-center gap-2 text-xs text-primary">
                     <Wifi className="h-3 w-3 animate-pulse" />
                     <span>Buscando...</span>
                 </div>
             )}
             {!isLoadingArrival && arrivalText && (
-              <div className="flex items-center gap-2 text-xs font-medium text-blue-400">
+              <div className="flex items-center gap-2 text-xs font-medium text-primary">
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
