@@ -31,24 +31,19 @@ export default function Home() {
     let intervalId: NodeJS.Timeout | null = null;
 
     const fetchBusLocations = async () => {
-      if (!directionsResponse || view === 'search') {
+      // Only fetch bus locations if a specific route is selected (details view)
+      if (!selectedRoute) {
         setBusLocations([]);
         return;
       }
       
       const lines = new Set<string>();
       
-      // If a specific route is selected, only show buses for that route.
-      // Otherwise (in options view), show buses for all possible routes.
-      const routesToScan = selectedRoute ? [selectedRoute] : directionsResponse.routes;
-
-      routesToScan.forEach(route => {
-        route.legs.forEach(leg => {
-          leg.steps.forEach(step => {
-            if (step.travel_mode === 'TRANSIT' && step.transit) {
-              lines.add(step.transit.line.short_name || step.transit.line.name);
-            }
-          });
+      selectedRoute.legs.forEach(leg => {
+        leg.steps.forEach(step => {
+          if (step.travel_mode === 'TRANSIT' && step.transit) {
+            lines.add(step.transit.line.short_name || step.transit.line.name);
+          }
         });
       });
 
@@ -67,7 +62,7 @@ export default function Home() {
       }
     };
     
-    fetchBusLocations();
+    fetchBusLocations(); // Initial fetch
     intervalId = setInterval(fetchBusLocations, 10000); // Refresh every 10 seconds
 
     return () => {
@@ -75,7 +70,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [directionsResponse, selectedRoute, view]);
+  }, [selectedRoute]);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
