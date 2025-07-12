@@ -42,7 +42,7 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
     const street = parts[0];
     const rest = parts.slice(1).join(',');
     return (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
             {prefix}: <span className="font-semibold text-foreground">{street}</span>{rest && `, ${rest}`}
         </p>
     )
@@ -56,19 +56,19 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
   if (!leg) return null;
 
   return (
-    <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-500">
+    <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500">
       <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center justify-between text-lg">
-            <div className="flex items-center gap-3">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center justify-between text-base">
+            <div className="flex items-center gap-2">
                 {busLines.map((bus) => (
-                  <Badge key={bus} variant="outline" className="text-base font-mono">{bus}</Badge>
+                  <Badge key={bus} variant="outline" className="text-sm font-mono">{bus}</Badge>
                 ))}
                 {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
-                  <Badge variant="outline" className="text-base">A pie</Badge>
+                  <Badge variant="outline" className="text-sm">A pie</Badge>
                 )}
             </div>
-            <div className="flex items-center gap-2 text-base font-normal">
+            <div className="flex items-center gap-2 text-sm font-normal">
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span>{duration} min</span>
             </div>
@@ -81,7 +81,7 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
       </Card>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-muted-foreground px-1">Indicaciones</h3>
+        <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
         <Accordion type="multiple" className="w-full space-y-1">
           {leg.steps.map((step, index) => {
             const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
@@ -89,19 +89,19 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
             if (hasDetailedWalkingSteps) {
               return (
                 <AccordionItem value={`item-${index}`} key={index} className="border-none">
-                   <div className="flex items-start gap-4 p-3 rounded-lg bg-muted/50">
-                     <div className="mt-1">
+                   <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
+                     <div className="mt-0.5">
                         <StepIcon type={step.travel_mode} />
                      </div>
                      <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
-                        <div className="flex-1 space-y-1">
-                          <p className="font-medium text-sm leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                        <div className="flex-1 space-y-0.5">
+                          <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
                           <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
                         </div>
                      </AccordionTrigger>
                    </div>
-                  <AccordionContent className="py-2 pl-12 pr-4 border-l ml-5">
-                      <div className="space-y-3 text-sm">
+                  <AccordionContent className="py-2 pl-10 pr-4 border-l ml-4">
+                      <div className="space-y-2 text-xs">
                         {step.steps!.map((subStep, subIndex) => (
                            <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
                         ))}
@@ -112,16 +112,16 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
             }
 
             return (
-              <div key={index} className="flex items-start gap-4 p-3 rounded-lg hover:bg-muted/50">
-                  <div className="mt-1">
+              <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                  <div className="mt-0.5">
                       <StepIcon type={step.travel_mode} />
                   </div>
-                  <div className="flex-1 space-y-1">
-                      <p className="font-medium text-sm leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                  <div className="flex-1 space-y-0.5">
+                      <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
                       <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
                   </div>
                   {step.travel_mode === 'TRANSIT' && step.transit && (
-                    <Badge variant="default" className="font-mono">{step.transit.line.short_name || step.transit.line.name}</Badge>
+                    <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name || step.transit.line.name}</Badge>
                   )}
               </div>
             )
