@@ -128,9 +128,7 @@ const RouteOptionItem = ({
 
   const arrivalText = getArrivalText();
   const scheduledText = getScheduledArrivalInMinutes();
-  
-  const showRealtime = arrivalInfo !== null;
-  
+    
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
 
   return (
@@ -177,19 +175,25 @@ const RouteOptionItem = ({
               <Clock className="h-4 w-4" />
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
-            {showRealtime && arrivalText ? (
+            
+            {/* --- Corrected Arrival Info Logic --- */}
+            {arrivalInfo && arrivalText ? (
+              // If we have real-time info, ALWAYS show it with colors and icon
               <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
             ) : scheduledText ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    <span>{scheduledText}</span>
-                </div>
+              // Otherwise, if we have a scheduled time, show that
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>{scheduledText}</span>
+              </div>
             ) : firstTransitStep && isApiConnected ? (
-                 <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
+              // Finally, if there's a bus but no arrival/scheduled info, show "Sin arribos"
+              <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             ) : null}
+
           </div>
         </div>
         <ArrowRight className="h-5 w-5 text-muted-foreground" />
