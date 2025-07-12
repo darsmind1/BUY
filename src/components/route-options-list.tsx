@@ -43,6 +43,7 @@ const RouteOptionItem = ({
   
   const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
   const googleTransitLine = firstTransitStep?.transit?.line.short_name;
+  const scheduledDepartureTime = firstTransitStep?.transit?.departure_time?.text;
 
   useEffect(() => {
     let isMounted = true;
@@ -211,17 +212,20 @@ const RouteOptionItem = ({
                     <span>Buscando...</span>
                 </div>
             )}
-            {!isLoadingArrival && arrivalText && (
+             {!isLoadingArrival && arrivalText && (
               <div className={cn("flex items-center gap-2 text-xs font-medium", arrivalColorClass)}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
             )}
-            {!isLoadingArrival && !arrivalText && firstTransitStep && (
+            {!isLoadingArrival && !arrivalText && scheduledDepartureTime && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Wifi className="h-3 w-3" />
-                    <span>Sin arribos</span>
+                    <Clock className="h-3 w-3" />
+                    <span>Sale a las {scheduledDepartureTime}</span>
                 </div>
+            )}
+            {!isLoadingArrival && !arrivalText && !scheduledDepartureTime && firstTransitStep && (
+                <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             )}
           </div>
         </div>
