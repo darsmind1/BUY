@@ -92,17 +92,12 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (selectedRoute && directionsResponse) {
-        const bounds = new window.google.maps.LatLngBounds();
-        // Use the selected route for bounds
-        const route = directionsResponse.routes[routeIndex];
-        route.legs.forEach(leg => {
-            leg.steps.forEach(step => {
-                step.path.forEach(point => bounds.extend(point));
-            });
-        });
-        map.fitBounds(bounds);
+    if (selectedRoute && userLocation) {
+        // When in details view, focus on the user's location
+        map.panTo(userLocation);
+        map.setZoom(16.75);
     } else if (directionsResponse) {
+        // For options view, fit the bounds of the route
         const bounds = new window.google.maps.LatLngBounds();
         directionsResponse.routes[routeIndex].legs.forEach(leg => {
             leg.steps.forEach(step => {
@@ -112,9 +107,11 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.fitBounds(bounds);
     }
     else if (userLocation) {
+        // For initial search view with location, focus on user
         map.panTo(userLocation);
         map.setZoom(15);
     } else {
+        // Default view
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
@@ -141,7 +138,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {userLocation && !selectedRoute && (
+          {userLocation && (
              <MarkerF 
                 position={userLocation}
                 title="Tu ubicación"
