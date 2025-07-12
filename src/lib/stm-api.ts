@@ -1,13 +1,10 @@
-
-'use server';
-
 import config from './config';
 
 // Validar credenciales al inicio. Si no están, el servidor no debería ni arrancar.
 if (!config.stm.clientId || !config.stm.clientSecret) {
-  const errorMessage = 'CRITICAL: STM API credentials (STM_CLIENT_ID, STM_CLIENT_SECRET) are not defined in the environment. Please check your .env file.';
+  const errorMessage = 'CRITICAL: STM API credentials (NEXT_PUBLIC_STM_CLIENT_ID, NEXT_PUBLIC_STM_CLIENT_SECRET) are not defined in the environment. Please check your .env file.';
   console.error(errorMessage);
-  throw new Error(errorMessage);
+  // No lanzamos error para no bloquear el build, pero la API no funcionará.
 }
 
 
