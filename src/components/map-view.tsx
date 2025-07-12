@@ -15,6 +15,7 @@ interface MapViewProps {
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
   containerClassName?: string;
+  view: 'search' | 'options' | 'details';
 }
 
 const mapContainerStyle = {
@@ -45,7 +46,7 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName, view }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -53,7 +54,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
 
   useEffect(() => {
-    if (window.google) {
+    if (isLoaded && window.google) {
         setUserMarkerIcon({
             path: window.google.maps.SymbolPath.CIRCLE,
             scale: 8,
@@ -63,7 +64,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
             strokeColor: "#ffffff",
         });
     }
-  }, []);
+  }, [isLoaded]);
 
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -110,24 +111,24 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
-
-    if (selectedRoute) { 
-        const bounds = new window.google.maps.LatLngBounds();
-        directionsResponse?.routes[routeIndex].legs.forEach(leg => { leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))); });
-        if(userLocation) bounds.extend(userLocation);
-        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-    } else if (directionsResponse) {
-        const bounds = new window.google.maps.LatLngBounds();
-        directionsResponse.routes.forEach(route => { route.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point)))); });
-        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-    } else if (userLocation) {
+  
+    if (view === 'details' && selectedRoute && userLocation) {
         map.panTo(userLocation);
-        map.setZoom(15);
+        map.setZoom(16.5);
+    } else if (directionsResponse) {
+      const bounds = new window.google.maps.LatLngBounds();
+      directionsResponse.routes.forEach(route => {
+        route.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+      });
+      if (view === 'options' && userLocation) {
+        bounds.extend(userLocation);
+      }
+      map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
     } else {
-        map.panTo(defaultCenter);
-        map.setZoom(12);
+      map.panTo(defaultCenter);
+      map.setZoom(12);
     }
-  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation, view]);
 
   if (!isLoaded) {
     return (

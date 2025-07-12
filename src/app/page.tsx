@@ -307,6 +307,7 @@ export default function Home() {
               userLocation={currentUserLocation}
               selectedRoute={selectedRoute}
               busLocations={busLocations}
+              view={view}
             />
         </div>
       </div>
