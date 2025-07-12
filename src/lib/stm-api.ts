@@ -97,8 +97,16 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
  */
 export async function findStopByLocation(lat: number, lon: number) {
     if (lat === undefined || lon === undefined) return null;
-     // The API expects a short distance to find the *closest* stop.
-    return stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=200`);
+    
+    let stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=200`);
+    
+    // If no stops are found, try again with a larger radius
+    if (!stops || stops.length === 0) {
+        console.log(`No stop found at 200m for ${lat}, ${lon}. Retrying with 500m.`);
+        stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=500`);
+    }
+
+    return stops;
 }
 
 
