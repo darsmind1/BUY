@@ -44,9 +44,9 @@ async function getAccessToken(): Promise<string | null> {
   if (cachedToken && now < cachedToken.expiresAt) {
     return cachedToken.token;
   }
-
+  
   if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
-    console.error('STM API credentials are not set in .env file. Please add STM_CLIENT_ID and STM_CLIENT_SECRET.');
+    console.error('STM API credentials are not set in environment variables. Please add STM_CLIENT_ID and STM_CLIENT_SECRET.');
     return null;
   }
 
@@ -87,7 +87,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) {
-      // Return null instead of throwing, so the calling function can handle it.
+      console.error(`STM API fetch for path ${path} failed because no access token could be obtained.`);
       return null;
     }
 
@@ -100,16 +100,16 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
-      next: { revalidate: 0 } // No caching for API fetches
+      next: { revalidate: 0 }
     });
+
+    if (response.status === 204) {
+      return [];
+    }
 
     if (!response.ok) {
       console.error(`STM API request to ${path} failed:`, response.status, await response.text());
       return null;
-    }
-    
-    if (response.status === 204) {
-      return [];
     }
     
     const data = await response.json();
@@ -129,7 +129,7 @@ export async function getBusLocation(line: string): Promise<BusLocation[] | null
     const data = await stmApiFetch(`/buses?lines=${line}`);
     if (data && Array.isArray(data)) {
         return data.map((bus: any) => {
-            const busLine = typeof bus.line === 'object' && bus.line !== null ? bus.line.value : bus.line;
+            const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
             return {
                 ...bus,
                 line: busLine.toString(),
@@ -159,3 +159,8 @@ export async function getAllBusStops(): Promise<StmBusStop[] | null> {
 
 export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[] | null> {
     const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
+    if (data && Array.isArray(data)) {
+        return data as StmLineInfo[];
+    }
+    return null;
+}
