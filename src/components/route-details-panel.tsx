@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Map, Snowflake, Wheelchair } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Map, Snowflake, Accessibility } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { Button } from './ui/button';
 
@@ -75,7 +75,7 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
         <div className="flex items-center gap-4 pt-2">
             {hasAccessibility && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Wheelchair className="h-4 w-4" />
+                    <Accessibility className="h-4 w-4" />
                     <span>Accesible</span>
                 </div>
             )}
