@@ -76,12 +76,18 @@ const RouteOptionItem = ({
   const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const leg = route.legs[0];
   
   const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
   const googleTransitLine = firstTransitStep?.transit?.line.short_name;
-  const scheduledDepartureTime = firstTransitStep?.transit?.departure_time?.text;
+  const scheduledDepartureTimeValue = firstTransitStep?.transit?.departure_time?.value;
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update time every minute
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -101,7 +107,6 @@ const RouteOptionItem = ({
 
             if (!isLineValidForStop) {
                 if(isInitialFetch) setIsLoadingArrival(false);
-                // Don't clear arrival info here, to let stale data persist
                 return;
             }
             
@@ -134,10 +139,7 @@ const RouteOptionItem = ({
                     });
                     setLastRealtimeUpdate(Date.now());
                 }
-            } else {
-                 // No buses found, don't clear arrival info, let it get stale
-            }
-
+            } 
         } catch (error) {
             console.error("Error fetching bus arrival info:", error);
         } finally {
@@ -190,7 +192,21 @@ const RouteOptionItem = ({
     }
   };
 
+  const getScheduledArrivalInMinutes = () => {
+      if (!scheduledDepartureTimeValue) return null;
+      const departureTime = new Date(scheduledDepartureTimeValue);
+      const diffMs = departureTime.getTime() - currentTime.getTime();
+      const diffMins = Math.round(diffMs / 60000);
+
+      if (diffMins <= 0) {
+          return "Saliendo ahora";
+      }
+      return `Sale en ${diffMins} min`;
+  };
+
+
   const arrivalText = getArrivalText();
+  const scheduledText = getScheduledArrivalInMinutes();
   
   const isRealtimeStale = lastRealtimeUpdate === null || (Date.now() - lastRealtimeUpdate > REALTIME_INFO_TIMEOUT_MS);
   const showRealtime = arrivalInfo !== null && !isRealtimeStale;
@@ -253,13 +269,13 @@ const RouteOptionItem = ({
                   <span>{arrivalText}</span>
               </div>
             )}
-            {!isLoadingArrival && !showRealtime && scheduledDepartureTime && (
+            {!isLoadingArrival && !showRealtime && scheduledText && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
-                    <span>Sale a las {scheduledDepartureTime}</span>
+                    <span>{scheduledText}</span>
                 </div>
             )}
-            {!isLoadingArrival && !showRealtime && !scheduledDepartureTime && firstTransitStep && isApiConnected && (
+            {!isLoadingArrival && !showRealtime && !scheduledText && firstTransitStep && isApiConnected && (
                 <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             )}
           </div>
@@ -376,5 +392,3 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
-
-    
