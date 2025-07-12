@@ -45,7 +45,7 @@ const mapOptions: google.maps.MapOptions = {
 
 const directionsRendererOptions = {
     suppressMarkers: true,
-    preserveViewport: true, // This is the key change to prevent auto-zoom
+    preserveViewport: true, 
     polylineOptions: {
         strokeColor: '#4285F4',
         strokeOpacity: 0.8,
@@ -76,15 +76,12 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    // SCENARIO 1: A route has been selected. Zoom in on user's location.
     if (directionsResponse && userLocation) {
         map.panTo(userLocation);
-        map.setZoom(16);
-    // SCENARIO 2: No route, but we have the user's location. Center on them.
+        map.setZoom(19);
     } else if (userLocation) {
         map.panTo(userLocation);
         map.setZoom(15);
-    // SCENARIO 3: Fallback to default view of Montevideo.
     } else {
         map.panTo(defaultCenter);
         map.setZoom(12);
