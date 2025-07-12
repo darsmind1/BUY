@@ -22,8 +22,16 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
   return Math.round(totalSeconds / 60);
 }
 
+interface StmLineInfo {
+  line: string;
+  arrival: {
+    minutos: number;
+    distance: number;
+  } | null;
+}
+
 const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
-  const [arrivalInfo, setArrivalInfo] = useState<string | null>(null);
+  const [stmLineInfo, setStmLineInfo] = useState<StmLineInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
   const duration = getTotalDuration(route.legs);
@@ -37,7 +45,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         return;
       }
       
-      if(!arrivalInfo) setIsLoadingArrival(true);
+      if(!stmLineInfo) setIsLoadingArrival(true);
 
       const line = firstTransitStep.transit.line.short_name;
       const stopLocation = firstTransitStep.transit.departure_stop.location;
@@ -47,27 +55,22 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         
         if (stopData && stopData.length > 0) {
           const stopId = stopData[0].busstopId;
-          const arrivals = await getArrivals(Number(line), stopId);
+          const arrivalData = await getArrivals(Number(line), stopId);
           
-          if (arrivals && arrivals.length > 0) {
-            const firstArrival = arrivals[0];
-            const arrivalSeconds = firstArrival.minutos;
-
-            if (arrivalSeconds < 60) {
-              setArrivalInfo(`Llegando`);
-            } else {
-              const arrivalMinutes = Math.round(arrivalSeconds / 60);
-              setArrivalInfo(`A ${arrivalMinutes} min`);
-            }
+          if (arrivalData) {
+            setStmLineInfo({
+              line: arrivalData.line,
+              arrival: arrivalData.arribos.length > 0 ? arrivalData.arribos[0] : null
+            });
           } else {
-             setArrivalInfo('Sin arribos');
+             setStmLineInfo(null);
           }
         } else {
-          setArrivalInfo(null);
+          setStmLineInfo(null);
         }
       } catch (error) {
         console.error("Error fetching arrivals:", error);
-        setArrivalInfo(null);
+        setStmLineInfo(null);
       } finally {
         setIsLoadingArrival(false);
       }
@@ -80,6 +83,19 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
     return () => clearInterval(intervalId);
 
   }, [firstTransitStep]);
+
+  const getArrivalText = () => {
+    if (!stmLineInfo || !stmLineInfo.arrival) return null;
+
+    const arrivalSeconds = stmLineInfo.arrival.minutos;
+    if (arrivalSeconds < 60) {
+      return `Llegando`;
+    }
+    const arrivalMinutes = Math.round(arrivalSeconds / 60);
+    return `A ${arrivalMinutes} min`;
+  };
+
+  const arrivalText = getArrivalText();
 
   return (
     <Card 
@@ -95,7 +111,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
                 if (step.travel_mode === 'TRANSIT') {
                   return (
                     <React.Fragment key={stepIndex}>
-                      <Badge variant="secondary" className="font-mono">{step.transit?.line.short_name}</Badge>
+                      <Badge variant="secondary" className="font-mono">{stmLineInfo?.line || step.transit?.line.short_name}</Badge>
                       {stepIndex < leg.steps.length - 1 && leg.steps[stepIndex+1].travel_mode ==='TRANSIT' && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
                     </React.Fragment>
                   );
@@ -129,11 +145,17 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
                     <span>Buscando...</span>
                 </div>
             )}
-            {!isLoadingArrival && arrivalInfo && (
+            {!isLoadingArrival && arrivalText && (
               <div className="flex items-center gap-2 text-xs font-medium text-blue-400">
                   <Wifi className="h-3 w-3" />
-                  <span>{arrivalInfo}</span>
+                  <span>{arrivalText}</span>
               </div>
+            )}
+            {!isLoadingArrival && !arrivalText && firstTransitStep && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Wifi className="h-3 w-3" />
+                    <span>Sin arribos</span>
+                </div>
             )}
           </div>
         </div>

@@ -107,7 +107,7 @@ export async function findStopByLocation(lat: number, lon: number) {
  * Gets the real-time arrivals for a specific line at a specific stop.
  * @param line The bus line number.
  * @param stopId The ID of the bus stop.
- * @returns A promise that resolves to an array of arrival data or null.
+ * @returns A promise that resolves to an object containing line info and arrivals.
  */
 export async function getArrivals(line: number, stopId: number) {
     if (!line || !stopId) return null;
@@ -119,12 +119,12 @@ export async function getArrivals(line: number, stopId: number) {
         const arrivalForLine = upcomingBuses.find(bus => bus.line === String(line));
         
         // Check if that line has upcoming arrivals in the 'arribos' array.
-        if (arrivalForLine && arrivalForLine.arribos && Array.isArray(arrivalForLine.arribos) && arrivalForLine.arribos.length > 0) {
-            // Return the first upcoming bus from the 'arribos' list.
-            return [arrivalForLine.arribos[0]];
+        if (arrivalForLine && arrivalForLine.arribos && Array.isArray(arrivalForLine.arribos)) {
+            // Return the line info and its arrivals
+            return arrivalForLine;
         }
     }
     
-    // Return empty array if no upcoming buses found or no arrivals for the specific line
-    return [];
+    // Return null if no upcoming buses found or no arrivals for the specific line
+    return null;
 }
