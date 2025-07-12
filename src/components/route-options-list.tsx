@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2 } from 'lucide-react';
 import { getBusLocation, BusLocation, getAllBusStops, StmBusStop, getLinesForBusStop } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
@@ -181,13 +182,13 @@ const RouteOptionItem = ({
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
             {isLoadingArrival && firstTransitStep && (
-                 <div className="flex items-center gap-2 text-xs text-primary">
-                    <Wifi className="h-3 w-3 animate-pulse" />
+                 <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
+                    <Wifi className="h-3 w-3" />
                     <span>Buscando...</span>
                 </div>
             )}
             {!isLoadingArrival && arrivalText && (
-              <div className="flex items-center gap-2 text-xs font-medium text-primary">
+              <div className={cn("flex items-center gap-2 text-xs font-medium", arrivalText ? 'text-green-500' : 'text-primary')}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
