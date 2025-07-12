@@ -53,7 +53,6 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
 
   useEffect(() => {
-    // This code runs only on the client, where `window` is available.
     if (window.google) {
         setUserMarkerIcon({
             path: window.google.maps.SymbolPath.CIRCLE,
