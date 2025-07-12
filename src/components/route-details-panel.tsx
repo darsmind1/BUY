@@ -100,7 +100,7 @@ export default function RouteDetailsPanel({
               </div>
               <div className="flex items-center gap-3 text-sm font-normal">
                 {isBusLive && (
-                  <div className="flex items-center gap-1.5 text-blue-400">
+                  <div className="flex items-center gap-1.5 text-green-400 animate-pulse">
                       <Wifi className="h-4 w-4" />
                       <span className="text-xs font-medium">En el mapa</span>
                   </div>
