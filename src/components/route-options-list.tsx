@@ -15,15 +15,18 @@ interface RouteOptionsListProps {
   isApiConnected: boolean;
 }
 
-type Freshness = 'fresh' | 'stale' | 'old' | null;
-
 interface BusArrivalInfo {
     eta: number; // in seconds
     distance: number; // in meters
 }
 
+interface StmInfo {
+  stopId: number | null;
+  isLineValid: boolean;
+}
+
 interface StmStopMapping {
-  [routeIndex: number]: number | null; // routeIndex -> stmBusStopId
+  [routeIndex: number]: StmInfo;
 }
 
 const REALTIME_INFO_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -64,13 +67,13 @@ const RouteOptionItem = ({
   route, 
   index, 
   onSelectRoute,
-  stmStopId,
+  stmInfo,
   isApiConnected
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void,
-  stmStopId: number | null,
+  stmInfo: StmInfo | null,
   isApiConnected: boolean
 }) => {
   const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
@@ -94,30 +97,21 @@ const RouteOptionItem = ({
     let intervalId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
-        if (!isMounted || !firstTransitStep || !googleTransitLine || stmStopId === null || !isApiConnected) {
-            if(isInitialFetch) setIsLoadingArrival(false);
+        if (!isMounted || !googleTransitLine || !stmInfo?.isLineValid || !isApiConnected) {
+            if (isInitialFetch) setIsLoadingArrival(false);
             return;
         }
 
-        if(isInitialFetch) setIsLoadingArrival(true);
+        if (isInitialFetch) setIsLoadingArrival(true);
 
         try {
-            const linesForStop = await getLinesForBusStop(stmStopId);
-            const isLineValidForStop = linesForStop?.some(line => line.line.toString() === googleTransitLine);
-
-            if (!isLineValidForStop) {
-                if(isInitialFetch) setIsLoadingArrival(false);
-                return;
-            }
-            
             const buses = await getBusLocation(googleTransitLine);
             if (!isMounted) return;
 
             if (buses && buses.length > 0) {
                 let nearestBusDistance = Infinity;
-                let nearestBus: BusLocation | null = null;
                 
-                const stmStopLocation = firstTransitStep.transit!.departure_stop.location;
+                const stmStopLocation = firstTransitStep!.transit!.departure_stop.location;
                 const stmStopCoords = { lat: stmStopLocation.lat(), lng: stmStopLocation.lng() };
 
                 buses.forEach(bus => {
@@ -125,11 +119,10 @@ const RouteOptionItem = ({
                     const distance = haversineDistance(stmStopCoords, busCoords);
                     if (distance < nearestBusDistance) {
                         nearestBusDistance = distance;
-                        nearestBus = bus;
                     }
                 });
 
-                if (nearestBus) {
+                if (nearestBusDistance !== Infinity) {
                     const averageSpeedMetersPerSecond = 4.5; // ~16 km/h
                     const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
                     
@@ -138,16 +131,21 @@ const RouteOptionItem = ({
                         eta: etaSeconds,
                     });
                     setLastRealtimeUpdate(Date.now());
+                } else {
+                   // No bus found, do nothing, keep stale data if available
                 }
-            } 
+            } else {
+                 // No buses for this line, do nothing, keep stale data if available
+            }
         } catch (error) {
             console.error("Error fetching bus arrival info:", error);
         } finally {
-            if(isMounted && isInitialFetch) setIsLoadingArrival(false);
+            if (isMounted && isInitialFetch) setIsLoadingArrival(false);
         }
     };
     
-    if (stmStopId !== null && isApiConnected) {
+    if (stmInfo?.isLineValid && isApiConnected) {
+      // Stagger initial fetches
       const initialFetchTimeoutId = setTimeout(() => {
         if(isMounted) {
             fetchArrival(true);
@@ -165,7 +163,8 @@ const RouteOptionItem = ({
         setIsLoadingArrival(false);
     }
 
-  }, [firstTransitStep, googleTransitLine, stmStopId, index, isApiConnected]);
+  }, [firstTransitStep, googleTransitLine, stmInfo, index, isApiConnected]);
+
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
@@ -185,7 +184,7 @@ const RouteOptionItem = ({
 
     if (etaSeconds <= 180) { // 3 minutes or less
         return 'text-green-500';
-    } else if (etaSeconds > 180 && etaSeconds < 600) { // More than 3 mins, up to 10 mins
+    } else if (etaSeconds > 180 && etaSeconds <= 600) { // More than 3 mins, up to 10 mins
         return 'text-yellow-500';
     } else { // 10 minutes or more
         return 'text-red-500';
@@ -208,9 +207,10 @@ const RouteOptionItem = ({
   const arrivalText = getArrivalText();
   const scheduledText = getScheduledArrivalInMinutes();
   
-  const showRealtime = arrivalInfo !== null && lastRealtimeUpdate !== null && (Date.now() - lastRealtimeUpdate < REALTIME_INFO_TIMEOUT_MS);
-
-  const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.travel_mode === 'WALKING' && step.distance && step.distance.value > 0));
+  const isRealtimeStale = lastRealtimeUpdate ? (Date.now() - lastRealtimeUpdate > REALTIME_INFO_TIMEOUT_MS) : true;
+  const showRealtime = arrivalInfo !== null && !isRealtimeStale;
+  
+  const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
 
   return (
     <Card 
@@ -310,9 +310,14 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       
       const newMappings: StmStopMapping = {};
 
-      routes.forEach((route, index) => {
+      // Use a map to cache results for getLinesForBusStop to avoid re-fetching for the same stop
+      const stopLinesCache = new Map<number, string[]>();
+
+      for (const [index, route] of routes.entries()) {
         const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-        if (firstTransitStep?.transit?.departure_stop?.location) {
+        const googleTransitLine = firstTransitStep?.transit?.line.short_name;
+
+        if (firstTransitStep?.transit?.departure_stop?.location && googleTransitLine) {
           const departureStopGoogleLocation = {
             lat: firstTransitStep.transit.departure_stop.location.lat(),
             lng: firstTransitStep.transit.departure_stop.location.lng()
@@ -330,16 +335,35 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
               }
           });
 
-          // If closest stop is more than 200m away, it's likely not the same one.
           if (closestStmStop && minDistance <= 200) {
-            newMappings[index] = closestStmStop.busstopId;
+            const stopId = closestStmStop.busstopId;
+            let validLinesForStop: string[] = [];
+
+            if (stopLinesCache.has(stopId)) {
+                validLinesForStop = stopLinesCache.get(stopId)!;
+            } else {
+                try {
+                    const linesData = await getLinesForBusStop(stopId);
+                    validLinesForStop = linesData.map(l => l.line.toString());
+                    stopLinesCache.set(stopId, validLinesForStop);
+                } catch (e) {
+                    console.error(`Failed to get lines for stop ${stopId}`, e);
+                    // Leave validLinesForStop as empty array
+                }
+            }
+            
+            newMappings[index] = {
+                stopId: stopId,
+                isLineValid: validLinesForStop.includes(googleTransitLine)
+            };
+
           } else {
-            newMappings[index] = null;
+            newMappings[index] = { stopId: null, isLineValid: false };
           }
         } else {
-          newMappings[index] = null; // No transit step for this route
+          newMappings[index] = { stopId: null, isLineValid: false };
         }
-      });
+      }
       
       setStmStopMappings(newMappings);
       setIsMappingStops(false);
@@ -366,7 +390,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             route={route} 
             index={index} 
             onSelectRoute={onSelectRoute}
-            stmStopId={stmStopMappings?.[index] ?? null}
+            stmInfo={stmStopMappings?.[index] ?? null}
             isApiConnected={isApiConnected}
         />
       ))}
@@ -376,7 +400,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             route={route} 
             index={index} 
             onSelectRoute={onSelectRoute}
-            stmStopId={null}
+            stmInfo={null}
             isApiConnected={false}
         />
       ))}
