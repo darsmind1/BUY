@@ -1,3 +1,4 @@
+
 'use server';
 
 import config from './config';
@@ -42,7 +43,7 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
-async function getAccessToken(): Promise<string | null> {
+async function getAccessToken(): Promise<string> {
   const now = Date.now();
 
   if (cachedToken && now < cachedToken.expiresAt) {
@@ -64,7 +65,7 @@ async function getAccessToken(): Promise<string | null> {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`CRITICAL: Error fetching STM token. Status: ${response.status}. Body: ${errorText}. This might be due to invalid credentials.`);
-      return null;
+      throw new Error(`Failed to fetch STM token: ${response.status} ${errorText}`);
     }
 
     const tokenData: StmToken = await response.json();
@@ -78,16 +79,16 @@ async function getAccessToken(): Promise<string | null> {
   } catch (error) {
     console.error('CRITICAL: Network or other exception while fetching STM access token.', error);
     cachedToken = null;
-    return null;
+    throw new Error(`Exception fetching access token: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any[] | null> {
+async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any[]> {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) {
       console.error(`STM API fetch for path ${path} failed because no access token could be obtained.`);
-      return null;
+      throw new Error('Could not obtain STM access token.');
     }
 
     const url = `${STM_API_BASE_URL}${path}`;
@@ -107,8 +108,9 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
     }
 
     if (!response.ok) {
-      console.error(`STM API request to ${path} failed:`, response.status, await response.text());
-      return null;
+      const errorText = await response.text();
+      console.error(`STM API request to ${path} failed:`, response.status, errorText);
+      throw new Error(`STM API request failed for ${path}: ${response.status} ${errorText}`);
     }
     
     const data = await response.json();
@@ -117,43 +119,47 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
         if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
             return []; // API returned an empty object, treat as no results.
         }
-        console.warn(`STM API response for ${path} was not an array:`, data);
-        return []; // Return empty array to prevent crashes down the line
+        console.warn(`STM API response for ${path} was not an array, returning empty array to avoid crash:`, data);
+        return [];
     }
     
     return data;
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
-    return null;
+    // Re-throw the error so the calling server action fails clearly.
+    throw error;
   }
 }
 
 export async function checkApiConnection(): Promise<boolean> {
-    const token = await getAccessToken();
-    return token !== null;
-}
-
-export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
-    const data = await stmApiFetch(`/buses?lines=${line}`);
-    if (data) {
-        return data.map((bus: any) => {
-            const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
-            return {
-                ...bus,
-                line: busLine.toString(),
-            };
-        }) as BusLocation[];
+    try {
+        await getAccessToken();
+        return true;
+    } catch {
+        return false;
     }
-    return null;
 }
 
-export async function getAllBusStops(): Promise<StmBusStop[] | null> {
+export async function getBusLocation(line: string): Promise<BusLocation[]> {
+    const data = await stmApiFetch(`/buses?lines=${line}`);
+    // The check for data being null is no longer needed as stmApiFetch will throw on error.
+    return data.map((bus: any) => {
+        const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
+        return {
+            ...bus,
+            line: busLine.toString(),
+            id: bus.id?.toString() // Ensure id is a string
+        };
+    }) as BusLocation[];
+}
+
+export async function getAllBusStops(): Promise<StmBusStop[]> {
     const data = await stmApiFetch('/buses/busstops');
-    return data as StmBusStop[] | null;
+    return data as StmBusStop[];
 }
 
-export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[] | null> {
+export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[]> {
     const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
-    return data as StmLineInfo[] | null;
+    return data as StmLineInfo[];
 }
