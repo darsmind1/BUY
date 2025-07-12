@@ -1,9 +1,6 @@
 
 'use server';
 
-import dotenv from 'dotenv';
-dotenv.config();
-
 interface StmToken {
   access_token: string;
   expires_in: number;
@@ -40,9 +37,6 @@ const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
 const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
 
-if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
-  console.error('CRITICAL: STM API credentials are not configured in environment variables. Please create a .env file in the project root with STM_CLIENT_ID and STM_CLIENT_SECRET.');
-}
 
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
@@ -52,7 +46,7 @@ async function getAccessToken(): Promise<string | null> {
   }
   
   if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
-    console.error('CRITICAL: STM API credentials are not set. Cannot fetch access token.');
+    console.error('CRITICAL: STM API credentials (STM_CLIENT_ID, STM_CLIENT_SECRET) are not defined in the environment. Please check your .env file.');
     return null;
   }
 
@@ -70,8 +64,8 @@ async function getAccessToken(): Promise<string | null> {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('CRITICAL: Error fetching STM token:', response.status, errorText);
-      throw new Error(`Failed to fetch access token, status: ${response.status}`);
+      console.error(`CRITICAL: Error fetching STM token. Status: ${response.status}. Body: ${errorText}. This might be due to invalid credentials.`);
+      return null;
     }
 
     const tokenData: StmToken = await response.json();
@@ -83,7 +77,7 @@ async function getAccessToken(): Promise<string | null> {
 
     return cachedToken.token;
   } catch (error) {
-    console.error('CRITICAL: Exception while fetching STM access token.', error);
+    console.error('CRITICAL: Network or other exception while fetching STM access token.', error);
     cachedToken = null;
     return null;
   }
