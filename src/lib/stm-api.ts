@@ -95,7 +95,6 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 async function findStopByLocation(lat: number, lon: number): Promise<number | null> {
     const stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=200`);
     if (stops && Array.isArray(stops) && stops.length > 0) {
-        // Return the first stop found, which is usually the closest
         return stops[0].busstopId;
     }
     return null;
@@ -109,19 +108,19 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
         return null;
     }
 
-    const upcomingData: UpcomingArrival[] | null = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
+    const upcomingData = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
     
     if (!upcomingData || !Array.isArray(upcomingData) || upcomingData.length === 0) {
         return null;
     }
 
-    const lineArrivals = upcomingData.find(arrivalInfo => arrivalInfo.line === line);
-
-    if (lineArrivals && lineArrivals.arribos && lineArrivals.arribos.length > 0) {
-        const firstArrival = lineArrivals.arribos[0];
-        return {
-            eta: firstArrival.minutos, // This is in seconds as per user feedback
-            distance: firstArrival.distancia,
+    // The endpoint returns a flat array of upcoming buses, not a nested structure.
+    const firstArrival = upcomingData[0];
+    
+    if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
+         return {
+            eta: firstArrival.eta,
+            distance: firstArrival.distance,
         };
     }
     
