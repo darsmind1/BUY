@@ -77,27 +77,20 @@ const PulsingUserMarker = () => (
     <div className="relative w-8 h-8">
         <style>
             {`
-            @keyframes pulse {
-                0% {
-                    transform: scale(0.95);
-                    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.7);
+            @keyframes blink {
+                0%, 100% {
+                    opacity: 1;
                 }
-                70% {
-                    transform: scale(1.4);
-                    box-shadow: 0 0 0 10px rgba(66, 133, 244, 0);
-                }
-                100% {
-                    transform: scale(0.95);
-                    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0);
+                50% {
+                    opacity: 0.2;
                 }
             }
             `}
         </style>
         <div 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4] shadow-lg"
-            style={{ width: '16px', height: '16px', animation: 'pulse 2s infinite' }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4] border-2 border-white shadow-lg"
+            style={{ width: '16px', height: '16px', animation: 'blink 1.5s infinite ease-in-out' }}
         />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-[#4285F4] border-2 border-white" />
     </div>
 )
 
