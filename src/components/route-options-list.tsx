@@ -368,7 +368,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       };
 
       fetchAllArrivals();
-      const intervalId = setInterval(fetchAllArrivals, 20000);
+      const intervalId = setInterval(fetchAllArrivals, 30000);
 
       return () => clearInterval(intervalId);
 
