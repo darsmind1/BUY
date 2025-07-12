@@ -87,12 +87,11 @@ export default function Home() {
 
   const handleBack = () => {
     if (view === 'details') {
+      setView('options');
       setSelectedRoute(null);
-      setDirectionsResponse(null); 
-      setView('search');
     } else if (view === 'options') {
-      setDirectionsResponse(null);
       setView('search');
+      setDirectionsResponse(null);
     }
   };
   
@@ -149,6 +148,7 @@ export default function Home() {
               directionsResponse={directionsResponse} 
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
+              selectedRoute={selectedRoute}
             />
         </div>
       </div>

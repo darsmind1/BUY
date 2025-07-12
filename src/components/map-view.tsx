@@ -10,6 +10,7 @@ interface MapViewProps {
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
+  selectedRoute: google.maps.DirectionsRoute | null;
 }
 
 const libraries: ("places")[] = ['places'];
@@ -24,7 +25,6 @@ const defaultCenter = {
   lng: -56.17
 };
 
-// Expanded bounds for Montevideo metropolitan area
 const montevideoBounds = {
   north: -34.5,
   south: -35.1,
@@ -53,7 +53,7 @@ const directionsRendererOptions = {
     }
 };
 
-export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation }: MapViewProps) {
+export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute }: MapViewProps) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: apiKey,
     libraries: libraries,
@@ -76,7 +76,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (directionsResponse && userLocation) {
+    if (selectedRoute && userLocation) {
         map.panTo(userLocation);
         map.setZoom(19);
     } else if (userLocation) {
@@ -86,7 +86,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [directionsResponse, userLocation, mapLoaded]);
+  }, [userLocation, selectedRoute, mapLoaded]);
 
   if (!isLoaded) {
     return (
