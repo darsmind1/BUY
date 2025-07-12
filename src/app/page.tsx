@@ -149,6 +149,7 @@ export default function Home() {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
     setView('details');
+    setMobileView('panel'); // Ensure panel is shown on details view
   };
 
   const handleBack = () => {
@@ -176,6 +177,7 @@ export default function Home() {
   }
 
   const showBackButton = view !== 'search' || mobileView === 'map';
+  const showMapToggleButton = view !== 'details';
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
@@ -191,9 +193,11 @@ export default function Home() {
                 </div>
             )}
             <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
-            <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                <Map className="h-5 w-5" />
-            </Button>
+            {showMapToggleButton && (
+              <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
+                  <Map className="h-5 w-5" />
+              </Button>
+            )}
           </header>
           <Separator />
           
@@ -214,13 +218,19 @@ export default function Home() {
                 <RouteDetailsPanel 
                   route={selectedRoute}
                   busLocations={busLocations}
+                  // Pass map props for embedded mobile map
+                  apiKey={googleMapsApiKey}
+                  directionsResponse={directionsResponse}
+                  routeIndex={selectedRouteIndex}
+                  userLocation={currentUserLocation}
                 />
               )}
           </main>
         </aside>
         
-        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
+        <div className={`${mobileView === 'panel' && view !== 'details' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
             <MapView 
+              containerClassName={view === 'details' ? 'hidden md:block' : ''}
               apiKey={googleMapsApiKey}
               directionsResponse={directionsResponse} 
               routeIndex={selectedRouteIndex}

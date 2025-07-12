@@ -5,6 +5,7 @@ import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader } from '@react-g
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
+import { cn } from '@/lib/utils';
 
 interface MapViewProps {
   apiKey: string;
@@ -13,6 +14,7 @@ interface MapViewProps {
   userLocation: google.maps.LatLngLiteral | null;
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
+  containerClassName?: string;
 }
 
 const libraries: ("places")[] = ['places'];
@@ -67,7 +69,7 @@ const busIconSvg = (line: string) => `data:image/svg+xml;utf8,${encodeURICompone
 `)}`;
 
 
-export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations }: MapViewProps) {
+export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName }: MapViewProps) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: apiKey,
     libraries: libraries,
@@ -90,9 +92,16 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (selectedRoute && userLocation) {
-        map.panTo(userLocation);
-        map.setZoom(19);
+    if (selectedRoute && directionsResponse) {
+        const bounds = new window.google.maps.LatLngBounds();
+        // Use the selected route for bounds
+        const route = directionsResponse.routes[routeIndex];
+        route.legs.forEach(leg => {
+            leg.steps.forEach(step => {
+                step.path.forEach(point => bounds.extend(point));
+            });
+        });
+        map.fitBounds(bounds);
     } else if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         directionsResponse.routes[routeIndex].legs.forEach(leg => {
@@ -123,7 +132,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   const endLocation = directionsResponse?.routes[routeIndex]?.legs[0]?.end_location;
 
   return (
-    <div className="w-full h-full bg-gray-300 relative overflow-hidden">
+    <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden", containerClassName)}>
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           center={defaultCenter}
