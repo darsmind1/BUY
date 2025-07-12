@@ -105,7 +105,6 @@ export async function findStopByLocation(lat: number, lon: number) {
 
 /**
  * Gets the real-time arrivals for a specific line at a specific stop.
- * This is an estimation based on bus location and sequence of stops.
  * @param line The bus line number.
  * @param stopId The ID of the bus stop.
  * @returns A promise that resolves to an array of arrival data or null.
