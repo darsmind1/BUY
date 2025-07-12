@@ -75,15 +75,15 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    // Zoom to user location when a route is selected
+    // SCENARIO 1: A route has been selected. Zoom in on user's location.
     if (directionsResponse && userLocation) {
         map.panTo(userLocation);
         map.setZoom(16);
-    // Center on user location if available and no route is active
+    // SCENARIO 2: No route, but we have the user's location. Center on them.
     } else if (userLocation) {
         map.panTo(userLocation);
         map.setZoom(15);
-    // Fallback to default view
+    // SCENARIO 3: Fallback to default view of Montevideo.
     } else {
         map.panTo(defaultCenter);
         map.setZoom(12);
