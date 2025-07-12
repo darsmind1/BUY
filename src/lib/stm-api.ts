@@ -35,8 +35,8 @@ let cachedStops: { stops: StmBusStop[]; expiresAt: number } | null = null;
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
-const STM_CLIENT_ID = "d7916e2b";
-const STM_CLIENT_SECRET = "164c5cf512e692dbfcc2fbda1f0ec0a1";
+const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
+const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
 
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
@@ -46,7 +46,7 @@ async function getAccessToken(): Promise<string | null> {
   }
 
   if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
-    console.error('STM API credentials are not set. Please add them to src/lib/stm-api.ts');
+    console.error('STM API credentials are not set in .env file. Please add STM_CLIENT_ID and STM_CLIENT_SECRET.');
     return null;
   }
 
@@ -87,7 +87,8 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) {
-      throw new Error('Could not retrieve access token for STM API.');
+      // Return null instead of throwing, so the calling function can handle it.
+      return null;
     }
 
     const url = `${STM_API_BASE_URL}${path}`;
@@ -158,8 +159,3 @@ export async function getAllBusStops(): Promise<StmBusStop[] | null> {
 
 export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[] | null> {
     const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
-    if (data && Array.isArray(data)) {
-        return data as StmLineInfo[];
-    }
-    return null;
-}
