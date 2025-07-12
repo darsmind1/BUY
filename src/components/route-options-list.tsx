@@ -31,8 +31,6 @@ interface BusArrivalsState {
     [routeIndex: number]: BusArrival | null;
 }
 
-const REALTIME_INFO_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-
 const ArrivalInfoLegend = () => {
   return (
       <div className="p-3 mb-2 rounded-lg bg-muted/50 border border-dashed text-xs text-muted-foreground space-y-2">
@@ -131,8 +129,7 @@ const RouteOptionItem = ({
   const arrivalText = getArrivalText();
   const scheduledText = getScheduledArrivalInMinutes();
   
-  const isRealtimeStale = arrivalInfo ? (Date.now() - arrivalInfo.lastUpdate > REALTIME_INFO_TIMEOUT_MS) : true;
-  const showRealtime = arrivalInfo !== null && !isRealtimeStale;
+  const showRealtime = arrivalInfo !== null;
   
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
 
