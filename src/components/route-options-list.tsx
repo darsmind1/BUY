@@ -48,9 +48,16 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         if (stopData && stopData.length > 0) {
           const stopId = stopData[0].codigo;
           const arrivals = await getArrivals(Number(line), stopId);
-
-          if (arrivals && arrivals.length > 0 && arrivals[0].minutos > 0) {
-            setArrivalInfo(`Próximo en ${arrivals[0].minutos} min`);
+          
+          if (arrivals && arrivals.length > 0) {
+            const firstArrival = arrivals[0];
+            if (firstArrival.minutos === 0) {
+              setArrivalInfo(`Llegando`);
+            } else if (firstArrival.minutos > 0) {
+              setArrivalInfo(`A ${firstArrival.minutos} min`);
+            } else {
+              setArrivalInfo('Sin arribos');
+            }
           } else {
              setArrivalInfo('Sin arribos');
           }

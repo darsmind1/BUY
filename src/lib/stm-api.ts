@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 'use server';
 
@@ -48,6 +47,7 @@ const getAccessToken = unstable_cache(
     { revalidate: 3500 }
 );
 
+
 async function stmApiFetch(path: string, options: RequestInit = {}) {
     const accessToken = await getAccessToken();
     const url = `${process.env.STM_API_BASE_URL}${path}`;
@@ -60,18 +60,17 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json',
             },
-            cache: 'no-store'
+            next: { revalidate: 0 } // No cache for API calls
         });
 
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`STM API request to ${path} failed:`, response.status, errorText);
-            // Return null or an empty array on error to prevent breaking the UI
             return null;
         }
 
-        if (response.status === 204) { // No Content
-            return null;
+        if (response.status === 204) {
+            return [];
         }
 
         return await response.json();
@@ -103,13 +102,22 @@ export async function findStopByLocation(lat: number, lon: number) {
     return stmApiFetch(`/paradas?lat=${lat}&lon=${lon}&dist=50`);
 }
 
+
 /**
  * Gets the real-time arrivals for a specific line at a specific stop.
+ * This is an estimation based on bus location and sequence of stops.
  * @param line The bus line number.
  * @param stopId The ID of the bus stop.
  * @returns A promise that resolves to an array of arrival data or null.
  */
 export async function getArrivals(line: number, stopId: number) {
     if (!line || !stopId) return null;
-    return stmApiFetch(`/arribos?linea=${line}&parada=${stopId}`);
+
+    const arrivalsResponse = await stmApiFetch(`/arribos?linea=${line}&parada=${stopId}`);
+    
+    if (arrivalsResponse && arrivalsResponse.length > 0) {
+        return arrivalsResponse;
+    }
+
+    return [];
 }
