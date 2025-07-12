@@ -96,6 +96,9 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     );
   }
   
+  const startLocation = directionsResponse?.routes[routeIndex]?.legs[0]?.start_location;
+  const endLocation = directionsResponse?.routes[routeIndex]?.legs[0]?.end_location;
+
   return (
     <div className="w-full h-full bg-gray-300 relative overflow-hidden">
         <GoogleMap
@@ -106,7 +109,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {userLocation && (
+          {userLocation && !selectedRoute && (
              <MarkerF 
                 position={userLocation}
                 title="Tu ubicación"
@@ -122,11 +125,41 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
           )}
 
           {directionsResponse && (
-            <DirectionsRenderer
-                directions={directionsResponse}
-                routeIndex={routeIndex}
-                options={directionsRendererOptions}
-            />
+            <>
+              <DirectionsRenderer
+                  directions={directionsResponse}
+                  routeIndex={routeIndex}
+                  options={directionsRendererOptions}
+              />
+              {startLocation && (
+                <MarkerF
+                  position={startLocation}
+                  title="Punto de partida"
+                  icon={{
+                    path: window.google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#10B981', // green-500
+                    fillOpacity: 1,
+                    strokeColor: 'white',
+                    strokeWeight: 2,
+                  }}
+                />
+              )}
+              {endLocation && (
+                 <MarkerF
+                  position={endLocation}
+                  title="Punto de destino"
+                  icon={{
+                    path: window.google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#EF4444', // red-500
+                    fillOpacity: 1,
+                    strokeColor: 'white',
+                    strokeWeight: 2,
+                  }}
+                />
+              )}
+            </>
           )}
         </GoogleMap>
     </div>
