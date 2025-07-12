@@ -50,7 +50,7 @@ const getAccessToken = unstable_cache(
 
 async function stmApiFetch(path: string, options: RequestInit = {}) {
     const accessToken = await getAccessToken();
-    const url = `${process.env.STM_API_BASE_URL}${path}`;
+    const url = `/api/transportepublico${path}`;
 
     try {
         const response = await fetch(url, {
