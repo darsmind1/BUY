@@ -150,15 +150,21 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(line: string): Promise<BusLocation[]> {
+export async function getBusLocation(line: string, destination?: string): Promise<BusLocation[]> {
     if (!line) return [];
-    const data = await stmApiFetch(`/buses?lines=${line}`);
+    
+    let path = `/buses?lines=${line}`;
+    if (destination) {
+        path += `&destination=${encodeURIComponent(destination)}`;
+    }
+
+    const data = await stmApiFetch(path);
 
     if (!Array.isArray(data)) {
         if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
             return []; // API returned an empty object, treat as no results.
         }
-        console.warn(`STM API response for /buses?lines=${line} was not an array, returning empty array to avoid crash:`, data);
+        console.warn(`STM API response for ${path} was not an array, returning empty array to avoid crash:`, data);
         return [];
     }
 
@@ -184,6 +190,7 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
 
 export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[]> {
     const data = await stmApiFetch(`/buses/busstops/${stopId}/lines/${lineId}/arrivals`);
+    
     if (!Array.isArray(data)) {
         console.warn(`STM API response for arrivals was not an array for stop ${stopId} line ${lineId}.`, data);
         return [];

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null) => void;
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void;
   isApiConnected: boolean;
 }
 
@@ -19,6 +19,7 @@ interface StmInfo {
   stopId: number | null;
   isLineValid: boolean;
   line: string | undefined;
+  lineDestination: string | null;
   departureStopLocation: google.maps.LatLng | null;
 }
 
@@ -74,7 +75,7 @@ const RouteOptionItem = ({
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null) => void,
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
   isApiConnected: boolean,
   arrivalInfo: BusArrival | null,
   stmInfo: StmInfo | null,
@@ -138,7 +139,7 @@ const RouteOptionItem = ({
   return (
     <Card 
       className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300"
-      onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null)}
+      onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null, stmInfo?.lineDestination ?? null)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
       <CardContent className="p-4 flex items-center justify-between">
@@ -239,6 +240,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
         const googleTransitLine = firstTransitStep?.transit?.line.short_name;
         const departureStopLocation = firstTransitStep?.transit?.departure_stop?.location || null;
+        const lineDestination = firstTransitStep?.transit?.line.name?.split(' - ')[1] || null;
 
         if (departureStopLocation && googleTransitLine) {
           const departureStopGoogleLocation = {
@@ -278,14 +280,15 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                 stopId: stopId,
                 isLineValid: validLinesForStop.includes(googleTransitLine),
                 line: googleTransitLine,
+                lineDestination: lineDestination,
                 departureStopLocation: departureStopLocation
             };
 
           } else {
-            newMappings[index] = { stopId: null, isLineValid: false, line: googleTransitLine, departureStopLocation: null };
+            newMappings[index] = { stopId: null, isLineValid: false, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
           }
         } else {
-          newMappings[index] = { stopId: null, isLineValid: false, line: googleTransitLine, departureStopLocation: null };
+          newMappings[index] = { stopId: null, isLineValid: false, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
         }
       }
       

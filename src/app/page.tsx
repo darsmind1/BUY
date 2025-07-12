@@ -13,7 +13,7 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getArrivalsForStop, BusLocation, checkApiConnection } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -26,6 +26,7 @@ export default function Home() {
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
+  const [selectedLineDestination, setSelectedLineDestination] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
@@ -60,8 +61,8 @@ export default function Home() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    const fetchBusArrivals = async () => {
-      if (!selectedRoute || apiStatus !== 'connected' || !selectedStopId) {
+    const fetchBusLocations = async () => {
+      if (!selectedRoute || apiStatus !== 'connected') {
         setBusLocations([]);
         return;
       }
@@ -73,30 +74,23 @@ export default function Home() {
       }
       
       const lineName = firstTransitStep.transit?.line.short_name;
-      if (!lineName || isNaN(parseInt(lineName))) {
+      if (!lineName) {
          setBusLocations([]);
          return;
       }
-      const lineId = parseInt(lineName);
       
       try {
-        const arrivals = await getArrivalsForStop(selectedStopId, lineId);
-        
-        const locations = arrivals
-          .filter(arrival => arrival.bus && arrival.bus.location)
-          .map(arrival => arrival.bus as BusLocation);
-
+        const locations = await getBusLocation(lineName, selectedLineDestination ?? undefined);
         setBusLocations(locations);
-
       } catch (error) {
-        console.error(`Error fetching arrivals for stop ${selectedStopId}:`, error);
+        console.error(`Error fetching locations for line ${lineName}:`, error);
         setBusLocations([]);
       }
     };
     
     if (view === 'details' && selectedRoute) {
-        fetchBusArrivals(); 
-        intervalId = setInterval(fetchBusArrivals, 15000); 
+        fetchBusLocations(); 
+        intervalId = setInterval(fetchBusLocations, 30000); 
     } else {
         setBusLocations([]);
     }
@@ -106,7 +100,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, selectedStopId, apiStatus]);
+  }, [view, selectedRoute, selectedLineDestination, apiStatus]);
 
   useEffect(() => {
     let watchId: number | null = null;
@@ -158,6 +152,7 @@ export default function Home() {
     setSelectedRoute(null);
     setSelectedRouteIndex(0);
     setSelectedStopId(null);
+    setSelectedLineDestination(null);
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
@@ -194,10 +189,11 @@ export default function Home() {
     );
   };
 
-  const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number, stopId: number | null) => {
+  const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
     setSelectedStopId(stopId);
+    setSelectedLineDestination(lineDestination);
     setView('details');
     setMobileView('panel');
   };
@@ -211,6 +207,7 @@ export default function Home() {
       setView('options');
       setSelectedRoute(null);
       setSelectedStopId(null);
+      setSelectedLineDestination(null);
     } else if (view === 'options') {
       setView('search');
       setDirectionsResponse(null);
