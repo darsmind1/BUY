@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bus, ArrowLeft, Loader2 } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -21,6 +21,7 @@ const MAX_BUS_DISTANCE_METERS = 2500; // 2.5km
 
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
+  const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
@@ -151,6 +152,10 @@ export default function Home() {
   };
 
   const handleBack = () => {
+    if (mobileView === 'map') {
+      setMobileView('panel');
+      return;
+    }
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
@@ -161,6 +166,7 @@ export default function Home() {
   };
   
   const getHeaderTitle = () => {
+    if (mobileView === 'map') return 'Mapa';
     switch(view) {
       case 'search': return '¿A dónde vamos?';
       case 'options': return 'Opciones de trayecto';
@@ -169,11 +175,13 @@ export default function Home() {
     }
   }
 
+  const showBackButton = view !== 'search' || mobileView === 'map';
+
   return (
-      <div className="flex h-dvh w-full bg-background text-foreground">
-        <aside className="w-full md:w-[390px] md:border-r md:shadow-2xl flex flex-col h-full">
-          <header className="p-4 flex items-center gap-4">
-            {view !== 'search' ? (
+      <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
+        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
+          <header className="p-4 flex items-center gap-4 flex-shrink-0">
+            {showBackButton ? (
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
@@ -182,7 +190,10 @@ export default function Home() {
                   <Bus className="h-5 w-5"/>
                 </div>
             )}
-            <h1 className="text-xl font-medium tracking-tight">{getHeaderTitle()}</h1>
+            <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
+            <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
+                <Map className="h-5 w-5" />
+            </Button>
           </header>
           <Separator />
           
@@ -208,7 +219,7 @@ export default function Home() {
           </main>
         </aside>
         
-        <div className="flex-1 hidden md:block">
+        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
             <MapView 
               apiKey={googleMapsApiKey}
               directionsResponse={directionsResponse} 
