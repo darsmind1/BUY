@@ -42,7 +42,6 @@ export default function Home() {
       const lines = new Set<string>();
       const departureStops: { line: string, location: google.maps.LatLng }[] = [];
       
-      // Get all transit lines and their departure stops from the selected route
       selectedRoute.legs[0]?.steps.forEach(step => {
         if (step.travel_mode === 'TRANSIT' && step.transit) {
           const lineName = step.transit.line.short_name || step.transit.line.name;
@@ -64,7 +63,6 @@ export default function Home() {
         const results = await Promise.all(promises);
         let allBuses = results.flat().filter((bus): bus is BusLocation => bus !== null);
 
-        // Filter buses to only show those near their corresponding departure stop
         const relevantBuses = allBuses.filter(bus => {
           const relevantStop = departureStops.find(stop => stop.line === bus.line);
           if (!relevantStop) return false;
@@ -99,7 +97,7 @@ export default function Home() {
   useEffect(() => {
     let watchId: number | null = null;
 
-    if (navigator.geolocation) { // Check for geolocation support
+    if (navigator.geolocation) { 
         watchId = navigator.geolocation.watchPosition(
           (position) => {
             const newLocation = {
@@ -110,7 +108,6 @@ export default function Home() {
           },
           (error) => {
             console.error("Error watching position:", error);
-            // Optionally notify user that location tracking stopped
           },
           {
             enableHighAccuracy: true,
@@ -125,7 +122,7 @@ export default function Home() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, []); // Run only once to start/stop watching
+  }, []);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -186,7 +183,7 @@ export default function Home() {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
     setView('details');
-    setMobileView('panel'); // Ensure panel is shown on details view
+    setMobileView('panel');
   };
 
   const handleBack = () => {
@@ -255,7 +252,6 @@ export default function Home() {
                 <RouteDetailsPanel 
                   route={selectedRoute}
                   busLocations={busLocations}
-                  // Pass map props for embedded mobile map
                   apiKey={googleMapsApiKey}
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
