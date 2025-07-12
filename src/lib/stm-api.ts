@@ -41,10 +41,9 @@ const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
 const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
 
-if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
-  console.error('CRITICAL: STM API credentials are not configured in environment variables. Please check your .env file in the project root.');
+if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
+  console.error('CRITICAL: STM API credentials are not configured in environment variables. Please create a .env file in the project root with STM_CLIENT_ID and STM_CLIENT_SECRET.');
 }
-
 
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
@@ -133,6 +132,11 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
   }
 }
 
+export async function checkApiConnection(): Promise<boolean> {
+    const token = await getAccessToken();
+    return token !== null;
+}
+
 export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
     const data = await stmApiFetch(`/buses?lines=${line}`);
     if (data && Array.isArray(data)) {
@@ -172,3 +176,5 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
     }
     return null;
 }
+
+    

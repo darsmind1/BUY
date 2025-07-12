@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bus, ArrowLeft, Loader2, Map } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map, AlertTriangle } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -12,7 +12,7 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
 
 
@@ -28,13 +28,33 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
+  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const { toast } = useToast();
+
+  useEffect(() => {
+    const verifyApiConnection = async () => {
+        const isConnected = await checkApiConnection();
+        if (isConnected) {
+            setApiStatus('connected');
+        } else {
+            setApiStatus('error');
+            toast({
+                variant: "destructive",
+                title: "Error de conexión",
+                description: "No se pudo conectar con el servicio de buses (STM). Los horarios en tiempo real no estarán disponibles.",
+                duration: 10000
+            });
+        }
+    };
+    verifyApiConnection();
+  }, [toast]);
+
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
     const fetchBusLocations = async () => {
-      if (!selectedRoute) {
+      if (!selectedRoute || apiStatus !== 'connected') {
         setBusLocations([]);
         return;
       }
@@ -92,7 +112,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute]);
+  }, [view, selectedRoute, apiStatus]);
 
   useEffect(() => {
     let watchId: number | null = null;
@@ -241,11 +261,20 @@ export default function Home() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               )}
-              {view === 'search' && <RouteSearchForm apiKey={googleMapsApiKey} onSearch={handleSearch} onLocationObtained={setCurrentUserLocation} />}
+              {view === 'search' && (
+                <RouteSearchForm 
+                    apiKey={googleMapsApiKey} 
+                    onSearch={handleSearch} 
+                    onLocationObtained={setCurrentUserLocation} 
+                    isApiChecking={apiStatus === 'checking'}
+                    isApiError={apiStatus === 'error'}
+                />
+              )}
               {view === 'options' && directionsResponse && (
                 <RouteOptionsList 
                   routes={directionsResponse.routes} 
-                  onSelectRoute={handleSelectRoute} 
+                  onSelectRoute={handleSelectRoute}
+                  isApiConnected={apiStatus === 'connected'}
                 />
               )}
               {view === 'details' && selectedRoute && (
@@ -275,3 +304,5 @@ export default function Home() {
       </div>
   );
 }
+
+    

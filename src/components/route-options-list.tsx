@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void;
+  isApiConnected: boolean;
 }
 
 type Freshness = 'fresh' | 'stale' | 'old' | null;
@@ -62,12 +63,14 @@ const RouteOptionItem = ({
   route, 
   index, 
   onSelectRoute,
-  stmStopId 
+  stmStopId,
+  isApiConnected
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void,
-  stmStopId: number | null
+  stmStopId: number | null,
+  isApiConnected: boolean
 }) => {
   const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
@@ -83,7 +86,7 @@ const RouteOptionItem = ({
     let initialFetchTimeoutId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
-        if (!isMounted || !firstTransitStep || !googleTransitLine || stmStopId === null) {
+        if (!isMounted || !firstTransitStep || !googleTransitLine || stmStopId === null || !isApiConnected) {
             if(isInitialFetch) setIsLoadingArrival(false);
             return;
         }
@@ -152,7 +155,7 @@ const RouteOptionItem = ({
         }
     };
     
-    if (stmStopId !== null) {
+    if (stmStopId !== null && isApiConnected) {
       // Stagger the initial fetch to avoid burst requests
       initialFetchTimeoutId = setTimeout(() => {
         fetchArrival(true);
@@ -169,7 +172,7 @@ const RouteOptionItem = ({
         if (intervalId) clearInterval(intervalId);
     };
 
-  }, [firstTransitStep, googleTransitLine, stmStopId, index]);
+  }, [firstTransitStep, googleTransitLine, stmStopId, index, isApiConnected]);
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
@@ -238,7 +241,7 @@ const RouteOptionItem = ({
               <Clock className="h-4 w-4" />
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
-            {isLoadingArrival && firstTransitStep && (
+            {isApiConnected && isLoadingArrival && firstTransitStep && (
                  <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
                     <Wifi className="h-3 w-3" />
                     <span>Buscando...</span>
@@ -256,7 +259,7 @@ const RouteOptionItem = ({
                     <span>Sale a las {scheduledDepartureTime}</span>
                 </div>
             )}
-            {!isLoadingArrival && !arrivalText && !scheduledDepartureTime && firstTransitStep && (
+            {!isLoadingArrival && !arrivalText && !scheduledDepartureTime && firstTransitStep && isApiConnected && (
                 <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             )}
           </div>
@@ -277,12 +280,18 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
   return Math.round(totalSeconds / 60);
 }
 
-export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptionsListProps) {
+export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected }: RouteOptionsListProps) {
   const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
   const [isMappingStops, setIsMappingStops] = useState(true);
 
   useEffect(() => {
     const mapStops = async () => {
+        if (!isApiConnected) {
+            setIsMappingStops(false);
+            setStmStopMappings({});
+            return;
+        }
+
       setIsMappingStops(true);
       const allStops = await getAllBusStops();
       if (!allStops || allStops.length === 0) {
@@ -330,18 +339,18 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
     };
 
     mapStops();
-  }, [routes]);
+  }, [routes, isApiConnected]);
 
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-      {isMappingStops && (
+      {isMappingStops && isApiConnected && (
          <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
             <Loader2 className="h-6 w-6 animate-spin" />
             <p>Verificando paradas...</p>
          </div>
       )}
-      {!isMappingStops && (
+      {!isMappingStops && isApiConnected && (
         <ArrivalInfoLegend />
       )}
       {!isMappingStops && stmStopMappings && routes.map((route, index) => (
@@ -351,8 +360,21 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
             index={index} 
             onSelectRoute={onSelectRoute}
             stmStopId={stmStopMappings?.[index] ?? null}
+            isApiConnected={isApiConnected}
+        />
+      ))}
+       {!isApiConnected && routes.map((route, index) => (
+         <RouteOptionItem 
+            key={index} 
+            route={route} 
+            index={index} 
+            onSelectRoute={onSelectRoute}
+            stmStopId={null}
+            isApiConnected={false}
         />
       ))}
     </div>
   );
 }
+
+    
