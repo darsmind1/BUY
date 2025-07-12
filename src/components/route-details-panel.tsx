@@ -46,12 +46,20 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
 }
 
 const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: string }) => {
+    if (!fullAddress) {
+        return (
+            <p className="text-xs text-muted-foreground">
+                {prefix}: <span className="font-semibold text-foreground">Ubicación actual</span>
+            </p>
+        );
+    }
     const parts = fullAddress.split(',');
-    const street = parts[0];
-    const rest = parts.slice(1).join(',');
+    const mainAddress = parts[0];
+    const rest = parts.slice(1, -2).join(',').trim(); // Omit last 2 parts (usually Montevideo, Uruguay)
+    
     return (
         <p className="text-xs text-muted-foreground">
-            {prefix}: <span className="font-semibold text-foreground">{street}</span>{rest && `, ${rest}`}
+            {prefix}: <span className="font-semibold text-foreground">{mainAddress}</span>{rest && `, ${rest}`}
         </p>
     )
 }
