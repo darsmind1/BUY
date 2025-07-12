@@ -208,8 +208,7 @@ const RouteOptionItem = ({
   const arrivalText = getArrivalText();
   const scheduledText = getScheduledArrivalInMinutes();
   
-  const isRealtimeStale = lastRealtimeUpdate === null || (Date.now() - lastRealtimeUpdate > REALTIME_INFO_TIMEOUT_MS);
-  const showRealtime = arrivalInfo !== null && !isRealtimeStale;
+  const showRealtime = arrivalInfo !== null && lastRealtimeUpdate !== null && (Date.now() - lastRealtimeUpdate < REALTIME_INFO_TIMEOUT_MS);
 
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.travel_mode === 'WALKING' && step.distance && step.distance.value > 0));
 
@@ -257,27 +256,19 @@ const RouteOptionItem = ({
               <Clock className="h-4 w-4" />
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
-            {isApiConnected && isLoadingArrival && firstTransitStep && (
-                 <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
-                    <Wifi className="h-3 w-3" />
-                    <span>Buscando...</span>
-                </div>
-            )}
-             {!isLoadingArrival && showRealtime && arrivalText && (
+            {showRealtime && arrivalText ? (
               <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
-            )}
-            {!isLoadingArrival && !showRealtime && scheduledText && (
+            ) : scheduledText ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
                     <span>{scheduledText}</span>
                 </div>
-            )}
-            {!isLoadingArrival && !showRealtime && !scheduledText && firstTransitStep && isApiConnected && (
-                <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
-            )}
+            ) : firstTransitStep && isApiConnected && !isLoadingArrival ? (
+                 <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
+            ) : null}
           </div>
         </div>
         <ArrowRight className="h-5 w-5 text-muted-foreground" />
