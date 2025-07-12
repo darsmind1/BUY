@@ -185,7 +185,7 @@ const RouteOptionItem = ({
         if (timer) clearInterval(timer);
     };
 
-  }, [firstTransitStep, googleTransitLine, stmStopId, index, isApiConnected, lastRealtimeUpdate]);
+  }, [firstTransitStep, googleTransitLine, stmStopId, index, isApiConnected]);
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
