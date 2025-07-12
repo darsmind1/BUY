@@ -3,6 +3,9 @@
 
 import config from './config';
 
+// Initialize with a random index to distribute load initially
+let currentCredentialIndex = Math.floor(Math.random() * config.stm.credentials.length);
+
 if (config.stm.credentials.length === 0) {
   const errorMessage = 'CRITICAL: No STM API credentials found. Please check your environment variables for STM_CLIENT_ID_1, STM_CLIENT_SECRET_1, etc.';
   console.error(errorMessage);
@@ -22,6 +25,12 @@ export interface BusLocation {
     };
 }
 
+export interface BusArrival {
+    bus: BusLocation | null;
+    eta: number; // in seconds
+    lastUpdate: number;
+}
+
 export interface StmBusStop {
     busstopId: number;
     location: {
@@ -36,7 +45,6 @@ export interface StmLineInfo {
 }
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
-let currentCredentialIndex = 0;
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
@@ -48,9 +56,9 @@ async function getAccessToken(): Promise<string> {
     throw new Error("No STM credentials configured.");
   }
   
-  // Round-robin selection of credentials
-  const credential = credentials[currentCredentialIndex];
+  // Rotate to the next credential for the next call
   currentCredentialIndex = (currentCredentialIndex + 1) % credentials.length;
+  const credential = credentials[currentCredentialIndex];
 
   const now = Date.now();
   const cached = tokenCache.get(credential.clientId);
@@ -167,4 +175,20 @@ export async function getAllBusStops(): Promise<StmBusStop[]> {
 export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[]> {
     const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
     return (Array.isArray(data) ? data : []) as StmLineInfo[];
+}
+
+export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[]> {
+    const data = await stmApiFetch(`/buses/busstops/${stopId}/lines/${lineId}/arrivals`);
+    if (!Array.isArray(data)) {
+        console.warn(`STM API response for arrivals was not an array for stop ${stopId} line ${lineId}.`, data);
+        return [];
+    }
+    return data.map(arrival => ({
+        ...arrival,
+        bus: arrival.bus ? {
+            ...arrival.bus,
+            line: arrival.bus.line.toString(),
+            id: arrival.bus.id?.toString()
+        } : null,
+    }));
 }

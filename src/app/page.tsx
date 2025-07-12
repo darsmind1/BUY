@@ -13,12 +13,10 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
-import { haversineDistance } from '@/lib/utils';
+import { getArrivalsForStop, BusLocation, checkApiConnection } from '@/lib/stm-api';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
-const MAX_BUS_DISTANCE_METERS = 2500; // 2.5km
 const LIBRARIES: ("places" | "marker")[] = ['places', 'marker'];
 
 export default function Home() {
@@ -27,6 +25,7 @@ export default function Home() {
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
@@ -61,56 +60,43 @@ export default function Home() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    const fetchBusLocations = async () => {
-      if (!selectedRoute || apiStatus !== 'connected') {
+    const fetchBusArrivals = async () => {
+      if (!selectedRoute || apiStatus !== 'connected' || !selectedStopId) {
         setBusLocations([]);
         return;
       }
       
-      const lines = new Set<string>();
-      const departureStops: { line: string, location: google.maps.LatLng }[] = [];
-      
-      selectedRoute.legs[0]?.steps.forEach(step => {
-        if (step.travel_mode === 'TRANSIT' && step.transit) {
-          const lineName = step.transit.line.short_name || step.transit.line.name;
-          lines.add(lineName);
-          departureStops.push({
-            line: lineName,
-            location: step.transit.departure_stop.location
-          });
-        }
-      });
-
-      if (lines.size === 0) {
+      const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+      if (!firstTransitStep) {
         setBusLocations([]);
         return;
       }
-
+      
+      const lineName = firstTransitStep.transit?.line.short_name;
+      if (!lineName || isNaN(parseInt(lineName))) {
+         setBusLocations([]);
+         return;
+      }
+      const lineId = parseInt(lineName);
+      
       try {
-        const promises = Array.from(lines).map(line => getBusLocation(line));
-        const results = await Promise.all(promises);
-        let allBuses = results.flat().filter((bus): bus is BusLocation => bus !== null);
+        const arrivals = await getArrivalsForStop(selectedStopId, lineId);
+        
+        const locations = arrivals
+          .filter(arrival => arrival.bus && arrival.bus.location)
+          .map(arrival => arrival.bus as BusLocation);
 
-        const relevantBuses = allBuses.filter(bus => {
-          const relevantStop = departureStops.find(stop => stop.line === bus.line);
-          if (!relevantStop) return false;
-
-          const stopCoords = { lat: relevantStop.location.lat(), lng: relevantStop.location.lng() };
-          const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-          const distance = haversineDistance(stopCoords, busCoords);
-          return distance <= MAX_BUS_DISTANCE_METERS;
-        });
-
-        setBusLocations(relevantBuses);
+        setBusLocations(locations);
 
       } catch (error) {
-        console.error("Error fetching bus locations for map:", error);
+        console.error(`Error fetching arrivals for stop ${selectedStopId}:`, error);
+        setBusLocations([]);
       }
     };
     
     if (view === 'details' && selectedRoute) {
-        fetchBusLocations(); 
-        intervalId = setInterval(fetchBusLocations, 10000); 
+        fetchBusArrivals(); 
+        intervalId = setInterval(fetchBusArrivals, 15000); 
     } else {
         setBusLocations([]);
     }
@@ -120,7 +106,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, apiStatus]);
+  }, [view, selectedRoute, selectedStopId, apiStatus]);
 
   useEffect(() => {
     let watchId: number | null = null;
@@ -171,6 +157,7 @@ export default function Home() {
     setDirectionsResponse(null);
     setSelectedRoute(null);
     setSelectedRouteIndex(0);
+    setSelectedStopId(null);
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
@@ -207,9 +194,10 @@ export default function Home() {
     );
   };
 
-  const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number) => {
+  const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number, stopId: number | null) => {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
+    setSelectedStopId(stopId);
     setView('details');
     setMobileView('panel');
   };
@@ -222,6 +210,7 @@ export default function Home() {
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
+      setSelectedStopId(null);
     } else if (view === 'options') {
       setView('search');
       setDirectionsResponse(null);

@@ -5,20 +5,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { getBusLocation, BusLocation, getAllBusStops, StmBusStop, getLinesForBusStop } from '@/lib/stm-api';
+import { getArrivalsForStop, getAllBusStops, StmBusStop, getLinesForBusStop, BusArrival } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void;
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null) => void;
   isApiConnected: boolean;
-}
-
-interface BusArrivalInfo {
-    eta: number; // in seconds
-    distance: number; // in meters
-    lastUpdate: number;
 }
 
 interface StmInfo {
@@ -33,7 +27,7 @@ interface StmStopMapping {
 }
 
 interface BusArrivalsState {
-    [routeIndex: number]: BusArrivalInfo | null;
+    [routeIndex: number]: BusArrival | null;
 }
 
 const REALTIME_INFO_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -75,13 +69,15 @@ const RouteOptionItem = ({
   index, 
   onSelectRoute,
   isApiConnected,
-  arrivalInfo
+  arrivalInfo,
+  stmInfo
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void,
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null) => void,
   isApiConnected: boolean,
-  arrivalInfo: BusArrivalInfo | null
+  arrivalInfo: BusArrival | null,
+  stmInfo: StmInfo | null,
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const leg = route.legs[0];
@@ -142,7 +138,7 @@ const RouteOptionItem = ({
   return (
     <Card 
       className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300"
-      onClick={() => onSelectRoute(route, index)}
+      onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
       <CardContent className="p-4 flex items-center justify-between">
@@ -307,71 +303,32 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       }
 
       const fetchAllArrivals = async () => {
-          const linesToFetch = new Set<string>();
-          Object.values(stmStopMappings).forEach(info => {
-              if (info.isLineValid && info.line) {
-                  linesToFetch.add(info.line);
+          const newArrivals: BusArrivalsState = {};
+
+          for (const routeIndex in stmStopMappings) {
+              const info = stmStopMappings[routeIndex];
+              if (!info.isLineValid || !info.line || !info.stopId || isNaN(parseInt(info.line))) {
+                  newArrivals[routeIndex] = null;
+                  continue;
               }
-          });
 
-          if (linesToFetch.size === 0) return;
-          
-          const linesQueryString = Array.from(linesToFetch).join(',');
-
-          try {
-              const allBuses = await getBusLocation(linesQueryString);
-              
-              const busesByLine = new Map<string, BusLocation[]>();
-              allBuses.forEach(bus => {
-                  if (!busesByLine.has(bus.line)) {
-                      busesByLine.set(bus.line, []);
-                  }
-                  busesByLine.get(bus.line)!.push(bus);
-              });
-
-              const newArrivals: BusArrivalsState = {};
-              
-              for (const routeIndex in stmStopMappings) {
-                  const info = stmStopMappings[routeIndex];
-                  if (!info.isLineValid || !info.line || !info.departureStopLocation) {
-                      newArrivals[routeIndex] = null;
-                      continue;
-                  }
-
-                  const busesForLine = busesByLine.get(info.line);
-                  if (busesForLine && busesForLine.length > 0) {
-                      let nearestBusDistance = Infinity;
-                      const stmStopCoords = { lat: info.departureStopLocation.lat(), lng: info.departureStopLocation.lng() };
-
-                      busesForLine.forEach(bus => {
-                          const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-                          const distance = haversineDistance(stmStopCoords, busCoords);
-                          if (distance < nearestBusDistance) {
-                              nearestBusDistance = distance;
-                          }
-                      });
-
-                      if (nearestBusDistance !== Infinity) {
-                          const averageSpeedMetersPerSecond = 4.5; // ~16 km/h
-                          const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
-                          
-                          newArrivals[routeIndex] = {
-                              distance: nearestBusDistance,
-                              eta: etaSeconds,
-                              lastUpdate: Date.now()
-                          };
-                      } else {
-                        newArrivals[routeIndex] = null;
-                      }
+              try {
+                  const lineId = parseInt(info.line);
+                  const arrivalsData = await getArrivalsForStop(info.stopId, lineId);
+                  
+                  if (arrivalsData && arrivalsData.length > 0) {
+                    const nextArrival = arrivalsData.find(a => a.eta > 0);
+                    newArrivals[routeIndex] = nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null;
                   } else {
-                     newArrivals[routeIndex] = null;
+                    newArrivals[routeIndex] = null;
                   }
-              }
-              setBusArrivals(prev => ({...prev, ...newArrivals}));
 
-          } catch (error) {
-              console.error(`Error fetching bus arrival info for lines ${linesQueryString}:`, error);
+              } catch (error) {
+                  console.error(`Error fetching bus arrival info for line ${info.line} at stop ${info.stopId}:`, error);
+                  newArrivals[routeIndex] = null;
+              }
           }
+           setBusArrivals(prev => ({...prev, ...newArrivals}));
       };
 
       fetchAllArrivals();
@@ -401,6 +358,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             onSelectRoute={onSelectRoute}
             isApiConnected={isApiConnected}
             arrivalInfo={busArrivals[index] ?? null}
+            stmInfo={stmStopMappings ? stmStopMappings[index] : null}
         />
       ))}
     </div>
