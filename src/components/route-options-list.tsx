@@ -5,9 +5,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { getArrivalsForStop, getAllBusStops, StmBusStop, getLinesForBusStop, BusArrival } from '@/lib/stm-api';
-import { haversineDistance } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { getBusLocation, StmBusStop, getAllBusStops, getLinesForBusStop, BusLocation } from '@/lib/stm-api';
+import { haversineDistance, cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
@@ -17,7 +16,6 @@ interface RouteOptionsListProps {
 
 interface StmInfo {
   stopId: number | null;
-  isLineValid: boolean;
   line: string | undefined;
   lineDestination: string | null;
   departureStopLocation: google.maps.LatLng | null;
@@ -27,8 +25,21 @@ interface StmStopMapping {
   [routeIndex: number]: StmInfo;
 }
 
+interface ArrivalInfo {
+    bus: BusLocation;
+    eta: number; // calculated ETA in seconds
+}
+
 interface BusArrivalsState {
-    [routeIndex: number]: BusArrival | null;
+    [routeIndex: number]: ArrivalInfo | null;
+}
+
+const AVERAGE_BUS_SPEED_M_PER_S = 8.33; // Approx 30 km/h
+
+const calculateEta = (busLocation: { lat: number, lng: number }, stopLocation: { lat: number, lng: number }): number => {
+    const distance = haversineDistance(busLocation, stopLocation);
+    // This is a simple linear distance ETA, not accounting for traffic or route, but it's a good proxy.
+    return distance / AVERAGE_BUS_SPEED_M_PER_S;
 }
 
 const ArrivalInfoLegend = () => {
@@ -74,7 +85,7 @@ const RouteOptionItem = ({
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
   isApiConnected: boolean,
-  arrivalInfo: BusArrival | null,
+  arrivalInfo: ArrivalInfo | null,
   stmInfo: StmInfo | null,
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -90,18 +101,16 @@ const RouteOptionItem = ({
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
-    if (arrivalInfo.eta < 60) {
+    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
+    if (arrivalMinutes <= 1) {
       return `Llegando`;
     }
-    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
     return `Llega en ${arrivalMinutes} min`;
   };
 
   const getArrivalColorClass = () => {
     if (!arrivalInfo) return 'text-primary';
-    
     const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
-
     if (arrivalMinutes < 5) {
         return 'text-green-400';
     } else if (arrivalMinutes <= 10) {
@@ -228,7 +237,6 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       }
       
       const newMappings: StmStopMapping = {};
-      const stopLinesCache = new Map<number, string[]>();
 
       for (const [index, route] of routes.entries()) {
         const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
@@ -253,36 +261,15 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                   closestStmStop = stop;
               }
           });
-
-          if (closestStmStop && minDistance <= 200) {
-            const stopId = closestStmStop.busstopId;
-            let validLinesForStop: string[] = [];
-
-            if (stopLinesCache.has(stopId)) {
-                validLinesForStop = stopLinesCache.get(stopId)!;
-            } else {
-                try {
-                    const linesData = await getLinesForBusStop(stopId);
-                    validLinesForStop = linesData.map(l => l.line.toString());
-                    stopLinesCache.set(stopId, validLinesForStop);
-                } catch (e) {
-                    console.error(`Failed to get lines for stop ${stopId}`, e);
-                }
-            }
-            
-            newMappings[index] = {
-                stopId: stopId,
-                isLineValid: validLinesForStop.includes(googleTransitLine),
-                line: googleTransitLine,
-                lineDestination: lineDestination,
-                departureStopLocation: departureStopLocation
-            };
-
-          } else {
-            newMappings[index] = { stopId: null, isLineValid: false, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
-          }
+          
+          newMappings[index] = {
+              stopId: (closestStmStop && minDistance <= 200) ? closestStmStop.busstopId : null,
+              line: googleTransitLine,
+              lineDestination: lineDestination,
+              departureStopLocation: departureStopLocation
+          };
         } else {
-          newMappings[index] = { stopId: null, isLineValid: false, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
+          newMappings[index] = { stopId: null, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
         }
       }
       
@@ -301,17 +288,34 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
     const fetchAllArrivals = async () => {
         const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndex, info]) => {
-            if (info.isLineValid && info.line && info.stopId && !isNaN(parseInt(info.line))) {
+            if (info.line && info.departureStopLocation) {
                 try {
-                    const lineId = parseInt(info.line);
-                    const arrivalsData = await getArrivalsForStop(info.stopId, lineId);
-                    return { routeIndex: parseInt(routeIndex), arrivals: arrivalsData };
+                    const busLocations = await getBusLocation(info.line, info.lineDestination ?? undefined);
+                    if (busLocations && busLocations.length > 0) {
+                        
+                        const googleStopLocation = { lat: info.departureStopLocation.lat(), lng: info.departureStopLocation.lng() };
+                        let closestBus: BusLocation | null = null;
+                        let minDistance = Infinity;
+
+                        busLocations.forEach(bus => {
+                            const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+                            const distance = haversineDistance(busCoords, googleStopLocation);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestBus = bus;
+                            }
+                        });
+
+                        if (closestBus) {
+                             const eta = calculateEta({ lat: closestBus.location.coordinates[1], lng: closestBus.location.coordinates[0] }, googleStopLocation);
+                             return { routeIndex: parseInt(routeIndex), arrival: { bus: closestBus, eta } };
+                        }
+                    }
                 } catch (error) {
-                    console.error(`Error fetching arrival info for route ${routeIndex}:`, error);
-                    return { routeIndex: parseInt(routeIndex), arrivals: null };
+                    console.error(`Error fetching bus locations for route ${routeIndex}:`, error);
                 }
             }
-            return { routeIndex: parseInt(routeIndex), arrivals: null };
+            return { routeIndex: parseInt(routeIndex), arrival: null };
         });
 
         const results = await Promise.allSettled(arrivalPromises);
@@ -319,15 +323,10 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         
         results.forEach(result => {
             if (result.status === 'fulfilled' && result.value) {
-                const { routeIndex, arrivals } = result.value;
-                 if (arrivals && arrivals.length > 0) {
-                    // Correct logic: Take the first arrival, even if eta is 0.
-                    newArrivals[routeIndex] = arrivals[0] ? { ...arrivals[0], lastUpdate: Date.now() } : null;
-                } else {
-                    newArrivals[routeIndex] = null;
-                }
+                const { routeIndex, arrival } = result.value;
+                newArrivals[routeIndex] = arrival;
             } else if (result.status === 'rejected') {
-                console.error("A promise for fetching arrivals was rejected:", result.reason);
+                console.error("A promise for fetching bus locations was rejected:", result.reason);
             }
         });
         
@@ -347,10 +346,10 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       {isMappingStops && isApiConnected && (
          <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <p>Verificando paradas...</p>
+            <p>Verificando paradas y líneas...</p>
          </div>
       )}
-      {!isMappingStops && isApiConnected && (
+      {!isMappingStops && isApiConnected && routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT')) && (
         <ArrivalInfoLegend />
       )}
       {!isMappingStops && routes.map((route, index) => (
