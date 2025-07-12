@@ -43,7 +43,7 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
     const rest = parts.slice(1).join(',');
     return (
         <p className="text-sm text-muted-foreground">
-            {prefix}: <span className="font-semibold">{street}</span>{rest && `, ${rest}`}
+            {prefix}: <span className="font-bold text-foreground">{street}</span>{rest && `, ${rest}`}
         </p>
     )
 }
