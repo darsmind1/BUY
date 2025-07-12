@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
-import { getArrivals, findStopByLocation } from '@/lib/stm-api';
+import { getArrivals } from '@/lib/stm-api';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
@@ -51,23 +51,18 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
       const stopLocation = firstTransitStep.transit.departure_stop.location;
 
       try {
-        const stopData = await findStopByLocation(stopLocation.lat(), stopLocation.lng());
+        const arrivalData = await getArrivals(line!, stopLocation.lat(), stopLocation.lng());
         
-        if (stopData && stopData.length > 0) {
-          const stopId = stopData[0].busstopId;
-          const arrivalData = await getArrivals(String(line), stopId);
-          
-          if (arrivalData) {
+        if (arrivalData) {
             setStmLineInfo({
-              line: arrivalData.line,
-              arrival: arrivalData.arribos.length > 0 ? arrivalData.arribos[0] : null
+              line: line!,
+              arrival: {
+                minutos: arrivalData.eta,
+                distance: arrivalData.distance
+              }
             });
-          } else {
-             setStmLineInfo(null);
-          }
         } else {
-          console.error(`No STM stop found for location:`, stopLocation.lat(), stopLocation.lng());
-          setStmLineInfo(null);
+             setStmLineInfo(null);
         }
       } catch (error) {
         console.error("Error fetching arrivals:", error);

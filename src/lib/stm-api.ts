@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 'use server';
 
@@ -17,7 +18,6 @@ async function getAccessToken(): Promise<string> {
     }
 
     try {
-        console.log("Fetching new STM API access token...");
         const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/token`, {
             method: 'POST',
             headers: {
@@ -45,7 +45,6 @@ async function getAccessToken(): Promise<string> {
             expiresAt: now + (tokenData.expires_in - 60) * 1000,
         };
         
-        console.log("Successfully fetched new STM API access token.");
         return cachedToken.token;
 
     } catch (error) {
@@ -90,70 +89,55 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 }
 
 /**
- * Finds the closest bus stop to a given location.
- * @param lat Latitude of the location.
- * @param lon Longitude of the location.
- * @returns A promise that resolves to an array of stop data or null.
- */
-export async function findStopByLocation(lat: number, lon: number) {
-    if (lat === undefined || lon === undefined) return null;
-    
-    let stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=200`);
-    
-    // If no stops are found, try again with a larger radius
-    if (!stops || stops.length === 0) {
-        console.log(`No stop found at 200m for ${lat}, ${lon}. Retrying with 500m.`);
-        stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=500`);
-    }
-
-    if (!stops || stops.length === 0) {
-        console.log(`No stop found at 500m for ${lat}, ${lon}. Retrying with buses endpoint.`);
-        const buses = await stmApiFetch(`/buses`);
-        if(buses && buses.length > 0) {
-            const closestBus = buses.reduce((prev, curr) => {
-                const prevDist = Math.sqrt(Math.pow(prev.location.coordinates[1] - lat, 2) + Math.pow(prev.location.coordinates[0] - lon, 2));
-                const currDist = Math.sqrt(Math.pow(curr.location.coordinates[1] - lat, 2) + Math.pow(curr.location.coordinates[0] - lon, 2));
-                return prevDist < currDist ? prev : curr;
-            });
-            if(closestBus && closestBus.lineVariantId) {
-                const lineVariant = await stmApiFetch(`/buses/linevariants/${closestBus.lineVariantId}`);
-                if(lineVariant && lineVariant.length > 0) {
-                    const busStop = await stmApiFetch(`/buses/busstops?street1Id=${lineVariant[0].street1Id}&street2Id=${lineVariant[0].street2Id}`);
-                    if(busStop && busStop.length > 0) {
-                        return busStop;
-                    }
-                }
-            }
-        }
-    }
-
-
-    return stops;
-}
-
-
-/**
- * Gets the real-time arrivals for a specific line at a specific stop.
+ * Gets the real-time arrivals for a specific line at a specific stop location.
  * @param line The bus line number.
- * @param stopId The ID of the bus stop.
- * @returns A promise that resolves to an object containing line info and arrivals.
+ * @param stopLat Latitude of the bus stop.
+ * @param stopLon Longitude of the bus stop.
+ * @returns A promise that resolves to an object containing eta and distance of the closest bus.
  */
-export async function getArrivals(line: string, stopId: number) {
-    if (!line || !stopId) return null;
+export async function getArrivals(line: string, stopLat: number, stopLon: number) {
+    if (!line || stopLat === undefined || stopLon === undefined) return null;
 
-    const upcomingBuses = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
+    const buses = await stmApiFetch(`/buses?lines=${line}`);
 
-    if (upcomingBuses && Array.isArray(upcomingBuses) && upcomingBuses.length > 0) {
-        // The API returns an array of lines. We need to find the one we're interested in.
-        const arrivalForLine = upcomingBuses.find(bus => bus.line === String(line));
-        
-        // Check if that line has upcoming arrivals in the 'arribos' array.
-        if (arrivalForLine && arrivalForLine.arribos && Array.isArray(arrivalForLine.arribos) && arrivalForLine.arribos.length > 0) {
-            // Return the line info and its arrivals
-            return arrivalForLine;
+    if (!buses || !Array.isArray(buses) || buses.length === 0) {
+        return null;
+    }
+
+    let closestBus = null;
+    let minDistance = Infinity;
+
+    for (const bus of buses) {
+        const busLat = bus.location.coordinates[1];
+        const busLon = bus.location.coordinates[0];
+
+        // Simple distance calculation (Haversine would be more accurate but this is a good approximation for short distances)
+        const distance = Math.sqrt(Math.pow(busLat - stopLat, 2) + Math.pow(busLon - stopLon, 2));
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestBus = bus;
         }
     }
+
+    if (!closestBus) {
+        return null;
+    }
     
-    // Return null if no upcoming buses found or no arrivals for the specific line
-    return null;
+    // Average speed of a bus in Montevideo is around 15 km/h (or 4.16 m/s)
+    // The distance is in degrees, so we need to convert it to meters
+    // 1 degree of latitude is approx 111.32 km
+    // 1 degree of longitude at Montevideo's latitude (-34.9) is approx 91.8 km
+    const distanceInMeters = Math.sqrt(
+        Math.pow((closestBus.location.coordinates[1] - stopLat) * 111320, 2) +
+        Math.pow((closestBus.location.coordinates[0] - stopLon) * 91800, 2)
+    );
+
+    const averageSpeedMetersPerSecond = 4.16;
+    const etaInSeconds = distanceInMeters / averageSpeedMetersPerSecond;
+
+    return {
+        eta: etaInSeconds,
+        distance: distanceInMeters,
+    };
 }
