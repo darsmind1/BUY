@@ -84,7 +84,9 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
         <h3 className="mb-2 text-sm font-semibold text-muted-foreground px-1">Indicaciones</h3>
         <Accordion type="multiple" className="w-full space-y-1">
           {leg.steps.map((step, index) => {
-            if (step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0) {
+            const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
+            
+            if (hasDetailedWalkingSteps) {
               return (
                 <AccordionItem value={`item-${index}`} key={index} className="border-none">
                    <div className="flex items-start gap-4 p-3 rounded-lg bg-muted/50">
@@ -100,7 +102,7 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                    </div>
                   <AccordionContent className="py-2 pl-12 pr-4 border-l ml-5">
                       <div className="space-y-3 text-sm">
-                        {step.steps.map((subStep, subIndex) => (
+                        {step.steps!.map((subStep, subIndex) => (
                            <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
                         ))}
                       </div>
@@ -108,6 +110,7 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                 </AccordionItem>
               )
             }
+
             return (
               <div key={index} className="flex items-start gap-4 p-3 rounded-lg hover:bg-muted/50">
                   <div className="mt-1">
