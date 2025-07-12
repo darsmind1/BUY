@@ -37,7 +37,12 @@ export default function Home() {
       }
       
       const lines = new Set<string>();
-      directionsResponse.routes.forEach(route => {
+      
+      // If a specific route is selected, only show buses for that route.
+      // Otherwise (in options view), show buses for all possible routes.
+      const routesToScan = selectedRoute ? [selectedRoute] : directionsResponse.routes;
+
+      routesToScan.forEach(route => {
         route.legs.forEach(leg => {
           leg.steps.forEach(step => {
             if (step.travel_mode === 'TRANSIT' && step.transit) {
@@ -70,7 +75,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [directionsResponse, view]);
+  }, [directionsResponse, selectedRoute, view]);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
