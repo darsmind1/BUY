@@ -9,7 +9,6 @@ interface StmToken {
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-// Function to get the access token, cached for its expiration time.
 async function getAccessToken(): Promise<string> {
     const now = Date.now();
 
@@ -25,8 +24,8 @@ async function getAccessToken(): Promise<string> {
             },
             body: new URLSearchParams({
                 'grant_type': 'client_credentials',
-                'client_id': process.env.STM_CLIENT_ID,
-                'client_secret': process.env.STM_CLIENT_SECRET,
+                'client_id': process.env.STM_CLIENT_ID!,
+                'client_secret': process.env.STM_CLIENT_SECRET!,
             }),
             cache: 'no-store'
         });
@@ -41,7 +40,6 @@ async function getAccessToken(): Promise<string> {
         
         cachedToken = {
             token: tokenData.access_token,
-            // We set expiration 60 seconds before it actually expires to be safe
             expiresAt: now + (tokenData.expires_in - 60) * 1000,
         };
         
@@ -49,7 +47,7 @@ async function getAccessToken(): Promise<string> {
 
     } catch (error) {
         console.error("Exception while fetching STM access token:", error);
-        cachedToken = null; // Reset cache on error
+        cachedToken = null;
         throw error;
     }
 }
@@ -58,7 +56,7 @@ async function getAccessToken(): Promise<string> {
 async function stmApiFetch(path: string, options: RequestInit = {}) {
     try {
         const accessToken = await getAccessToken();
-        const url = `/api/transportepublico${path}`;
+        const url = `${process.env.NEXT_PUBLIC_BASE_URL}${path}`;
 
         const response = await fetch(url, {
             ...options,
@@ -67,7 +65,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json',
             },
-            cache: 'no-store', // Use cache: 'no-store' for real-time data
+            cache: 'no-store',
         });
 
         if (!response.ok) {
@@ -76,7 +74,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
             return null;
         }
 
-        if (response.status === 204) { // No Content
+        if (response.status === 204) {
             return [];
         }
 
@@ -89,7 +87,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 }
 
 /**
- * Gets the real-time arrivals for a specific line at a specific stop location.
+ * Gets the real-time arrivals for a specific line at a specific stop location by finding the closest bus.
  * @param line The bus line number.
  * @param stopLat Latitude of the bus stop.
  * @param stopLon Longitude of the bus stop.
