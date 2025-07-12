@@ -121,6 +121,11 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
     if (response.status === 204) {
       return [];
     }
+    
+    if (response.status === 429) {
+      console.warn(`STM API rate limit exceeded for path ${path}. Returning null to avoid crash.`);
+      return null;
+    }
 
     if (!response.ok) {
         if (response.status === 404) {
@@ -188,8 +193,12 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
     return (Array.isArray(data) ? data : []) as StmLineInfo[];
 }
 
-export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[]> {
+export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[] | null> {
     const data = await stmApiFetch(`/buses/busstops/${stopId}/lines/${lineId}/arrivals`);
+    
+    if (data === null) { // Handle rate limit case
+        return null;
+    }
     
     if (!Array.isArray(data)) {
         console.warn(`STM API response for arrivals was not an array for stop ${stopId} line ${lineId}.`, data);

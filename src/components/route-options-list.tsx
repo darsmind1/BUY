@@ -301,43 +301,46 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
 
   useEffect(() => {
-      if (!isApiConnected || !stmStopMappings) {
-          return;
-      }
+    if (!isApiConnected || !stmStopMappings) {
+        return;
+    }
 
-      const fetchAllArrivals = async () => {
-          const newArrivals: BusArrivalsState = {};
-
-          for (const routeIndex in stmStopMappings) {
-              const info = stmStopMappings[routeIndex];
-              if (!info.isLineValid || !info.line || !info.stopId || isNaN(parseInt(info.line))) {
-                  newArrivals[routeIndex] = null;
-                  continue;
-              }
-
-              try {
-                  const lineId = parseInt(info.line);
-                  const arrivalsData = await getArrivalsForStop(info.stopId, lineId);
-                  
-                  if (arrivalsData && arrivalsData.length > 0) {
+    const fetchAllArrivals = async () => {
+        const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndex, info]) => {
+            if (!info.isLineValid || !info.line || !info.stopId || isNaN(parseInt(info.line))) {
+                return { routeIndex, arrival: null };
+            }
+            try {
+                const lineId = parseInt(info.line);
+                const arrivalsData = await getArrivalsForStop(info.stopId, lineId);
+                
+                if (arrivalsData && arrivalsData.length > 0) {
                     const nextArrival = arrivalsData.find(a => a.eta > 0);
-                    newArrivals[routeIndex] = nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null;
-                  } else {
-                    newArrivals[routeIndex] = null;
-                  }
+                    return { routeIndex, arrival: nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null };
+                }
+                return { routeIndex, arrival: null };
+            } catch (error) {
+                console.error(`Error fetching bus arrival info for line ${info.line} at stop ${info.stopId}:`, error);
+                return { routeIndex, arrival: null };
+            }
+        });
 
-              } catch (error) {
-                  console.error(`Error fetching bus arrival info for line ${info.line} at stop ${info.stopId}:`, error);
-                  newArrivals[routeIndex] = null;
-              }
-          }
-           setBusArrivals(prev => ({...prev, ...newArrivals}));
-      };
+        const results = await Promise.allSettled(arrivalPromises);
+        const newArrivals: BusArrivalsState = {};
+        
+        results.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+                newArrivals[parseInt(result.value.routeIndex)] = result.value.arrival;
+            }
+        });
+        
+        setBusArrivals(prev => ({...prev, ...newArrivals}));
+    };
 
-      fetchAllArrivals();
-      const intervalId = setInterval(fetchAllArrivals, 30000);
+    fetchAllArrivals();
+    const intervalId = setInterval(fetchAllArrivals, 30000);
 
-      return () => clearInterval(intervalId);
+    return () => clearInterval(intervalId);
 
   }, [stmStopMappings, isApiConnected]);
 
