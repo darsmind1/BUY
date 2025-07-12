@@ -9,9 +9,7 @@ interface StmToken {
 export interface BusLocation {
     id: string;
     timestamp: string;
-    line: {
-      value: string;
-    };
+    line: string;
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
@@ -129,7 +127,13 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
     const data = await stmApiFetch(`/buses?lines=${line}`);
     if (data && Array.isArray(data)) {
-        return data.map(bus => ({...bus, line: bus.line.value.toString()})) as BusLocation[];
+        return data.map((bus: any) => {
+            const busLine = typeof bus.line === 'object' && bus.line !== null ? bus.line.value : bus.line;
+            return {
+                ...bus,
+                line: busLine.toString(),
+            };
+        }) as BusLocation[];
     }
     return null;
 }
