@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
-import { getArrivals, getAllBusStops } from '@/lib/stm-api';
+import { getArrivals, getAllBusStops, getLinesForStop } from '@/lib/stm-api';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
@@ -45,6 +45,7 @@ function haversineDistance(
 
 const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void, allStops: StmBusStop[] }) => {
   const [stmLineInfo, setStmLineInfo] = useState<StmLineArrivalInfo | null>(null);
+  const [stmLine, setStmLine] = useState<string | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
   const duration = getTotalDuration(route.legs);
@@ -87,15 +88,24 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
       }
 
       try {
-        const arrivalData = await getArrivals(nearestStop.busstopId, googleTransitLine);
-        if (isMounted) {
-            if (arrivalData) {
-                console.log("STM Arrival Info:", arrivalData);
-                setStmLineInfo(arrivalData);
-            } else {
-                setStmLineInfo(null);
+        const linesAtStop = await getLinesForStop(nearestStop.busstopId);
+        const stmLineForRoute = linesAtStop?.find(l => l.line === googleTransitLine);
+
+        if (isMounted && stmLineForRoute) {
+            setStmLine(stmLineForRoute.line);
+            const arrivalData = await getArrivals(nearestStop.busstopId, stmLineForRoute.line);
+            if (isMounted) {
+                if (arrivalData) {
+                    setStmLineInfo(arrivalData);
+                } else {
+                    setStmLineInfo(null);
+                }
             }
+        } else if (isMounted) {
+            setStmLine(googleTransitLine); // Fallback to Google's line name if not found
+            setStmLineInfo(null);
         }
+
       } catch (error) {
         console.error("Error fetching arrivals:", error);
         if(isMounted) setStmLineInfo(null);
@@ -127,7 +137,6 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
   };
 
   const arrivalText = getArrivalText();
-  const displayLine = stmLineInfo?.line || googleTransitLine;
 
   return (
     <Card 
@@ -141,9 +150,10 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
             <div className="flex items-center gap-1.5 flex-wrap">
               {leg.steps.map((step, stepIndex) => {
                 if (step.travel_mode === 'TRANSIT') {
+                  const lineToShow = (stmLine && firstTransitStep && step.transit?.line.short_name === googleTransitLine) ? stmLine : step.transit?.line.short_name;
                   return (
                     <React.Fragment key={stepIndex}>
-                      <Badge variant="secondary" className="font-mono">{step.transit?.line.short_name}</Badge>
+                      <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
                       {stepIndex < leg.steps.length - 1 && leg.steps[stepIndex+1].travel_mode ==='TRANSIT' && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
                     </React.Fragment>
                   );

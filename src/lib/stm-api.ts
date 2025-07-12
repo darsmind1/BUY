@@ -1,3 +1,4 @@
+
 'use server';
 
 interface StmToken {
@@ -19,6 +20,11 @@ interface StmBusStop {
     // add other properties if needed
 }
 
+interface StmLineAtStop {
+    line: string;
+    lineId: string;
+}
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 let cachedBusStops: StmBusStop[] | null = null;
 
@@ -27,8 +33,8 @@ const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
 // WARNING: Replace with your actual credentials.
-const STM_CLIENT_ID = "YOUR_CLIENT_ID_HERE";
-const STM_CLIENT_SECRET = "YOUR_CLIENT_SECRET_HERE";
+const STM_CLIENT_ID = "d7916e2b";
+const STM_CLIENT_SECRET = "164c5cf512e692dbfcc2fbda1f0ec0a1";
 
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
@@ -129,6 +135,14 @@ export async function getAllBusStops(): Promise<StmBusStop[] | null> {
     return null;
 }
 
+export async function getLinesForStop(stopId: number): Promise<StmLineAtStop[] | null> {
+    const lines = await stmApiFetch(`/buses/busstops/${stopId}/lines`);
+    if (lines && Array.isArray(lines)) {
+        return lines;
+    }
+    return null;
+}
+
 export async function getArrivals(stopId: number, line: string): Promise<StmLineArrivalInfo | null> {
   const upcomingData = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
 
@@ -139,7 +153,6 @@ export async function getArrivals(stopId: number, line: string): Promise<StmLine
   const firstArrival = upcomingData[0];
 
   if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
-    console.log("STM Arrival Info for line", line, "at stop", stopId, ":", firstArrival);
     return {
       line: firstArrival.line,
       eta: firstArrival.eta,
