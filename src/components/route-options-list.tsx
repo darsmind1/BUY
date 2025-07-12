@@ -36,6 +36,8 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         setIsLoadingArrival(false);
         return;
       }
+      
+      if(!arrivalInfo) setIsLoadingArrival(true);
 
       const line = firstTransitStep.transit.line.short_name;
       const stopLocation = firstTransitStep.transit.departure_stop.location;
@@ -64,6 +66,11 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
     };
 
     fetchArrival();
+    
+    const intervalId = setInterval(fetchArrival, 15000);
+
+    return () => clearInterval(intervalId);
+
   }, [firstTransitStep]);
 
   return (
