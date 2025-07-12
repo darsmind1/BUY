@@ -69,17 +69,23 @@ const PulsingUserMarker = () => (
             {`
             @keyframes blink {
                 0%, 100% {
-                    opacity: 1;
+                    transform: scale(0.5);
+                    opacity: 0;
                 }
                 50% {
-                    opacity: 0.2;
+                    transform: scale(1);
+                    opacity: 1;
                 }
             }
             `}
         </style>
         <div 
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4] border-2 border-white shadow-lg"
-            style={{ width: '16px', height: '16px', animation: 'blink 1.5s infinite ease-in-out' }}
+            style={{ width: '18px', height: '18px' }}
+        />
+         <div 
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4]/50"
+            style={{ width: '32px', height: '32px', animation: 'blink 2s infinite ease-out' }}
         />
     </div>
 )
@@ -93,8 +99,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  
-  const [customDirections, setCustomDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -104,28 +109,43 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   const onUnmount = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
     setMapLoaded(false);
+    if (directionsRendererRef.current) {
+        directionsRendererRef.current.setMap(null);
+        directionsRendererRef.current = null;
+    }
   }, []);
   
   useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+
+    if (!directionsRendererRef.current) {
+      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+        suppressMarkers: true,
+        map: mapRef.current,
+        polylineOptions: {
+            strokeColor: '#A40034', // default color
+            strokeOpacity: 0.8,
+            strokeWeight: 6,
+            zIndex: 1
+        }
+      });
+    }
+  
     if (!directionsResponse) {
-      setCustomDirections(null);
+      directionsRendererRef.current.setDirections(null);
       return;
     }
   
-    // Create a deep copy to avoid mutating the original response
     const directionsCopy = JSON.parse(JSON.stringify(directionsResponse));
     const route = directionsCopy.routes[routeIndex];
   
     if (!route || !route.legs) {
-      setCustomDirections(directionsCopy);
+      directionsRendererRef.current.setDirections(directionsCopy);
       return;
     }
   
-    // This will hold the single DirectionsRenderer instance
-    const renderer = new window.google.maps.DirectionsRenderer({
-      suppressMarkers: true,
-      map: mapRef.current,
-    });
+    const leg = route.legs[0];
+    const newSteps: any[] = [];
   
     const transitPolylineOptions = {
         strokeColor: '#A40034',
@@ -136,9 +156,9 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   
     const walkingPolylineOptions = {
         strokeColor: '#212F3D',
-        strokeOpacity: 0, // The main line is invisible
+        strokeOpacity: 0,
         strokeWeight: 2,
-        zIndex: 2, // Higher zIndex to appear above transit line
+        zIndex: 2,
         icons: [{
             icon: {
                 path: 'M 0,-1 0,1',
@@ -151,32 +171,24 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         }]
     };
   
-    // We create a new DirectionsResult where each step has its own polyline.
-    // This is a workaround to style parts of the same route differently.
-    const leg = route.legs[0];
-    const newSteps: any[] = [];
-  
     leg.steps.forEach((step: google.maps.DirectionsStep) => {
       const polyline = new window.google.maps.Polyline(
         step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions
       );
       polyline.setPath(step.path);
+      polyline.setMap(mapRef.current);
       newSteps.push({ ...step, polyline: polyline });
     });
-  
-    leg.steps = newSteps;
     
-    renderer.setDirections(directionsCopy);
+    // We pass a DirectionsResult with no steps/legs to the renderer to avoid it drawing its own polyline
+    const blankDirections = { ...directionsCopy, routes: [{ ...route, legs: [{...leg, steps: []}] }] };
+    directionsRendererRef.current.setDirections(blankDirections);
 
-    // Since we are manually handling the rendering via polylines, we clear the state
-    setCustomDirections(null); 
-  
     return () => {
-      // Clean up the renderer when the component/effect re-runs
-      renderer.setMap(null);
+        newSteps.forEach(step => step.polyline?.setMap(null));
     };
   
-  }, [directionsResponse, routeIndex, mapRef.current]);
+  }, [directionsResponse, routeIndex, mapLoaded]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -243,14 +255,6 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
             </OverlayViewF>
           )}
           
-          {customDirections && (
-            <DirectionsRenderer
-              directions={customDirections}
-              routeIndex={0} 
-              options={{ suppressMarkers: true, preserveViewport: true }}
-            />
-          )}
-
           {directionsResponse && (
             <>
               {startLocation && (
