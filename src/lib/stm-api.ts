@@ -1,20 +1,15 @@
 
 'use server';
 
-import type { ClassValue } from "clsx";
-
 interface StmToken {
     access_token: string;
     expires_in: number;
 }
 
-interface StmArrivalInfo {
+interface StmLineArrivalInfo {
+    line: string;
     eta: number; // in seconds
     distance: number; // in meters
-}
-
-interface StmLineArrivalInfo extends StmArrivalInfo {
-    line: string;
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -23,8 +18,8 @@ const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
 // It's very important to replace these with your actual credentials.
-const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
-const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
+const STM_CLIENT_ID = "YOUR_CLIENT_ID_HERE";
+const STM_CLIENT_SECRET = "YOUR_CLIENT_SECRET_HERE";
 
 async function getAccessToken(): Promise<string | null> {
     const now = Date.now();
@@ -33,8 +28,8 @@ async function getAccessToken(): Promise<string | null> {
         return cachedToken.token;
     }
 
-    if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
-        console.error("STM API credentials are not set. Please check your environment variables.");
+    if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
+        console.error("STM API credentials are not set. Please add them to src/lib/stm-api.ts");
         return null;
     }
 
@@ -92,8 +87,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`STM API request to ${path} failed:`, response.status, errorText);
+            console.error(`STM API request to ${path} failed:`, response.status, await response.text());
             return null;
         }
         
@@ -102,8 +96,9 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
         }
 
         const data = await response.json();
+
         // The API might return an empty object {} on some cases instead of an array []
-        if (!Array.isArray(data)) {
+        if (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0) {
             return [];
         }
 
@@ -116,9 +111,12 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 }
 
 async function findStopByLocation(lat: number, lon: number): Promise<number | null> {
+    // The API seems to have an undocumented way to search by location.
+    // Let's use it as it's the only way to bridge Google Maps data with STM data.
     const stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=200`);
     
     if (stops && Array.isArray(stops) && stops.length > 0) {
+        // Assuming the first one is the closest/most relevant
         return stops[0].busstopId;
     }
 
@@ -129,6 +127,7 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
     const stopId = await findStopByLocation(stopLat, stopLon);
 
     if (!stopId) {
+        console.warn(`Could not find an STM stopId for coords: ${stopLat}, ${stopLon}`);
         return null;
     }
 
@@ -141,7 +140,6 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
     const firstArrival = upcomingData[0];
     
     if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
-        console.log("STM Arrival Info:", firstArrival);
          return {
             line: firstArrival.line,
             eta: firstArrival.eta,
