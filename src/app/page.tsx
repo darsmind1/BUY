@@ -75,15 +75,19 @@ export default function Home() {
       }
     };
     
-    fetchBusLocations(); 
-    intervalId = setInterval(fetchBusLocations, 10000); 
+    if (view === 'details' && selectedRoute) {
+        fetchBusLocations(); 
+        intervalId = setInterval(fetchBusLocations, 10000); 
+    } else {
+        setBusLocations([]);
+    }
 
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
     };
-  }, [selectedRoute]);
+  }, [view, selectedRoute]);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -198,6 +202,7 @@ export default function Home() {
               {view === 'details' && selectedRoute && (
                 <RouteDetailsPanel 
                   route={selectedRoute}
+                  busLocations={busLocations}
                 />
               )}
           </main>

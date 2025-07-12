@@ -4,10 +4,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi } from 'lucide-react';
+import type { BusLocation } from '@/lib/stm-api';
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
+  busLocations?: BusLocation[];
 }
 
 const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
@@ -48,10 +50,12 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
     )
 }
 
-export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
+export default function RouteDetailsPanel({ route, busLocations = [] }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
   const busLines = getBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
+
+  const isBusLive = busLocations.length > 0 && busLines.some(line => busLocations.some(bus => bus.line === line));
   
   if (!leg) return null;
 
@@ -68,9 +72,17 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                   <Badge variant="outline" className="text-sm">A pie</Badge>
                 )}
             </div>
-            <div className="flex items-center gap-2 text-sm font-normal">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{duration} min</span>
+            <div className="flex items-center gap-3 text-sm font-normal">
+              {isBusLive && (
+                <div className="flex items-center gap-1.5 text-blue-400">
+                    <Wifi className="h-4 w-4" />
+                    <span className="text-xs font-medium">En el mapa</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>{duration} min</span>
+              </div>
             </div>
           </CardTitle>
         </CardHeader>
