@@ -83,7 +83,7 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-async function stmApiFetch(path: string, options: RequestInit = {}) {
+async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any[] | null> {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) {
@@ -114,11 +114,17 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
     
     const data = await response.json();
 
-    if (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0) {
-        return [];
+    // Defensive check: if data is not an array (e.g., an empty object {}), return an empty array.
+    if (!Array.isArray(data)) {
+        if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
+            return []; // API returned an empty object, treat as no results.
+        }
+        console.warn(`STM API response for ${path} was not an array:`, data);
+        return null; // Unexpected format, return null to indicate an error.
     }
-
+    
     return data;
+
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
     return null;
@@ -132,7 +138,7 @@ export async function checkApiConnection(): Promise<boolean> {
 
 export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
     const data = await stmApiFetch(`/buses?lines=${line}`);
-    if (data && Array.isArray(data)) {
+    if (data) { // data is guaranteed to be an array or null here
         return data.map((bus: any) => {
             const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
             return {
@@ -146,16 +152,10 @@ export async function getBusLocation(line: string): Promise<BusLocation[] | null
 
 export async function getAllBusStops(): Promise<StmBusStop[] | null> {
     const data = await stmApiFetch('/buses/busstops');
-    if (data && Array.isArray(data)) {
-        return data as StmBusStop[];
-    }
-    return null;
+    return data as StmBusStop[] | null;
 }
 
 export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[] | null> {
     const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
-    if (data && Array.isArray(data)) {
-        return data as StmLineInfo[];
-    }
-    return null;
+    return data as StmLineInfo[] | null;
 }
