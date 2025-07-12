@@ -1,6 +1,9 @@
 
 'use server';
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 interface StmToken {
   access_token: string;
   expires_in: number;
@@ -51,7 +54,7 @@ async function getAccessToken(): Promise<string | null> {
   }
   
   if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
-    console.error('STM API credentials are not set. Cannot fetch access token.');
+    console.error('CRITICAL: STM API credentials are not set. Cannot fetch access token.');
     return null;
   }
 
