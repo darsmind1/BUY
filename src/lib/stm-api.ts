@@ -6,11 +6,6 @@ interface StmToken {
     expires_in: number;
 }
 
-interface UpcomingArrival {
-    line: string;
-    arribos: { minutos: number; distancia: number }[];
-}
-
 interface StmArrivalInfo {
     eta: number; // in seconds
     distance: number; // in meters
@@ -26,7 +21,7 @@ async function getAccessToken(): Promise<string> {
     }
 
     try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/token`, {
+        const response = await fetch(process.env.STM_TOKEN_URL!, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
@@ -62,7 +57,7 @@ async function getAccessToken(): Promise<string> {
 async function stmApiFetch(path: string, options: RequestInit = {}) {
     try {
         const accessToken = await getAccessToken();
-        const url = `${process.env.NEXT_PUBLIC_BASE_URL}/api/transportepublico${path}`;
+        const url = `${process.env.STM_API_BASE_URL}${path}`;
 
         const response = await fetch(url, {
             ...options,
@@ -104,7 +99,6 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
     const stopId = await findStopByLocation(stopLat, stopLon);
 
     if (!stopId) {
-        console.error(`Could not find a valid STM bus stop ID for location ${stopLat}, ${stopLon}`);
         return null;
     }
 
@@ -113,8 +107,7 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
     if (!upcomingData || !Array.isArray(upcomingData) || upcomingData.length === 0) {
         return null;
     }
-
-    // The endpoint returns a flat array of upcoming buses, not a nested structure.
+    
     const firstArrival = upcomingData[0];
     
     if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
