@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
+import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2 } from 'lucide-react';
 import { getBusLocation, BusLocation, getAllBusStops, StmBusStop, getLinesForBusStop } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
 
@@ -18,7 +18,21 @@ interface BusArrivalInfo {
     distance: number; // in meters
 }
 
-const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
+interface StmStopMapping {
+  [routeIndex: number]: number | null; // routeIndex -> stmBusStopId
+}
+
+const RouteOptionItem = ({ 
+  route, 
+  index, 
+  onSelectRoute,
+  stmStopId 
+}: { 
+  route: google.maps.DirectionsRoute, 
+  index: number, 
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void,
+  stmStopId: number | null
+}) => {
   const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
@@ -31,44 +45,15 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
     let intervalId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
-        if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
+        if (!isMounted || !firstTransitStep || !googleTransitLine || stmStopId === null) {
             if(isInitialFetch) setIsLoadingArrival(false);
             return;
         }
 
         if(isInitialFetch) setIsLoadingArrival(true);
 
-        const departureStopGoogleLocation = {
-            lat: firstTransitStep.transit.departure_stop.location.lat(),
-            lng: firstTransitStep.transit.departure_stop.location.lng()
-        };
-
         try {
-            // 1. Find the closest STM bus stop to the Google Maps departure stop
-            const allStops = await getAllBusStops();
-            if (!allStops || allStops.length === 0) throw new Error("Could not fetch STM bus stops.");
-
-            let closestStmStop: StmBusStop | null = null;
-            let minDistance = Infinity;
-
-            allStops.forEach(stop => {
-                const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
-                const distance = haversineDistance(departureStopGoogleLocation, stopCoords);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestStmStop = stop;
-                }
-            });
-
-            // If closest stop is more than 200m away, it's likely not the same one.
-            if (!closestStmStop || minDistance > 200) {
-                 if(isInitialFetch) setIsLoadingArrival(false);
-                 setArrivalInfo(null);
-                 return;
-            }
-
-            // 2. Verify that the Google-suggested line actually passes through that STM stop
-            const linesForStop = await getLinesForBusStop(closestStmStop.busstopId);
+            const linesForStop = await getLinesForBusStop(stmStopId);
             const isLineValidForStop = linesForStop?.some(line => line.line.toString() === googleTransitLine);
 
             if (!isLineValidForStop) {
@@ -77,13 +62,13 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
                 return;
             }
             
-            // 3. If valid, fetch bus locations and calculate ETA
             const buses = await getBusLocation(googleTransitLine);
             if (isMounted && buses && buses.length > 0) {
                 let nearestBusDistance = Infinity;
                 let nearestBus: BusLocation | null = null;
                 
-                const stmStopCoords = { lat: closestStmStop.location.coordinates[1], lng: closestStmStop.location.coordinates[0] };
+                const stmStopLocation = firstTransitStep.transit!.departure_stop.location;
+                const stmStopCoords = { lat: stmStopLocation.lat(), lng: stmStopLocation.lng() };
 
                 buses.forEach(bus => {
                     const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
@@ -115,17 +100,21 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
             if(isMounted && isInitialFetch) setIsLoadingArrival(false);
         }
     };
-
-    fetchArrival(true);
     
-    intervalId = setInterval(() => fetchArrival(false), 20000); 
+    // Only start fetching if we have a valid stop ID.
+    if (stmStopId !== null) {
+        fetchArrival(true);
+        intervalId = setInterval(() => fetchArrival(false), 20000); 
+    } else {
+        setIsLoadingArrival(false);
+    }
 
     return () => {
         isMounted = false;
-        clearInterval(intervalId);
+        if (intervalId) clearInterval(intervalId);
     };
 
-  }, [firstTransitStep, googleTransitLine]);
+  }, [firstTransitStep, googleTransitLine, stmStopId]);
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
@@ -223,14 +212,75 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
 }
 
 export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptionsListProps) {
+  const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
+  const [isMappingStops, setIsMappingStops] = useState(true);
+
+  useEffect(() => {
+    const mapStops = async () => {
+      setIsMappingStops(true);
+      const allStops = await getAllBusStops();
+      if (!allStops || allStops.length === 0) {
+        console.error("Could not fetch STM bus stops for mapping.");
+        setIsMappingStops(false);
+        return;
+      }
+      
+      const newMappings: StmStopMapping = {};
+
+      routes.forEach((route, index) => {
+        const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+        if (firstTransitStep?.transit?.departure_stop?.location) {
+          const departureStopGoogleLocation = {
+            lat: firstTransitStep.transit.departure_stop.location.lat(),
+            lng: firstTransitStep.transit.departure_stop.location.lng()
+          };
+
+          let closestStmStop: StmBusStop | null = null;
+          let minDistance = Infinity;
+
+          allStops.forEach(stop => {
+              const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
+              const distance = haversineDistance(departureStopGoogleLocation, stopCoords);
+              if (distance < minDistance) {
+                  minDistance = distance;
+                  closestStmStop = stop;
+              }
+          });
+
+          // If closest stop is more than 200m away, it's likely not the same one.
+          if (closestStmStop && minDistance <= 200) {
+            newMappings[index] = closestStmStop.busstopId;
+          } else {
+            newMappings[index] = null;
+          }
+        } else {
+          newMappings[index] = null; // No transit step for this route
+        }
+      });
+      
+      setStmStopMappings(newMappings);
+      setIsMappingStops(false);
+    };
+
+    mapStops();
+  }, [routes]);
+
+
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-      {routes.map((route, index) => (
+      {isMappingStops && (
+         <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p>Verificando paradas...</p>
+         </div>
+      )}
+      {!isMappingStops && routes.map((route, index) => (
         <RouteOptionItem 
             key={index} 
             route={route} 
             index={index} 
             onSelectRoute={onSelectRoute}
+            stmStopId={stmStopMappings?.[index] ?? null}
         />
       ))}
     </div>
