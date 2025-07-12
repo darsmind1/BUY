@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2 } from 'lucide-react';
+import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
 import { getBusLocation, BusLocation, getAllBusStops, StmBusStop, getLinesForBusStop } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,37 @@ interface BusArrivalInfo {
 
 interface StmStopMapping {
   [routeIndex: number]: number | null; // routeIndex -> stmBusStopId
+}
+
+const ArrivalInfoLegend = () => {
+    return (
+        <div className="p-3 mb-2 rounded-lg bg-muted/50 border border-dashed text-xs text-muted-foreground space-y-2">
+           <div className="flex items-center gap-2 font-medium text-foreground">
+                <Info className="h-4 w-4" />
+                <span>Leyenda de Arribos</span>
+           </div>
+           <div className="flex items-center gap-2">
+             <Wifi className="h-3.5 w-3.5 text-primary" />
+             <span>Tiempo real:</span>
+             <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-green-400" />
+                <span className="text-foreground">Fiable</span>
+             </div>
+             <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-yellow-400" />
+                <span className="text-foreground">Demora</span>
+             </div>
+             <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-foreground">Antigua</span>
+             </div>
+           </div>
+           <div className="flex items-center gap-2">
+                <Clock className="h-3.5 w-3.5 text-primary" />
+                <span>Horario programado por Google</span>
+           </div>
+        </div>
+    )
 }
 
 const RouteOptionItem = ({ 
@@ -308,6 +339,9 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
             <Loader2 className="h-6 w-6 animate-spin" />
             <p>Verificando paradas...</p>
          </div>
+      )}
+      {!isMappingStops && (
+        <ArrivalInfoLegend />
       )}
       {!isMappingStops && stmStopMappings && routes.map((route, index) => (
         <RouteOptionItem 
