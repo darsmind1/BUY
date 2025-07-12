@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 'use server';
 
@@ -25,6 +26,7 @@ const getAccessToken = unstable_cache(
                     'client_id': process.env.STM_CLIENT_ID,
                     'client_secret': process.env.STM_CLIENT_SECRET,
                 }),
+                cache: 'no-store'
             });
 
             if (!response.ok) {
@@ -46,22 +48,26 @@ const getAccessToken = unstable_cache(
     { revalidate: 3500 }
 );
 
-async function stmApiFetch(path: string) {
+async function stmApiFetch(path: string, options: RequestInit = {}) {
     const accessToken = await getAccessToken();
     const url = `${process.env.STM_API_BASE_URL}${path}`;
 
     try {
         const response = await fetch(url, {
+            ...options,
             headers: {
+                ...options.headers,
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json',
-            }
+            },
+            cache: 'no-store'
         });
 
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`STM API request to ${path} failed:`, response.status, errorText);
-            throw new Error(`API request failed with status ${response.status}`);
+            // Return null or an empty array on error to prevent breaking the UI
+            return null;
         }
 
         if (response.status === 204) { // No Content
@@ -83,4 +89,27 @@ async function stmApiFetch(path: string) {
 export async function getBusLocationsByLine(linea: number) {
     if (!linea) return null;
     return stmApiFetch(`/buses?linea=${linea}`);
+}
+
+/**
+ * Finds the closest bus stop to a given location.
+ * @param lat Latitude of the location.
+ * @param lon Longitude of the location.
+ * @returns A promise that resolves to an array of stop data or null.
+ */
+export async function findStopByLocation(lat: number, lon: number) {
+    if (lat === undefined || lon === undefined) return null;
+     // The API expects a short distance to find the *closest* stop.
+    return stmApiFetch(`/paradas?lat=${lat}&lon=${lon}&dist=50`);
+}
+
+/**
+ * Gets the real-time arrivals for a specific line at a specific stop.
+ * @param line The bus line number.
+ * @param stopId The ID of the bus stop.
+ * @returns A promise that resolves to an array of arrival data or null.
+ */
+export async function getArrivals(line: number, stopId: number) {
+    if (!line || !stopId) return null;
+    return stmApiFetch(`/arribos?linea=${line}&parada=${stopId}`);
 }
