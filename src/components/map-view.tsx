@@ -152,30 +152,30 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const route = directionsResponse.routes[routeIndex];
     if (!route) return;
 
-    const newWalkingLegs: google.maps.DirectionsLeg[] = [];
-    const newTransitLegs: google.maps.DirectionsLeg[] = [];
+    // Create a deep copy of the original directions response to modify
+    const directionsCopy: google.maps.DirectionsResult = JSON.parse(JSON.stringify(directionsResponse));
 
-    route.legs.forEach(leg => {
-        const walkingSteps = leg.steps.filter(step => step.travel_mode === 'WALKING');
-        const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT');
-        
-        if (walkingSteps.length > 0) {
-            newWalkingLegs.push({ ...leg, steps: walkingSteps });
-        }
-        if (transitSteps.length > 0) {
-            newTransitLegs.push({ ...leg, steps: transitSteps });
-        }
+    const walkingRoute = JSON.parse(JSON.stringify(directionsCopy.routes[routeIndex]));
+    const transitRoute = JSON.parse(JSON.stringify(directionsCopy.routes[routeIndex]));
+
+    walkingRoute.legs.forEach((leg: google.maps.DirectionsLeg) => {
+        leg.steps = leg.steps.filter(step => step.travel_mode === 'WALKING');
     });
 
-    if (newWalkingLegs.length > 0) {
-        const walkingResult = { ...directionsResponse, routes: [{ ...route, legs: newWalkingLegs }]};
+    transitRoute.legs.forEach((leg: google.maps.DirectionsLeg) => {
+        leg.steps = leg.steps.filter(step => step.travel_mode === 'TRANSIT');
+    });
+    
+    const walkingResult = { ...directionsCopy, routes: [walkingRoute]};
+    const transitResult = { ...directionsCopy, routes: [transitRoute]};
+
+    if (walkingRoute.legs.some((l: google.maps.DirectionsLeg) => l.steps.length > 0)) {
         setWalkingDirections(walkingResult);
     } else {
         setWalkingDirections(null);
     }
     
-    if (newTransitLegs.length > 0) {
-        const transitResult = { ...directionsResponse, routes: [{ ...route, legs: newTransitLegs }]};
+    if (transitRoute.legs.some((l: google.maps.DirectionsLeg) => l.steps.length > 0)) {
         setTransitDirections(transitResult);
     } else {
         setTransitDirections(null);
@@ -188,10 +188,19 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (selectedRoute && userLocation) {
-        map.panTo(userLocation);
-        map.setZoom(16.75);
-    } else if (directionsResponse) {
+    if (selectedRoute) { // Don't pan with user location to allow map exploration
+        const bounds = new window.google.maps.LatLngBounds();
+        directionsResponse?.routes[routeIndex].legs.forEach(leg => {
+            leg.steps.forEach(step => {
+                step.path.forEach(point => bounds.extend(point));
+            });
+        });
+        if(userLocation){
+            bounds.extend(userLocation);
+        }
+        map.fitBounds(bounds);
+    }
+    else if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         directionsResponse.routes[routeIndex].legs.forEach(leg => {
             leg.steps.forEach(step => {
@@ -207,7 +216,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]);
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]); // removed userLocation
 
   if (!isLoaded) {
     return (

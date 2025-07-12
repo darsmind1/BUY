@@ -93,29 +93,25 @@ export default function Home() {
   useEffect(() => {
     let watchId: number | null = null;
 
-    if (view === 'details' && navigator.geolocation) {
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const newLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          };
-          setCurrentUserLocation(newLocation);
-        },
-        (error) => {
-          console.error("Error watching position:", error);
-          toast({
-            variant: "destructive",
-            title: "Error de seguimiento",
-            description: "No se pudo actualizar tu ubicación en tiempo real.",
-          });
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
-      );
+    if (navigator.geolocation) { // Check for geolocation support
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const newLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            };
+            setCurrentUserLocation(newLocation);
+          },
+          (error) => {
+            console.error("Error watching position:", error);
+            // Optionally notify user that location tracking stopped
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          }
+        );
     }
 
     return () => {
@@ -123,7 +119,7 @@ export default function Home() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [view, toast]);
+  }, []); // Run only once to start/stop watching
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
