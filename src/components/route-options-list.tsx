@@ -5,24 +5,23 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
-import { getArrivals, getAllBusStops, getLinesForStop } from '@/lib/stm-api';
+import { getBusLocation } from '@/lib/stm-api';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void;
 }
 
-interface StmLineArrivalInfo {
+interface BusLocation {
     line: string;
-    eta: number;
-    distance: number;
-}
-
-interface StmBusStop {
-    busstopId: number;
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
+}
+
+interface BusArrivalInfo {
+    eta: number; // in seconds
+    distance: number; // in meters
 }
 
 function haversineDistance(
@@ -43,9 +42,8 @@ function haversineDistance(
   return R * c; // in metres
 }
 
-const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void, allStops: StmBusStop[] }) => {
-  const [stmLineInfo, setStmLineInfo] = useState<StmLineArrivalInfo | null>(null);
-  const [stmLine, setStmLine] = useState<string | null>(null);
+const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
+  const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
   const duration = getTotalDuration(route.legs);
@@ -58,7 +56,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
     let intervalId: NodeJS.Timeout;
 
     const fetchArrival = async () => {
-      if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location || allStops.length === 0) {
+      if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
         setIsLoadingArrival(false);
         return;
       }
@@ -69,46 +67,42 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
           lat: firstTransitStep.transit.departure_stop.location.lat(),
           lng: firstTransitStep.transit.departure_stop.location.lng()
       };
-      
-      let nearestStop: StmBusStop | null = null;
-      let minDistance = Infinity;
-
-      allStops.forEach(stop => {
-        const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
-        const distance = haversineDistance(departureStopLocation, stopCoords);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestStop = stop;
-        }
-      });
-      
-      if (!nearestStop) {
-          if(isMounted) setIsLoadingArrival(false);
-          return;
-      }
 
       try {
-        const linesAtStop = await getLinesForStop(nearestStop.busstopId);
-        const stmLineForRoute = linesAtStop?.find(l => l.line === googleTransitLine);
+        const buses = await getBusLocation(googleTransitLine);
 
-        if (isMounted && stmLineForRoute) {
-            setStmLine(stmLineForRoute.line);
-            const arrivalData = await getArrivals(nearestStop.busstopId, stmLineForRoute.line);
-            if (isMounted) {
-                if (arrivalData) {
-                    setStmLineInfo(arrivalData);
-                } else {
-                    setStmLineInfo(null);
+        if (isMounted && buses && buses.length > 0) {
+            let nearestBusDistance = Infinity;
+            
+            buses.forEach(bus => {
+                const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+                const distance = haversineDistance(departureStopLocation, busCoords);
+                if (distance < nearestBusDistance) {
+                    nearestBusDistance = distance;
                 }
+            });
+
+            if (nearestBusDistance !== Infinity) {
+                // Average bus speed in Montevideo is ~15-20 km/h -> ~4.2-5.5 m/s. Let's use ~4.5 m/s.
+                const averageSpeedMetersPerSecond = 4.5;
+                const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
+                
+                setArrivalInfo({
+                    distance: nearestBusDistance,
+                    eta: etaSeconds,
+                });
+
+            } else {
+                 setArrivalInfo(null);
             }
+
         } else if (isMounted) {
-            setStmLine(googleTransitLine); // Fallback to Google's line name if not found
-            setStmLineInfo(null);
+            setArrivalInfo(null);
         }
 
       } catch (error) {
-        console.error("Error fetching arrivals:", error);
-        if(isMounted) setStmLineInfo(null);
+        console.error("Error fetching bus locations:", error);
+        if(isMounted) setArrivalInfo(null);
       } finally {
         if(isMounted) setIsLoadingArrival(false);
       }
@@ -123,12 +117,12 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
         clearInterval(intervalId);
     };
 
-  }, [firstTransitStep, googleTransitLine, allStops]);
+  }, [firstTransitStep, googleTransitLine]);
 
   const getArrivalText = () => {
-    if (!stmLineInfo) return null;
+    if (!arrivalInfo) return null;
 
-    const arrivalSeconds = stmLineInfo.eta;
+    const arrivalSeconds = arrivalInfo.eta;
     if (arrivalSeconds < 60) {
       return `Llegando`;
     }
@@ -150,7 +144,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute, allStops }: { route: goo
             <div className="flex items-center gap-1.5 flex-wrap">
               {leg.steps.map((step, stepIndex) => {
                 if (step.travel_mode === 'TRANSIT') {
-                  const lineToShow = (stmLine && firstTransitStep && step.transit?.line.short_name === googleTransitLine) ? stmLine : step.transit?.line.short_name;
+                  const lineToShow = step.transit?.line.short_name;
                   return (
                     <React.Fragment key={stepIndex}>
                       <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
@@ -218,18 +212,6 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
 }
 
 export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptionsListProps) {
-    const [allStops, setAllStops] = useState<StmBusStop[]>([]);
-
-    useEffect(() => {
-        getAllBusStops()
-            .then(stops => {
-                if (stops) {
-                    setAllStops(stops);
-                }
-            })
-            .catch(err => console.error("Could not load bus stops", err));
-    }, []);
-
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
       {routes.map((route, index) => (
@@ -238,7 +220,6 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
             route={route} 
             index={index} 
             onSelectRoute={onSelectRoute}
-            allStops={allStops}
         />
       ))}
     </div>

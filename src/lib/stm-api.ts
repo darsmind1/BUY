@@ -6,33 +6,18 @@ interface StmToken {
   expires_in: number;
 }
 
-interface StmLineArrivalInfo {
-  line: string;
-  eta: number; // in seconds
-  distance: number; // in meters
-}
-
-interface StmBusStop {
-    busstopId: number;
+interface BusLocation {
+    line: string;
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
-    // add other properties if needed
-}
-
-interface StmLineAtStop {
-    line: string;
-    lineId: string;
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
-let cachedBusStops: StmBusStop[] | null = null;
-
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
-// WARNING: Replace with your actual credentials.
 const STM_CLIENT_ID = "d7916e2b";
 const STM_CLIENT_SECRET = "164c5cf512e692dbfcc2fbda1f0ec0a1";
 
@@ -122,43 +107,10 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
   }
 }
 
-export async function getAllBusStops(): Promise<StmBusStop[] | null> {
-    if (cachedBusStops) {
-        return cachedBusStops;
-    }
-
-    const stops = await stmApiFetch(`/buses/busstops`);
-    if (stops && Array.isArray(stops)) {
-        cachedBusStops = stops;
-        return stops;
+export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
+    const data = await stmApiFetch(`/buses?lines=${line}`);
+    if (data && Array.isArray(data)) {
+        return data as BusLocation[];
     }
     return null;
-}
-
-export async function getLinesForStop(stopId: number): Promise<StmLineAtStop[] | null> {
-    const lines = await stmApiFetch(`/buses/busstops/${stopId}/lines`);
-    if (lines && Array.isArray(lines)) {
-        return lines;
-    }
-    return null;
-}
-
-export async function getArrivals(stopId: number, line: string): Promise<StmLineArrivalInfo | null> {
-  const upcomingData = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
-
-  if (!upcomingData || !Array.isArray(upcomingData) || upcomingData.length === 0) {
-    return null;
-  }
-
-  const firstArrival = upcomingData[0];
-
-  if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
-    return {
-      line: firstArrival.line,
-      eta: firstArrival.eta,
-      distance: firstArrival.distance,
-    };
-  }
-
-  return null;
 }
