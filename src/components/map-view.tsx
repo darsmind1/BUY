@@ -1,7 +1,7 @@
 
 "use client";
 
-import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader, OverlayViewF } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
@@ -67,6 +67,39 @@ const busIconSvg = (line: string) => `data:image/svg+xml;utf8,${encodeURICompone
 </foreignObject>
 </svg>
 `)}`;
+
+const getPixelPositionOffset = (width: number, height: number) => ({
+    x: -(width / 2),
+    y: -(height / 2),
+});
+
+const PulsingUserMarker = () => (
+    <div className="relative w-8 h-8">
+        <style>
+            {`
+            @keyframes pulse {
+                0% {
+                    transform: scale(0.95);
+                    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.7);
+                }
+                70% {
+                    transform: scale(1.4);
+                    box-shadow: 0 0 0 10px rgba(66, 133, 244, 0);
+                }
+                100% {
+                    transform: scale(0.95);
+                    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0);
+                }
+            }
+            `}
+        </style>
+        <div 
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4] shadow-lg"
+            style={{ width: '16px', height: '16px', animation: 'pulse 2s infinite' }}
+        />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-[#4285F4] border-2 border-white" />
+    </div>
+)
 
 
 export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName }: MapViewProps) {
@@ -139,18 +172,13 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
           onUnmount={onUnmount}
         >
           {userLocation && (
-             <MarkerF 
+             <OverlayViewF
                 position={userLocation}
-                title="Tu ubicación"
-                icon={{
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 7,
-                    fillColor: '#4285F4',
-                    fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 2,
-                }}
-             />
+                mapPaneName={OverlayViewF.OVERLAY_MOUSE_TARGET}
+                getPixelPositionOffset={getPixelPositionOffset}
+            >
+                <PulsingUserMarker />
+            </OverlayViewF>
           )}
 
           {directionsResponse && (
