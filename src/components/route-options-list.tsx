@@ -43,6 +43,7 @@ const RouteOptionItem = ({
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
+    let initialFetchTimeoutId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
         if (!isMounted || !firstTransitStep || !googleTransitLine || stmStopId === null) {
@@ -101,20 +102,24 @@ const RouteOptionItem = ({
         }
     };
     
-    // Only start fetching if we have a valid stop ID.
     if (stmStopId !== null) {
+      // Stagger the initial fetch to avoid burst requests
+      initialFetchTimeoutId = setTimeout(() => {
         fetchArrival(true);
+        // Set up the recurring fetch after the first one
         intervalId = setInterval(() => fetchArrival(false), 20000); 
+      }, index * 300); // 300ms delay per item
     } else {
         setIsLoadingArrival(false);
     }
 
     return () => {
         isMounted = false;
+        if (initialFetchTimeoutId) clearTimeout(initialFetchTimeoutId);
         if (intervalId) clearInterval(intervalId);
     };
 
-  }, [firstTransitStep, googleTransitLine, stmStopId]);
+  }, [firstTransitStep, googleTransitLine, stmStopId, index]);
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
@@ -222,6 +227,7 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
       if (!allStops || allStops.length === 0) {
         console.error("Could not fetch STM bus stops for mapping.");
         setIsMappingStops(false);
+        setStmStopMappings({}); // Set to empty object to allow rendering items
         return;
       }
       
@@ -274,7 +280,7 @@ export default function RouteOptionsList({ routes, onSelectRoute }: RouteOptions
             <p>Verificando paradas...</p>
          </div>
       )}
-      {!isMappingStops && routes.map((route, index) => (
+      {!isMappingStops && stmStopMappings && routes.map((route, index) => (
         <RouteOptionItem 
             key={index} 
             route={route} 
