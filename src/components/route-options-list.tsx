@@ -108,9 +108,9 @@ const RouteOptionItem = ({
     const etaSeconds = arrivalInfo.eta;
 
     if (etaSeconds <= 180) { // 3 minutes or less
-        return 'text-green-500';
+        return 'text-green-400';
     } else if (etaSeconds > 180 && etaSeconds <= 600) { // More than 3 mins, up to 10 mins
-        return 'text-yellow-500';
+        return 'text-yellow-400';
     } else { // 10 minutes or more
         return 'text-red-500';
     }

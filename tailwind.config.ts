@@ -66,9 +66,7 @@ export default {
           ring: 'hsl(var(--sidebar-ring))',
         },
         'green-400': '#4ade80',
-        'green-500': '#22c55e',
         'yellow-400': '#facc15',
-        'yellow-500': '#eab308',
         'red-500': '#ef4444',
       },
       borderRadius: {
