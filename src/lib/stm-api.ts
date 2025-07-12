@@ -113,11 +113,18 @@ export async function findStopByLocation(lat: number, lon: number) {
 export async function getArrivals(line: number, stopId: number) {
     if (!line || !stopId) return null;
 
-    const arrivalsResponse = await stmApiFetch(`/arribos?linea=${line}&parada=${stopId}`);
-    
-    if (arrivalsResponse && arrivalsResponse.length > 0) {
-        return arrivalsResponse;
-    }
+    const upcomingBuses = await stmApiFetch(`/buses/busstops/${stopId}/upcomingbuses?lines=${line}`);
 
+    if (upcomingBuses && Array.isArray(upcomingBuses) && upcomingBuses.length > 0) {
+        // Find the arrival for the specific line we are interested in.
+        // Although we only query for one, the API might return info for other lines at the same stop.
+        const arrival = upcomingBuses.find(bus => bus.line === String(line));
+        if (arrival && arrival.arribos && arrival.arribos.length > 0) {
+            // Return the first arrival for that line
+            return [arrival.arribos[0]];
+        }
+    }
+    
+    // Return empty array if no upcoming buses found or no arrivals for the specific line
     return [];
 }
