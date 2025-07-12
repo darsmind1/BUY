@@ -12,6 +12,7 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { getBusLocation, BusLocation } from '@/lib/stm-api';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -23,7 +24,53 @@ export default function Home() {
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
+  const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const fetchBusLocations = async () => {
+      if (!directionsResponse || view === 'search') {
+        setBusLocations([]);
+        return;
+      }
+      
+      const lines = new Set<string>();
+      directionsResponse.routes.forEach(route => {
+        route.legs.forEach(leg => {
+          leg.steps.forEach(step => {
+            if (step.travel_mode === 'TRANSIT' && step.transit) {
+              lines.add(step.transit.line.short_name || step.transit.line.name);
+            }
+          });
+        });
+      });
+
+      if (lines.size === 0) {
+        setBusLocations([]);
+        return;
+      }
+
+      try {
+        const promises = Array.from(lines).map(line => getBusLocation(line));
+        const results = await Promise.all(promises);
+        const allBuses = results.flat().filter((bus): bus is BusLocation => bus !== null);
+        setBusLocations(allBuses);
+      } catch (error) {
+        console.error("Error fetching bus locations for map:", error);
+      }
+    };
+    
+    fetchBusLocations();
+    intervalId = setInterval(fetchBusLocations, 10000); // Refresh every 10 seconds
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [directionsResponse, view]);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -150,6 +197,7 @@ export default function Home() {
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
               selectedRoute={selectedRoute}
+              busLocations={busLocations}
             />
         </div>
       </div>

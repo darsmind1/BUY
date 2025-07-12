@@ -4,6 +4,7 @@
 import { GoogleMap, MarkerF, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import type { BusLocation } from '@/lib/stm-api';
 
 interface MapViewProps {
   apiKey: string;
@@ -11,6 +12,7 @@ interface MapViewProps {
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
   selectedRoute: google.maps.DirectionsRoute | null;
+  busLocations: BusLocation[];
 }
 
 const libraries: ("places")[] = ['places'];
@@ -47,13 +49,25 @@ const directionsRendererOptions = {
     suppressMarkers: true,
     preserveViewport: true, 
     polylineOptions: {
-        strokeColor: '#4285F4',
+        strokeColor: '#A40034', // Accent color
         strokeOpacity: 0.8,
         strokeWeight: 6,
     }
 };
 
-export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute }: MapViewProps) {
+const busIconSvg = (line: string) => `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg width="42" height="28" viewBox="0 0 42 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="0.5" y="0.5" width="41" height="27" rx="6" fill="#212F3D" stroke="#F0F4F8" stroke-width="1"/>
+<path d="M5 22C5 20.8954 5.89543 20 7 20H10C11.1046 20 12 20.8954 12 22V28H5V22Z" fill="#F0F4F8"/>
+<path d="M30 22C30 20.8954 30.8954 20 32 20H35C36.1046 20 37 20.8954 37 22V28H30V22Z" fill="#F0F4F8"/>
+<foreignObject x="0" y="4" width="42" height="20" style="font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #F0F4F8; text-align: center; line-height: 20px;">
+  ${line}
+</foreignObject>
+</svg>
+`)}`;
+
+
+export default function MapView({ apiKey, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations }: MapViewProps) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: apiKey,
     libraries: libraries,
@@ -79,14 +93,23 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     if (selectedRoute && userLocation) {
         map.panTo(userLocation);
         map.setZoom(19);
-    } else if (userLocation) {
+    } else if (directionsResponse) {
+        const bounds = new window.google.maps.LatLngBounds();
+        directionsResponse.routes[routeIndex].legs.forEach(leg => {
+            leg.steps.forEach(step => {
+                step.path.forEach(point => bounds.extend(point));
+            });
+        });
+        map.fitBounds(bounds);
+    }
+    else if (userLocation) {
         map.panTo(userLocation);
         map.setZoom(15);
     } else {
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [userLocation, selectedRoute, mapLoaded]);
+  }, [userLocation, selectedRoute, directionsResponse, routeIndex, mapLoaded]);
 
   if (!isLoaded) {
     return (
@@ -136,12 +159,13 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
                   position={startLocation}
                   title="Punto de partida"
                   icon={{
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
+                    path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
                     fillColor: '#10B981', // green-500
                     fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 2,
+                    strokeWeight: 0,
+                    rotation: 0,
+                    scale: 1.5,
+                    anchor: new google.maps.Point(12, 24),
                   }}
                 />
               )}
@@ -150,17 +174,33 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
                   position={endLocation}
                   title="Punto de destino"
                   icon={{
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
+                    path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
                     fillColor: '#EF4444', // red-500
                     fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 2,
+                    strokeWeight: 0,
+                    rotation: 0,
+                    scale: 1.5,
+                    anchor: new google.maps.Point(12, 24),
                   }}
                 />
               )}
             </>
           )}
+
+          {busLocations.map((bus, index) => (
+             <MarkerF 
+                key={`${bus.line}-${index}`}
+                position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
+                title={`Línea ${bus.line}`}
+                icon={{
+                    url: busIconSvg(bus.line),
+                    scaledSize: new window.google.maps.Size(42, 28),
+                    anchor: new window.google.maps.Point(21, 14),
+                }}
+                zIndex={100}
+             />
+          ))}
+
         </GoogleMap>
     </div>
   );

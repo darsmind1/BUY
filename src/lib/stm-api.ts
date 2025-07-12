@@ -6,11 +6,23 @@ interface StmToken {
   expires_in: number;
 }
 
-interface BusLocation {
+export interface BusLocation {
     line: string;
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
+}
+
+export interface StmBusStop {
+    busstopId: number;
+    location: {
+        coordinates: [number, number];
+    };
+}
+
+export interface ArrivalInfo {
+    eta: number; // seconds
+    distance: number; // meters
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -111,6 +123,14 @@ export async function getBusLocation(line: string): Promise<BusLocation[] | null
     const data = await stmApiFetch(`/buses?lines=${line}`);
     if (data && Array.isArray(data)) {
         return data as BusLocation[];
+    }
+    return null;
+}
+
+export async function getAllBusStops(): Promise<StmBusStop[] | null> {
+    const data = await stmApiFetch('/buses/busstops');
+    if (data && Array.isArray(data)) {
+        return data as StmBusStop[];
     }
     return null;
 }
