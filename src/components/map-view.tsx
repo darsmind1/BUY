@@ -99,8 +99,8 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
+  const [directionsRendererOptions, setDirectionsRendererOptions] = useState<google.maps.DirectionsRendererOptions | null>(null);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -112,38 +112,21 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     setMapLoaded(false);
     customPolylinesRef.current.forEach(p => p.setMap(null));
     customPolylinesRef.current = [];
-    if (directionsRendererRef.current) {
-        directionsRendererRef.current.setMap(null);
-        directionsRendererRef.current = null;
-    }
   }, []);
   
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current) return;
+    if (!mapLoaded || !mapRef.current || !directionsResponse) {
+        customPolylinesRef.current.forEach(p => p.setMap(null));
+        customPolylinesRef.current = [];
+        return;
+    }
   
     // Clear previous custom polylines
     customPolylinesRef.current.forEach(p => p.setMap(null));
     customPolylinesRef.current = [];
   
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: true,
-        map: mapRef.current,
-      });
-    }
-  
-    if (!directionsResponse) {
-      // Check if renderer exists before trying to clear it
-      if (directionsRendererRef.current) {
-        directionsRendererRef.current.setDirections(null);
-      }
-      return;
-    }
-  
-    // Create a new DirectionsResult object to avoid modifying the original one
-    const customDirections = JSON.parse(JSON.stringify(directionsResponse));
-    const customRoute = customDirections.routes[routeIndex];
-    if (!customRoute) return;
+    const route = directionsResponse.routes[routeIndex];
+    if (!route) return;
   
     const transitPolylineOptions = {
       strokeColor: '#A40034',
@@ -164,7 +147,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
       }]
     };
   
-    customRoute.legs[0].steps.forEach((step: google.maps.DirectionsStep) => {
+    route.legs[0].steps.forEach((step: google.maps.DirectionsStep) => {
       const polyline = new window.google.maps.Polyline(
         step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions
       );
@@ -173,9 +156,11 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
       customPolylinesRef.current.push(polyline);
     });
   
-    // Set a blank route to the renderer to avoid it drawing its own polyline on top
-    const blankRoute = { ...customRoute, legs: [{...customRoute.legs[0], steps: []}] };
-    directionsRendererRef.current.setDirections({ ...customDirections, routes: [blankRoute] });
+    // This will prevent the DirectionsRenderer from drawing its own polyline
+    setDirectionsRendererOptions({
+        suppressPolylines: true,
+        suppressMarkers: true,
+    });
   
   }, [directionsResponse, routeIndex, mapLoaded]);
 
@@ -236,6 +221,14 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
+          {directionsResponse && directionsRendererOptions && (
+             <DirectionsRenderer 
+                directions={directionsResponse}
+                routeIndex={routeIndex}
+                options={directionsRendererOptions}
+             />
+          )}
+
           {userLocation && (
              <OverlayViewF
                 position={userLocation}
