@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+   async rewrites() {
+    return [
+      {
+        source: '/api/transportepublico/:path*',
+        destination: 'https://api.montevideo.gub.uy/:path*',
+      },
+    ]
+  },
 };
 
 export default nextConfig;
