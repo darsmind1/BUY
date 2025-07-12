@@ -324,10 +324,14 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         const newArrivals: BusArrivalsState = {};
         
         results.forEach(result => {
-            if (result.status === 'fulfilled' && result.value && result.value.arrivals) {
+            if (result.status === 'fulfilled' && result.value) {
                 const { routeIndex, arrivals } = result.value;
-                const nextArrival = arrivals.find(a => a.eta > 0);
-                newArrivals[routeIndex] = nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null;
+                if (arrivals && arrivals.length > 0) {
+                    const nextArrival = arrivals.find(a => a.eta > 0);
+                    newArrivals[routeIndex] = nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null;
+                } else {
+                    newArrivals[routeIndex] = null;
+                }
             } else if (result.status === 'rejected') {
                 console.error("A promise for fetching arrivals was rejected:", result.reason);
             }
