@@ -1,5 +1,7 @@
-// @ts-nocheck
+
 'use server';
+
+import type { ClassValue } from "clsx";
 
 interface StmToken {
     access_token: string;
@@ -11,9 +13,13 @@ interface StmArrivalInfo {
     distance: number; // in meters
 }
 
+interface StmLineArrivalInfo extends StmArrivalInfo {
+    line: string;
+}
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-async function getAccessToken(): Promise<string> {
+async function getAccessToken(): Promise<string | null> {
     const now = Date.now();
 
     if (cachedToken && now < cachedToken.expiresAt) {
@@ -42,7 +48,7 @@ async function getAccessToken(): Promise<string> {
         
         cachedToken = {
             token: tokenData.access_token,
-            expiresAt: now + (tokenData.expires_in - 60) * 1000, // Refresh 1 minute before expiry
+            expiresAt: now + (tokenData.expires_in - 60) * 1000, 
         };
         
         return cachedToken.token;
@@ -50,13 +56,17 @@ async function getAccessToken(): Promise<string> {
     } catch (error) {
         console.error("Exception while fetching STM access token:", error);
         cachedToken = null;
-        throw error;
+        return null;
     }
 }
 
 async function stmApiFetch(path: string, options: RequestInit = {}) {
     try {
         const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error("Could not retrieve access token for STM API.");
+        }
+
         const url = `${process.env.STM_API_BASE_URL}${path}`;
 
         const response = await fetch(url, {
@@ -74,8 +84,8 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
             console.error(`STM API request to ${path} failed:`, response.status, errorText);
             return null;
         }
-
-        if (response.status === 204) { // No Content
+        
+        if (response.status === 204) {
             return [];
         }
 
@@ -89,13 +99,15 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 
 async function findStopByLocation(lat: number, lon: number): Promise<number | null> {
     const stops = await stmApiFetch(`/buses/busstops?lat=${lat}&lon=${lon}&dist=200`);
+    
     if (stops && Array.isArray(stops) && stops.length > 0) {
         return stops[0].busstopId;
     }
+
     return null;
 }
 
-export async function getArrivals(line: string, stopLat: number, stopLon: number): Promise<StmArrivalInfo | null> {
+export async function getArrivals(line: string, stopLat: number, stopLon: number): Promise<StmLineArrivalInfo | null> {
     const stopId = await findStopByLocation(stopLat, stopLon);
 
     if (!stopId) {
@@ -112,6 +124,7 @@ export async function getArrivals(line: string, stopLat: number, stopLon: number
     
     if (firstArrival && typeof firstArrival.eta === 'number' && typeof firstArrival.distance === 'number') {
          return {
+            line: firstArrival.line,
             eta: firstArrival.eta,
             distance: firstArrival.distance,
         };

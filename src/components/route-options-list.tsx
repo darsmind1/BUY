@@ -22,23 +22,25 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
   return Math.round(totalSeconds / 60);
 }
 
-interface StmArrivalInfo {
-  eta: number;
-  distance: number;
+interface StmLineArrivalInfo {
+    line: string;
+    eta: number;
+    distance: number;
 }
 
+
 const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
-  const [arrivalInfo, setArrivalInfo] = useState<StmArrivalInfo | null>(null);
+  const [stmLineInfo, setStmLineInfo] = useState<StmLineArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
   const duration = getTotalDuration(route.legs);
   
   const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT');
-  const transitLine = firstTransitStep?.transit?.line.short_name;
+  const googleTransitLine = firstTransitStep?.transit?.line.short_name;
 
   useEffect(() => {
     const fetchArrival = async () => {
-      if (!firstTransitStep || !transitLine || !firstTransitStep.transit?.departure_stop.location) {
+      if (!firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
         setIsLoadingArrival(false);
         return;
       }
@@ -48,11 +50,16 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
       const stopLocation = firstTransitStep.transit.departure_stop.location;
 
       try {
-        const arrivalData = await getArrivals(transitLine, stopLocation.lat(), stopLocation.lng());
-        setArrivalInfo(arrivalData);
+        const arrivalData = await getArrivals(googleTransitLine, stopLocation.lat(), stopLocation.lng());
+        if (arrivalData) {
+            console.log("STM Arrival Info:", arrivalData);
+            setStmLineInfo(arrivalData);
+        } else {
+            setStmLineInfo(null);
+        }
       } catch (error) {
         console.error("Error fetching arrivals:", error);
-        setArrivalInfo(null);
+        setStmLineInfo(null);
       } finally {
         setIsLoadingArrival(false);
       }
@@ -60,16 +67,16 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
 
     fetchArrival();
     
-    const intervalId = setInterval(fetchArrival, 15000);
+    const intervalId = setInterval(fetchArrival, 20000); // 20 seconds
 
     return () => clearInterval(intervalId);
 
-  }, [firstTransitStep, transitLine]);
+  }, [firstTransitStep, googleTransitLine]);
 
   const getArrivalText = () => {
-    if (!arrivalInfo) return null;
+    if (!stmLineInfo) return null;
 
-    const arrivalSeconds = arrivalInfo.eta;
+    const arrivalSeconds = stmLineInfo.eta;
     if (arrivalSeconds < 60) {
       return `Llegando`;
     }
@@ -78,6 +85,7 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
   };
 
   const arrivalText = getArrivalText();
+  const displayLine = stmLineInfo?.line || googleTransitLine;
 
   return (
     <Card 
