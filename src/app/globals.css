@@ -90,20 +90,28 @@
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     border-width: 1px;
     margin-top: 0.25rem;
+    z-index: 1000 !important; /* Ensure it appears above other elements */
 }
 
 .pac-item {
-    @apply text-popover-foreground text-sm cursor-pointer py-2 px-3;
+    @apply flex items-center gap-3 text-popover-foreground text-sm cursor-pointer py-2 px-3;
 }
 
 .pac-item:hover {
-    @apply bg-accent/80 text-accent-foreground;
+    @apply bg-secondary;
 }
 
+/* Icon for each item */
+.pac-icon {
+    @apply w-4 h-4 text-muted-foreground;
+}
+
+/* The matched part of the address */
 .pac-item-query {
-    @apply font-semibold;
+    @apply font-semibold text-foreground;
 }
 
+/* Hide Google's logo */
 .pac-logo:after {
     display: none !important;
 }
