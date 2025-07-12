@@ -1,6 +1,8 @@
 
 'use server';
 
+import config from '@/config';
+
 interface StmToken {
   access_token: string;
   expires_in: number;
@@ -35,9 +37,6 @@ let cachedStops: { stops: StmBusStop[]; expiresAt: number } | null = null;
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
-const STM_CLIENT_ID = process.env.STM_CLIENT_ID;
-const STM_CLIENT_SECRET = process.env.STM_CLIENT_SECRET;
-
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
 
@@ -45,26 +44,21 @@ async function getAccessToken(): Promise<string | null> {
     return cachedToken.token;
   }
   
-  if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
-    console.error('CRITICAL: STM API credentials are not set in environment variables. Please add STM_CLIENT_ID and STM_CLIENT_SECRET to your .env file in the project root.');
-    return null;
-  }
-
   try {
     const response = await fetch(STM_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: STM_CLIENT_ID,
-        client_secret: STM_CLIENT_SECRET,
+        client_id: config.stm.clientId!,
+        client_secret: config.stm.clientSecret!,
       }),
       cache: 'no-store',
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Error fetching STM token:', response.status, errorText);
+      console.error('CRITICAL: Error fetching STM token:', response.status, errorText);
       throw new Error(`Failed to fetch access token, status: ${response.status}`);
     }
 
@@ -77,7 +71,7 @@ async function getAccessToken(): Promise<string | null> {
 
     return cachedToken.token;
   } catch (error) {
-    console.error('Exception while fetching STM access token:', error);
+    console.error('CRITICAL: Exception while fetching STM access token. This is likely a configuration issue.', error);
     cachedToken = null;
     return null;
   }
