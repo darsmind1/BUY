@@ -37,11 +37,24 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
   return Math.round(totalSeconds / 60);
 }
 
+const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: string }) => {
+    const parts = fullAddress.split(',');
+    const street = parts[0];
+    const rest = parts.slice(1).join(',');
+    return (
+        <p className="text-xs text-muted-foreground">
+            {prefix}: <span className="font-semibold">{street}</span>{rest && `, ${rest}`}
+        </p>
+    )
+}
+
 export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
   const busLines = getBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
   
+  if (!leg) return null;
+
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-500">
       <Card>
@@ -61,9 +74,9 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground pt-0">
-          <p>Desde: {leg.start_address}</p>
-          <p>Hasta: {leg.end_address}</p>
+        <CardContent className="pt-0 space-y-1">
+          <AddressText prefix="Desde" fullAddress={leg.start_address} />
+          <AddressText prefix="Hasta" fullAddress={leg.end_address} />
         </CardContent>
       </Card>
 
@@ -80,13 +93,13 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                      </div>
                      <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
                         <div className="flex-1 space-y-1">
-                          <p className="font-medium leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                          <p className="text-sm text-muted-foreground">{step.duration?.text}</p>
+                          <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                          <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
                         </div>
                      </AccordionTrigger>
                    </div>
                   <AccordionContent className="py-2 pl-12 pr-4 border-l ml-5">
-                      <div className="space-y-3 text-sm">
+                      <div className="space-y-3 text-xs">
                         {step.steps.map((subStep, subIndex) => (
                            <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
                         ))}
@@ -101,8 +114,8 @@ export default function RouteDetailsPanel({ route }: RouteDetailsPanelProps) {
                       <StepIcon type={step.travel_mode} />
                   </div>
                   <div className="flex-1 space-y-1">
-                      <p className="font-medium leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                      <p className="text-sm text-muted-foreground">{step.duration?.text}</p>
+                      <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                      <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
                   </div>
                   {step.travel_mode === 'TRANSIT' && step.transit && (
                     <Badge variant="default" className="font-mono">{step.transit.line.short_name || step.transit.line.name}</Badge>
