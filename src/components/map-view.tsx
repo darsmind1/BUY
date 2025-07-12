@@ -100,6 +100,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
 
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
@@ -109,6 +110,8 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   const onUnmount = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
     setMapLoaded(false);
+    customPolylinesRef.current.forEach(p => p.setMap(null));
+    customPolylinesRef.current = [];
     if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
         directionsRendererRef.current = null;
@@ -117,17 +120,15 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-
+  
+    // Clear previous custom polylines
+    customPolylinesRef.current.forEach(p => p.setMap(null));
+    customPolylinesRef.current = [];
+  
     if (!directionsRendererRef.current) {
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
         suppressMarkers: true,
-        map: mapRef.current,
-        polylineOptions: {
-            strokeColor: '#A40034', // default color
-            strokeOpacity: 0.8,
-            strokeWeight: 6,
-            zIndex: 1
-        }
+        map: mapRef.current, // Associate with map on creation
       });
     }
   
@@ -136,57 +137,42 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
       return;
     }
   
-    const directionsCopy = JSON.parse(JSON.stringify(directionsResponse));
-    const route = directionsCopy.routes[routeIndex];
-  
-    if (!route || !route.legs) {
-      directionsRendererRef.current.setDirections(directionsCopy);
-      return;
-    }
-  
-    const leg = route.legs[0];
-    const newSteps: any[] = [];
+    // Create a new DirectionsResult object to avoid modifying the original one
+    const customDirections = JSON.parse(JSON.stringify(directionsResponse));
+    const customRoute = customDirections.routes[routeIndex];
+    if (!customRoute) return;
   
     const transitPolylineOptions = {
-        strokeColor: '#A40034',
-        strokeOpacity: 0.8,
-        strokeWeight: 6,
-        zIndex: 1,
+      strokeColor: '#A40034',
+      strokeOpacity: 0.8,
+      strokeWeight: 6,
+      zIndex: 1,
     };
   
     const walkingPolylineOptions = {
-        strokeColor: '#212F3D',
-        strokeOpacity: 0,
-        strokeWeight: 2,
-        zIndex: 2,
-        icons: [{
-            icon: {
-                path: 'M 0,-1 0,1',
-                strokeOpacity: 1,
-                strokeWeight: 3,
-                scale: 3,
-            },
-            offset: '0',
-            repeat: '15px'
-        }]
+      strokeColor: '#212F3D',
+      strokeOpacity: 0,
+      strokeWeight: 2,
+      zIndex: 2,
+      icons: [{
+        icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3 },
+        offset: '0',
+        repeat: '15px'
+      }]
     };
   
-    leg.steps.forEach((step: google.maps.DirectionsStep) => {
+    customRoute.legs[0].steps.forEach((step: google.maps.DirectionsStep) => {
       const polyline = new window.google.maps.Polyline(
         step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions
       );
       polyline.setPath(step.path);
       polyline.setMap(mapRef.current);
-      newSteps.push({ ...step, polyline: polyline });
+      customPolylinesRef.current.push(polyline);
     });
-    
-    // We pass a DirectionsResult with no steps/legs to the renderer to avoid it drawing its own polyline
-    const blankDirections = { ...directionsCopy, routes: [{ ...route, legs: [{...leg, steps: []}] }] };
-    directionsRendererRef.current.setDirections(blankDirections);
-
-    return () => {
-        newSteps.forEach(step => step.polyline?.setMap(null));
-    };
+  
+    // Set a blank route to the renderer to avoid it drawing its own polyline on top
+    const blankRoute = { ...customRoute, legs: [{...customRoute.legs[0], steps: []}] };
+    directionsRendererRef.current.setDirections({ ...customDirections, routes: [blankRoute] });
   
   }, [directionsResponse, routeIndex, mapLoaded]);
 
@@ -208,12 +194,14 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
     }
     else if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
-        directionsResponse.routes[routeIndex].legs.forEach(leg => {
-            leg.steps.forEach(step => {
-                step.path.forEach(point => bounds.extend(point));
-            });
+        directionsResponse.routes.forEach(route => {
+           route.legs.forEach(leg => {
+               leg.steps.forEach(step => {
+                   step.path.forEach(point => bounds.extend(point));
+               });
+           });
         });
-        map.fitBounds(bounds, 50); // 50px padding
+        map.fitBounds(bounds, 50);
     }
     else if (userLocation) {
         map.panTo(userLocation);
@@ -292,7 +280,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
 
           {busLocations.map((bus, index) => (
              <MarkerF 
-                key={`${bus.line}-${index}`}
+                key={`${bus.line}-${bus.location.coordinates[0]}-${bus.location.coordinates[1]}`}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 title={`Línea ${bus.line}`}
                 icon={{
