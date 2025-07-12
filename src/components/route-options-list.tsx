@@ -132,6 +132,8 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
 
   const arrivalText = getArrivalText();
 
+  const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.travel_mode === 'WALKING' && step.distance && step.distance.value > 0));
+
   return (
     <Card 
       className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300"
@@ -142,26 +144,27 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 flex-wrap">
-              {leg.steps.map((step, stepIndex) => {
-                if (step.travel_mode === 'TRANSIT') {
-                  const lineToShow = step.transit?.line.short_name;
-                  return (
-                    <React.Fragment key={stepIndex}>
-                      <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
-                      {stepIndex < leg.steps.length - 1 && leg.steps[stepIndex+1].travel_mode ==='TRANSIT' && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
-                    </React.Fragment>
-                  );
-                }
-                if (step.travel_mode === 'WALKING') {
-                   return (
-                    <React.Fragment key={stepIndex}>
-                      <Footprints className="h-4 w-4 text-muted-foreground" />
-                       {stepIndex < leg.steps.length - 1 && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
-                    </React.Fragment>
-                   )
-                }
-                return null;
-              })}
+              {renderableSteps.map((step, stepIndex) => {
+                  const isLastStep = stepIndex === renderableSteps.length - 1;
+                  if (step.travel_mode === 'TRANSIT') {
+                    const lineToShow = step.transit?.line.short_name;
+                    return (
+                      <React.Fragment key={stepIndex}>
+                        <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
+                         {!isLastStep && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
+                      </React.Fragment>
+                    );
+                  }
+                  if (step.travel_mode === 'WALKING') {
+                     return (
+                      <React.Fragment key={stepIndex}>
+                        <Footprints className="h-4 w-4 text-muted-foreground" />
+                         {!isLastStep && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
+                      </React.Fragment>
+                     )
+                  }
+                  return null;
+                })}
                {leg.steps.every(s => s.travel_mode === 'WALKING') && (
                 <div className="flex items-center gap-2">
                   <Footprints className="h-4 w-4 text-muted-foreground" />
