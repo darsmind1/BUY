@@ -67,7 +67,6 @@ const RouteOptionItem = ({
   route, 
   index, 
   onSelectRoute,
-  isApiConnected,
   arrivalInfo,
   stmInfo
 }: { 
@@ -91,25 +90,24 @@ const RouteOptionItem = ({
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
-
     const arrivalSeconds = arrivalInfo.eta;
     if (arrivalSeconds < 60) {
       return `Llegando`;
     }
     const arrivalMinutes = Math.round(arrivalSeconds / 60);
-    return `A ${arrivalMinutes} min`;
+    return `Llega en ${arrivalMinutes} min`;
   };
 
   const getArrivalColorClass = () => {
     if (!arrivalInfo) return 'text-primary';
     
-    const etaSeconds = arrivalInfo.eta;
+    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
 
-    if (etaSeconds <= 180) { // 3 minutes or less
+    if (arrivalMinutes < 5) {
         return 'text-green-400';
-    } else if (etaSeconds > 180 && etaSeconds <= 600) { // More than 3 mins, up to 10 mins
+    } else if (arrivalMinutes <= 10) {
         return 'text-yellow-400';
-    } else { // 10 minutes or more
+    } else {
         return 'text-red-500';
     }
   };
@@ -133,7 +131,7 @@ const RouteOptionItem = ({
 
   return (
     <Card 
-      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300"
+      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
       onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null, stmInfo?.lineDestination ?? null)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
@@ -176,21 +174,17 @@ const RouteOptionItem = ({
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
             
-            {/* --- Corrected Arrival Info Logic --- */}
             {arrivalInfo && arrivalText ? (
-              // If we have real-time info, ALWAYS show it with colors and icon
               <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
             ) : scheduledText ? (
-              // Otherwise, if we have a scheduled time, show that
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   <span>{scheduledText}</span>
               </div>
-            ) : firstTransitStep && isApiConnected ? (
-              // Finally, if there's a bus but no arrival/scheduled info, show "Sin arribos"
+            ) : firstTransitStep ? (
               <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             ) : null}
 
@@ -374,3 +368,5 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
+
+    
