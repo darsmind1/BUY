@@ -56,7 +56,8 @@ export default function Home() {
           modes: [window.google.maps.TransitMode.BUS],
         },
         provideRouteAlternatives: true,
-        region: 'UY'
+        region: 'UY',
+        language: 'es'
       },
       (result, status) => {
         setIsLoading(false);
