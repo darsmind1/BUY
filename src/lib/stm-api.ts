@@ -37,71 +37,59 @@ export interface StmLineInfo {
     description: string;
 }
 
-// Cache tokens for each credential set. The key is the index in the config array.
-const cachedTokens = new Map<number, { token: string; expiresAt: number }>();
-let currentCredentialIndex = 0;
+// Simple cache for the access token
+let cachedToken: { token: string; expiresAt: number } | null = null;
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
 async function getAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedToken && now < cachedToken.expiresAt) {
+    return cachedToken.token;
+  }
+  
   const credentialsCount = config.stm.credentials.length;
   if (credentialsCount === 0) {
     console.error("CRITICAL: No STM credentials configured.");
     throw new Error("No STM credentials configured.");
   }
 
-  // Check cache for the current working credential
-  const now = Date.now();
-  const cachedToken = cachedTokens.get(currentCredentialIndex);
-  if (cachedToken && now < cachedToken.expiresAt) {
-    return cachedToken.token;
-  }
+  // Use the first available credential set
+  const credential = config.stm.credentials[0];
 
-  // Iterate through all credentials if the cached one is expired or doesn't exist
-  for (let i = 0; i < credentialsCount; i++) {
-    const credentialIndexToTry = (currentCredentialIndex + i) % credentialsCount;
-    const selectedCredential = config.stm.credentials[credentialIndexToTry];
+  try {
+    const response = await fetch(STM_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: credential.clientId,
+        client_secret: credential.clientSecret,
+      }),
+      cache: 'no-store',
+    });
 
-    try {
-      const response = await fetch(STM_TOKEN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: selectedCredential.clientId,
-          client_secret: selectedCredential.clientSecret,
-        }),
-        cache: 'no-store',
-      });
-
-      if (response.ok) {
-        const tokenData: StmToken = await response.json();
-        const newCachedToken = {
-          token: tokenData.access_token,
-          expiresAt: Date.now() + (tokenData.expires_in - 60) * 1000, // 60-second buffer
-        };
-        
-        // Success! Update cache and set this as the current working credential index
-        cachedTokens.set(credentialIndexToTry, newCachedToken);
-        currentCredentialIndex = credentialIndexToTry;
-        return newCachedToken.token;
-      }
-
-      // If response is not ok, log it and the loop will try the next credential
+    if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to fetch STM token for client ID ending in ...${selectedCredential.clientId.slice(-4)}. Status: ${response.status}. Body: ${errorText}. Trying next credential...`);
-      cachedTokens.delete(credentialIndexToTry); // Invalidate cache for this credential
-
-    } catch (error) {
-      console.error(`CRITICAL: Network or other exception while fetching STM access token for client ID ...${selectedCredential.clientId.slice(-4)}. Trying next credential...`, error);
-      cachedTokens.delete(credentialIndexToTry); // Invalidate cache
+      console.error(`Failed to fetch STM token for client ID ending in ...${credential.clientId.slice(-4)}. Status: ${response.status}. Body: ${errorText}.`);
+      throw new Error(`Failed to get STM access token: ${response.status}`);
     }
-  }
 
-  // If the loop completes without returning, all credentials have failed.
-  console.error("CRITICAL: All STM credentials failed to fetch an access token.");
-  throw new Error("All configured STM credentials failed.");
+    const tokenData: StmToken = await response.json();
+    cachedToken = {
+      token: tokenData.access_token,
+      expiresAt: Date.now() + (tokenData.expires_in - 60) * 1000, // 60-second buffer
+    };
+    
+    return cachedToken.token;
+
+  } catch (error) {
+    console.error(`CRITICAL: Network or other exception while fetching STM access token.`, error);
+    // Invalidate cache on any error
+    cachedToken = null; 
+    throw error;
+  }
 }
 
 
