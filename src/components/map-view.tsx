@@ -47,13 +47,34 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-const directionsRendererOptions = {
+const transitDirectionsRendererOptions = {
     suppressMarkers: true,
     preserveViewport: true, 
     polylineOptions: {
         strokeColor: '#A40034', // Accent color
         strokeOpacity: 0.8,
         strokeWeight: 6,
+        zIndex: 1,
+    }
+};
+const walkingDirectionsRendererOptions = {
+    suppressMarkers: true,
+    preserveViewport: true, 
+    polylineOptions: {
+        strokeColor: '#212F3D', // Primary color
+        strokeOpacity: 0,
+        strokeWeight: 2,
+        zIndex: 2,
+        icons: [{
+            icon: {
+                path: 'M 0,-1 0,1',
+                strokeOpacity: 1,
+                strokeWeight: 3,
+                scale: 3,
+            },
+            offset: '0',
+            repeat: '15px'
+        }]
     }
 };
 
@@ -108,6 +129,9 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 
+  const [walkingDirections, setWalkingDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [transitDirections, setTransitDirections] = useState<google.maps.DirectionsResult | null>(null);
+
   const onLoad = React.useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
     setMapLoaded(true);
@@ -119,15 +143,55 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
   }, []);
   
   useEffect(() => {
+    if (!directionsResponse) {
+      setWalkingDirections(null);
+      setTransitDirections(null);
+      return;
+    }
+
+    const route = directionsResponse.routes[routeIndex];
+    if (!route) return;
+
+    const newWalkingLegs: google.maps.DirectionsLeg[] = [];
+    const newTransitLegs: google.maps.DirectionsLeg[] = [];
+
+    route.legs.forEach(leg => {
+        const walkingSteps = leg.steps.filter(step => step.travel_mode === 'WALKING');
+        const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT');
+        
+        if (walkingSteps.length > 0) {
+            newWalkingLegs.push({ ...leg, steps: walkingSteps });
+        }
+        if (transitSteps.length > 0) {
+            newTransitLegs.push({ ...leg, steps: transitSteps });
+        }
+    });
+
+    if (newWalkingLegs.length > 0) {
+        const walkingResult = { ...directionsResponse, routes: [{ ...route, legs: newWalkingLegs }]};
+        setWalkingDirections(walkingResult);
+    } else {
+        setWalkingDirections(null);
+    }
+    
+    if (newTransitLegs.length > 0) {
+        const transitResult = { ...directionsResponse, routes: [{ ...route, legs: newTransitLegs }]};
+        setTransitDirections(transitResult);
+    } else {
+        setTransitDirections(null);
+    }
+
+  }, [directionsResponse, routeIndex]);
+
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
     if (selectedRoute && userLocation) {
-        // When in details view, focus on the user's location
         map.panTo(userLocation);
         map.setZoom(16.75);
     } else if (directionsResponse) {
-        // For options view, fit the bounds of the route
         const bounds = new window.google.maps.LatLngBounds();
         directionsResponse.routes[routeIndex].legs.forEach(leg => {
             leg.steps.forEach(step => {
@@ -137,15 +201,13 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.fitBounds(bounds);
     }
     else if (userLocation) {
-        // For initial search view with location, focus on user
         map.panTo(userLocation);
         map.setZoom(15);
     } else {
-        // Default view
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]); // Removed userLocation from deps
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]);
 
   if (!isLoaded) {
     return (
@@ -177,14 +239,25 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
                 <PulsingUserMarker />
             </OverlayViewF>
           )}
+          
+          {transitDirections && (
+            <DirectionsRenderer
+                directions={transitDirections}
+                routeIndex={0} // We've already filtered to one route
+                options={transitDirectionsRendererOptions}
+            />
+           )}
+           
+          {walkingDirections && (
+            <DirectionsRenderer
+                directions={walkingDirections}
+                routeIndex={0}
+                options={walkingDirectionsRendererOptions}
+            />
+          )}
 
           {directionsResponse && (
             <>
-              <DirectionsRenderer
-                  directions={directionsResponse}
-                  routeIndex={routeIndex}
-                  options={directionsRendererOptions}
-              />
               {startLocation && (
                 <MarkerF
                   position={startLocation}
