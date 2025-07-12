@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
-import { getBusLocation, BusLocation } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, getAllBusStops, StmBusStop, getLinesForBusStop } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
 
 interface RouteOptionsListProps {
@@ -18,102 +18,85 @@ interface BusArrivalInfo {
     distance: number; // in meters
 }
 
-interface PreviousBusState {
-    location: { lat: number, lng: number };
-    timestamp: number;
-}
-
 const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
   const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
-  const duration = getTotalDuration(route.legs);
   
   const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
   const googleTransitLine = firstTransitStep?.transit?.line.short_name;
-
-  const previousBusStates = useRef<Map<string, PreviousBusState>>(new Map());
 
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
-      if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location || !firstTransitStep.transit?.arrival_stop.location) {
-        if(isInitialFetch) setIsLoadingArrival(false);
-        return;
-      }
-      
-      if(isInitialFetch) setIsLoadingArrival(true);
+        if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
+            if(isInitialFetch) setIsLoadingArrival(false);
+            return;
+        }
 
-      const departureStopLocation = {
-          lat: firstTransitStep.transit.departure_stop.location.lat(),
-          lng: firstTransitStep.transit.departure_stop.location.lng()
-      };
-      
-      const arrivalStopLocation = {
-        lat: firstTransitStep.transit.arrival_stop.location.lat(),
-        lng: firstTransitStep.transit.arrival_stop.location.lng()
-      }
+        if(isInitialFetch) setIsLoadingArrival(true);
 
-      try {
-        const buses = await getBusLocation(googleTransitLine);
+        const departureStopGoogleLocation = {
+            lat: firstTransitStep.transit.departure_stop.location.lat(),
+            lng: firstTransitStep.transit.departure_stop.location.lng()
+        };
 
-        if (isMounted && buses && buses.length > 0) {
-            let nearestBusDistance = Infinity;
-            let nearestBus: BusLocation | null = null;
-            
-            buses.forEach(bus => {
-                const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-                const distance = haversineDistance(departureStopLocation, busCoords);
-                if (distance < nearestBusDistance) {
-                    nearestBusDistance = distance;
-                    nearestBus = bus;
+        try {
+            // 1. Find the closest STM bus stop to the Google Maps departure stop
+            const allStops = await getAllBusStops();
+            if (!allStops || allStops.length === 0) throw new Error("Could not fetch STM bus stops.");
+
+            let closestStmStop: StmBusStop | null = null;
+            let minDistance = Infinity;
+
+            allStops.forEach(stop => {
+                const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
+                const distance = haversineDistance(departureStopGoogleLocation, stopCoords);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestStmStop = stop;
                 }
             });
 
-            if (nearestBus) {
-                // Direction check
-                const busId = `${nearestBus.line}-${nearestBus.location.coordinates[0]}-${nearestBus.location.coordinates[1]}`; // simple id
-                const previousState = previousBusStates.current.get(busId);
-                const currentState = {
-                    location: { lat: nearestBus.location.coordinates[1], lng: nearestBus.location.coordinates[0] },
-                    timestamp: Date.now()
-                };
+            // If closest stop is more than 200m away, it's likely not the same one.
+            if (!closestStmStop || minDistance > 200) {
+                 if(isInitialFetch) setIsLoadingArrival(false);
+                 setArrivalInfo(null);
+                 return;
+            }
 
-                let isMovingInCorrectDirection = true; // Assume correct if we can't verify
+            // 2. Verify that the Google-suggested line actually passes through that STM stop
+            const linesForStop = await getLinesForBusStop(closestStmStop.busstopId);
+            const isLineValidForStop = linesForStop?.some(line => line.line.toString() === googleTransitLine);
 
-                if (previousState && (currentState.timestamp - previousState.timestamp > 1000)) { // has moved
-                    const routeVector = { 
-                        x: arrivalStopLocation.lng - departureStopLocation.lng,
-                        y: arrivalStopLocation.lat - departureStopLocation.lat
-                    };
-                    const busVector = {
-                        x: currentState.location.lng - previousState.location.lng,
-                        y: currentState.location.lat - previousState.location.lat
-                    };
-
-                    const dotProduct = routeVector.x * busVector.x + routeVector.y * busVector.y;
-                    const routeMag = Math.sqrt(routeVector.x**2 + routeVector.y**2);
-                    const busMag = Math.sqrt(busVector.x**2 + busVector.y**2);
-                    
-                    if (busMag > 0.00001 && routeMag > 0.00001) { // Avoid division by zero
-                        const cosAngle = dotProduct / (routeMag * busMag);
-                        const angle = Math.acos(Math.max(-1, Math.min(1, cosAngle))) * (180 / Math.PI); // Angle in degrees
-                        
-                        // We allow a generous angle (e.g., 90 degrees) to account for curvy roads.
-                        if (angle > 90) { 
-                            isMovingInCorrectDirection = false;
-                        }
-                    }
-                }
+            if (!isLineValidForStop) {
+                if(isInitialFetch) setIsLoadingArrival(false);
+                setArrivalInfo(null);
+                return;
+            }
+            
+            // 3. If valid, fetch bus locations and calculate ETA
+            const buses = await getBusLocation(googleTransitLine);
+            if (isMounted && buses && buses.length > 0) {
+                let nearestBusDistance = Infinity;
+                let nearestBus: BusLocation | null = null;
                 
-                previousBusStates.current.set(busId, currentState);
+                const stmStopCoords = { lat: closestStmStop.location.coordinates[1], lng: closestStmStop.location.coordinates[0] };
 
-                if (isMovingInCorrectDirection) {
-                    const averageSpeedMetersPerSecond = 4.5;
+                buses.forEach(bus => {
+                    const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+                    const distance = haversineDistance(stmStopCoords, busCoords);
+                    if (distance < nearestBusDistance) {
+                        nearestBusDistance = distance;
+                        nearestBus = bus;
+                    }
+                });
+
+                if (nearestBus) {
+                    const averageSpeedMetersPerSecond = 4.5; // ~16 km/h
                     const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
-                    
                     setArrivalInfo({
                         distance: nearestBusDistance,
                         eta: etaSeconds,
@@ -121,21 +104,16 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
                 } else {
                     setArrivalInfo(null);
                 }
-
-            } else {
-                 setArrivalInfo(null);
+            } else if (isMounted) {
+                setArrivalInfo(null);
             }
 
-        } else if (isMounted) {
-            setArrivalInfo(null);
+        } catch (error) {
+            console.error("Error fetching bus arrival info:", error);
+            if(isMounted) setArrivalInfo(null);
+        } finally {
+            if(isMounted && isInitialFetch) setIsLoadingArrival(false);
         }
-
-      } catch (error) {
-        console.error("Error fetching bus locations:", error);
-        if(isMounted) setArrivalInfo(null);
-      } finally {
-        if(isMounted && isInitialFetch) setIsLoadingArrival(false);
-      }
     };
 
     fetchArrival(true);

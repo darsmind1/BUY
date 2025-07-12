@@ -18,6 +18,12 @@ export interface StmBusStop {
     location: {
         coordinates: [number, number];
     };
+    name: string;
+}
+
+export interface StmLineInfo {
+    line: number;
+    description: string;
 }
 
 export interface ArrivalInfo {
@@ -26,6 +32,8 @@ export interface ArrivalInfo {
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedStops: { stops: StmBusStop[]; expiresAt: number } | null = null;
+
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
@@ -94,7 +102,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
-      cache: 'no-store',
+      next: { revalidate: 0 } // No caching for API fetches
     });
 
     if (!response.ok) {
@@ -128,9 +136,27 @@ export async function getBusLocation(line: string): Promise<BusLocation[] | null
 }
 
 export async function getAllBusStops(): Promise<StmBusStop[] | null> {
+    const now = Date.now();
+    if (cachedStops && now < cachedStops.expiresAt) {
+      return cachedStops.stops;
+    }
+    
     const data = await stmApiFetch('/buses/busstops');
     if (data && Array.isArray(data)) {
-        return data as StmBusStop[];
+        const stops = data as StmBusStop[];
+        cachedStops = {
+            stops,
+            expiresAt: now + 24 * 60 * 60 * 1000, // Cache for 24 hours
+        };
+        return stops;
+    }
+    return null;
+}
+
+export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[] | null> {
+    const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
+    if (data && Array.isArray(data)) {
+        return data as StmLineInfo[];
     }
     return null;
 }
