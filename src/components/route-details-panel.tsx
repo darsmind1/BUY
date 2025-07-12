@@ -4,9 +4,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Map } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
-import MapView from './map-view';
+import { Button } from './ui/button';
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
@@ -16,6 +16,7 @@ interface RouteDetailsPanelProps {
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
+  onToggleMap: () => void;
 }
 
 const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
@@ -67,32 +68,30 @@ const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: str
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
-  isGoogleMapsLoaded,
-  directionsResponse,
-  routeIndex,
-  userLocation
+  onToggleMap
 }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
   const busLines = getBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
 
-  const isBusLive = busLocations.length > 0 && busLines.some(line => busLocations.some(bus => bus.line === line));
+  const isBusLive = busLocations.length > 0;
   
   if (!leg) return null;
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
-      <div className="md:hidden">
-          <MapView 
-            isLoaded={isGoogleMapsLoaded}
-            containerClassName="h-[250px] w-full"
-            directionsResponse={directionsResponse}
-            routeIndex={routeIndex}
-            userLocation={userLocation}
-            selectedRoute={route}
-            busLocations={busLocations}
-          />
-      </div>
+       <div className="relative h-[200px] md:hidden">
+            <div className="absolute inset-0 bg-muted">
+                 <p className="flex items-center justify-center h-full text-muted-foreground text-sm">Cargando mapa...</p>
+            </div>
+            <div className="absolute inset-x-0 bottom-4 flex justify-center">
+                <Button onClick={onToggleMap}>
+                    <Map className="mr-2 h-4 w-4" />
+                    Ver mapa completo
+                </Button>
+            </div>
+       </div>
+
 
       <div className="p-4 space-y-3">
         <Card>

@@ -239,7 +239,7 @@ export default function Home() {
   }
 
   const showBackButton = view !== 'search' || mobileView === 'map';
-  const showMapToggleButton = view === 'search' || view === 'options';
+  const showMapToggleButton = view === 'details' ? false : true;
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
@@ -293,6 +293,7 @@ export default function Home() {
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
+                  onToggleMap={() => setMobileView(v => v === 'panel' ? 'map' : 'panel')}
                 />
               )}
           </main>
@@ -301,7 +302,6 @@ export default function Home() {
         <div className={`${mobileView === 'panel' && view !== 'details' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
             <MapView 
               isLoaded={isGoogleMapsLoaded}
-              containerClassName={view === 'details' ? 'hidden md:block' : ''}
               directionsResponse={directionsResponse} 
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}

@@ -14,7 +14,6 @@ interface MapViewProps {
   userLocation: google.maps.LatLngLiteral | null;
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
-  containerClassName?: string;
   view: 'search' | 'options' | 'details';
 }
 
@@ -37,7 +36,7 @@ const montevideoBounds = {
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
-  zoomControl: false,
+  zoomControl: true,
   mapId: '6579f49a03449c66ec2a188b',
   gestureHandling: 'greedy',
   restriction: {
@@ -46,7 +45,7 @@ const mapOptions: google.maps.MapOptions = {
   },
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, containerClassName, view }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -112,9 +111,18 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
   
-    if (view === 'details' && selectedRoute && userLocation) {
-      map.panTo(userLocation);
-      map.setZoom(16.5);
+    if (selectedRoute) {
+      const bounds = new window.google.maps.LatLngBounds();
+      selectedRoute.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+      if (userLocation) {
+        bounds.extend(userLocation);
+      }
+      if (view === 'details' && userLocation) {
+        map.panTo(userLocation);
+        map.setZoom(16.5);
+      } else {
+        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+      }
     } else if (directionsResponse) {
       const bounds = new window.google.maps.LatLngBounds();
       directionsResponse.routes.forEach(route => {
@@ -125,8 +133,8 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
       }
       map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
     } else if (view === 'search' && userLocation) {
-      map.panTo(userLocation);
-      map.setZoom(15);
+      map.panTo(defaultCenter);
+      map.setZoom(12);
     } else {
       map.panTo(defaultCenter);
       map.setZoom(12);
@@ -142,7 +150,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   }
   
   return (
-    <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden", containerClassName)}>
+    <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden")}>
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           center={defaultCenter}
