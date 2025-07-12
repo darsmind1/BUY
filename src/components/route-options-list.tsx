@@ -14,9 +14,12 @@ interface RouteOptionsListProps {
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void;
 }
 
+type Freshness = 'fresh' | 'stale' | 'old' | null;
+
 interface BusArrivalInfo {
     eta: number; // in seconds
     distance: number; // in meters
+    freshness: Freshness;
 }
 
 interface StmStopMapping {
@@ -84,9 +87,22 @@ const RouteOptionItem = ({
                 if (nearestBus) {
                     const averageSpeedMetersPerSecond = 4.5; // ~16 km/h
                     const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
+
+                    const now = new Date();
+                    const busTimestamp = new Date(nearestBus.timestamp);
+                    const ageSeconds = (now.getTime() - busTimestamp.getTime()) / 1000;
+
+                    let freshness: Freshness = 'old';
+                    if (ageSeconds < 45) {
+                        freshness = 'fresh';
+                    } else if (ageSeconds < 120) {
+                        freshness = 'stale';
+                    }
+
                     setArrivalInfo({
                         distance: nearestBusDistance,
                         eta: etaSeconds,
+                        freshness,
                     });
                 } else {
                     setArrivalInfo(null);
@@ -134,6 +150,14 @@ const RouteOptionItem = ({
   };
 
   const arrivalText = getArrivalText();
+
+  const arrivalColorClass = {
+      fresh: 'text-green-500',
+      stale: 'text-yellow-500',
+      old: 'text-red-500',
+      null: 'text-primary'
+  }[arrivalInfo?.freshness ?? null];
+
 
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.travel_mode === 'WALKING' && step.distance && step.distance.value > 0));
 
@@ -188,7 +212,7 @@ const RouteOptionItem = ({
                 </div>
             )}
             {!isLoadingArrival && arrivalText && (
-              <div className={cn("flex items-center gap-2 text-xs font-medium", arrivalText ? 'text-green-500' : 'text-primary')}>
+              <div className={cn("flex items-center gap-2 text-xs font-medium", arrivalColorClass)}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>

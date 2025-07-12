@@ -7,7 +7,11 @@ interface StmToken {
 }
 
 export interface BusLocation {
-    line: string;
+    id: string;
+    timestamp: string;
+    line: {
+      value: string;
+    };
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
@@ -24,11 +28,6 @@ export interface StmBusStop {
 export interface StmLineInfo {
     line: number;
     description: string;
-}
-
-export interface ArrivalInfo {
-    eta: number; // seconds
-    distance: number; // meters
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -130,7 +129,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}) {
 export async function getBusLocation(line: string): Promise<BusLocation[] | null> {
     const data = await stmApiFetch(`/buses?lines=${line}`);
     if (data && Array.isArray(data)) {
-        return data as BusLocation[];
+        return data.map(bus => ({...bus, line: bus.line.value.toString()})) as BusLocation[];
     }
     return null;
 }
