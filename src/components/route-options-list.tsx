@@ -90,11 +90,10 @@ const RouteOptionItem = ({
 
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
-    const arrivalSeconds = arrivalInfo.eta;
-    if (arrivalSeconds < 60) {
+    if (arrivalInfo.eta < 60) {
       return `Llegando`;
     }
-    const arrivalMinutes = Math.round(arrivalSeconds / 60);
+    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
     return `Llega en ${arrivalMinutes} min`;
   };
 
@@ -321,9 +320,9 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         results.forEach(result => {
             if (result.status === 'fulfilled' && result.value) {
                 const { routeIndex, arrivals } = result.value;
-                if (arrivals && arrivals.length > 0) {
-                    const nextArrival = arrivals.find(a => a.eta > 0);
-                    newArrivals[routeIndex] = nextArrival ? { ...nextArrival, lastUpdate: Date.now() } : null;
+                 if (arrivals && arrivals.length > 0) {
+                    // Correct logic: Take the first arrival, even if eta is 0.
+                    newArrivals[routeIndex] = arrivals[0] ? { ...arrivals[0], lastUpdate: Date.now() } : null;
                 } else {
                     newArrivals[routeIndex] = null;
                 }
