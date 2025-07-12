@@ -45,8 +45,8 @@ async function getAccessToken(): Promise<string | null> {
     return cachedToken.token;
   }
   
-  if (!STM_CLIENT_ID || !STM_CLIENT_SECRET) {
-    console.error('STM API credentials are not set in environment variables. Please add STM_CLIENT_ID and STM_CLIENT_SECRET to your .env file.');
+  if (!STM_CLIENT_ID || !STM_CLIENT_SECRET || STM_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
+    console.error('CRITICAL: STM API credentials are not set in environment variables. Please add STM_CLIENT_ID and STM_CLIENT_SECRET to your .env file in the project root.');
     return null;
   }
 
