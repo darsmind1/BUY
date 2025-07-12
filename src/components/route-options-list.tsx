@@ -1,11 +1,11 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi } from 'lucide-react';
-import { getBusLocation } from '@/lib/stm-api';
+import { getBusLocation, BusLocation } from '@/lib/stm-api';
 import { haversineDistance } from '@/lib/utils';
 
 interface RouteOptionsListProps {
@@ -18,21 +18,28 @@ interface BusArrivalInfo {
     distance: number; // in meters
 }
 
+interface PreviousBusState {
+    location: { lat: number, lng: number };
+    timestamp: number;
+}
+
 const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.DirectionsRoute, index: number, onSelectRoute: (route: google.maps.DirectionsRoute, index: number) => void }) => {
   const [arrivalInfo, setArrivalInfo] = useState<BusArrivalInfo | null>(null);
   const [isLoadingArrival, setIsLoadingArrival] = useState(true);
   const leg = route.legs[0];
   const duration = getTotalDuration(route.legs);
   
-  const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT');
+  const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
   const googleTransitLine = firstTransitStep?.transit?.line.short_name;
+
+  const previousBusStates = useRef<Map<string, PreviousBusState>>(new Map());
 
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
 
     const fetchArrival = async (isInitialFetch = false) => {
-      if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location) {
+      if (!isMounted || !firstTransitStep || !googleTransitLine || !firstTransitStep.transit?.departure_stop.location || !firstTransitStep.transit?.arrival_stop.location) {
         if(isInitialFetch) setIsLoadingArrival(false);
         return;
       }
@@ -43,30 +50,77 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
           lat: firstTransitStep.transit.departure_stop.location.lat(),
           lng: firstTransitStep.transit.departure_stop.location.lng()
       };
+      
+      const arrivalStopLocation = {
+        lat: firstTransitStep.transit.arrival_stop.location.lat(),
+        lng: firstTransitStep.transit.arrival_stop.location.lng()
+      }
 
       try {
         const buses = await getBusLocation(googleTransitLine);
 
         if (isMounted && buses && buses.length > 0) {
             let nearestBusDistance = Infinity;
+            let nearestBus: BusLocation | null = null;
             
             buses.forEach(bus => {
                 const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
                 const distance = haversineDistance(departureStopLocation, busCoords);
                 if (distance < nearestBusDistance) {
                     nearestBusDistance = distance;
+                    nearestBus = bus;
                 }
             });
 
-            if (nearestBusDistance !== Infinity) {
-                // Average bus speed in Montevideo is ~15-20 km/h -> ~4.2-5.5 m/s. Let's use ~4.5 m/s.
-                const averageSpeedMetersPerSecond = 4.5;
-                const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
+            if (nearestBus) {
+                // Direction check
+                const busId = `${nearestBus.line}-${nearestBus.location.coordinates[0]}-${nearestBus.location.coordinates[1]}`; // simple id
+                const previousState = previousBusStates.current.get(busId);
+                const currentState = {
+                    location: { lat: nearestBus.location.coordinates[1], lng: nearestBus.location.coordinates[0] },
+                    timestamp: Date.now()
+                };
+
+                let isMovingInCorrectDirection = true; // Assume correct if we can't verify
+
+                if (previousState && (currentState.timestamp - previousState.timestamp > 1000)) { // has moved
+                    const routeVector = { 
+                        x: arrivalStopLocation.lng - departureStopLocation.lng,
+                        y: arrivalStopLocation.lat - departureStopLocation.lat
+                    };
+                    const busVector = {
+                        x: currentState.location.lng - previousState.location.lng,
+                        y: currentState.location.lat - previousState.location.lat
+                    };
+
+                    const dotProduct = routeVector.x * busVector.x + routeVector.y * busVector.y;
+                    const routeMag = Math.sqrt(routeVector.x**2 + routeVector.y**2);
+                    const busMag = Math.sqrt(busVector.x**2 + busVector.y**2);
+                    
+                    if (busMag > 0.00001 && routeMag > 0.00001) { // Avoid division by zero
+                        const cosAngle = dotProduct / (routeMag * busMag);
+                        const angle = Math.acos(Math.max(-1, Math.min(1, cosAngle))) * (180 / Math.PI); // Angle in degrees
+                        
+                        // We allow a generous angle (e.g., 90 degrees) to account for curvy roads.
+                        if (angle > 90) { 
+                            isMovingInCorrectDirection = false;
+                        }
+                    }
+                }
                 
-                setArrivalInfo({
-                    distance: nearestBusDistance,
-                    eta: etaSeconds,
-                });
+                previousBusStates.current.set(busId, currentState);
+
+                if (isMovingInCorrectDirection) {
+                    const averageSpeedMetersPerSecond = 4.5;
+                    const etaSeconds = nearestBusDistance / averageSpeedMetersPerSecond;
+                    
+                    setArrivalInfo({
+                        distance: nearestBusDistance,
+                        eta: etaSeconds,
+                    });
+                } else {
+                    setArrivalInfo(null);
+                }
 
             } else {
                  setArrivalInfo(null);
