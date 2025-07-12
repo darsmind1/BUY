@@ -51,12 +51,13 @@ const RouteOptionItem = ({ route, index, onSelectRoute }: { route: google.maps.D
           
           if (arrivals && arrivals.length > 0) {
             const firstArrival = arrivals[0];
-            if (firstArrival.minutos === 0) {
+            const arrivalSeconds = firstArrival.minutos;
+
+            if (arrivalSeconds < 60) {
               setArrivalInfo(`Llegando`);
-            } else if (firstArrival.minutos > 0) {
-              setArrivalInfo(`A ${firstArrival.minutos} min`);
             } else {
-              setArrivalInfo('Sin arribos');
+              const arrivalMinutes = Math.round(arrivalSeconds / 60);
+              setArrivalInfo(`A ${arrivalMinutes} min`);
             }
           } else {
              setArrivalInfo('Sin arribos');
