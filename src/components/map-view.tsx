@@ -89,7 +89,11 @@ const PulsingUserMarker = () => (
         </style>
         <div 
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4] border-2 border-white shadow-lg"
-            style={{ width: '16px', height: '16px', animation: 'blink 1.5s infinite ease-in-out' }}
+            style={{ width: '16px', height: '16px' }}
+        />
+         <div 
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4285F4]/50"
+            style={{ width: '24px', height: '24px', animation: 'blink 1.5s infinite ease-in-out' }}
         />
     </div>
 )
