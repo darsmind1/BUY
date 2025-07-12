@@ -141,7 +141,7 @@ export default function MapView({ apiKey, directionsResponse, routeIndex, userLo
         map.panTo(defaultCenter);
         map.setZoom(12);
     }
-  }, [userLocation, selectedRoute, directionsResponse, routeIndex, mapLoaded]);
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded]); // Removed userLocation from deps
 
   if (!isLoaded) {
     return (
