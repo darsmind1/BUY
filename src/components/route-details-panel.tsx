@@ -1,8 +1,8 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { GoogleMap, Marker } from '@react-google-maps/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -10,10 +10,111 @@ import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot, Loader2 } 
 import type { BusLocation } from '@/lib/stm-api';
 import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
-import { cn } from '@/lib/utils';
 
+// Reusing style from main map view for consistency
+const mapStyle = [
+  {
+    "elementType": "geometry",
+    "stylers": [{ "color": "#F0F4F8" }]
+  },
+  {
+    "elementType": "labels.icon",
+    "stylers": [{ "visibility": "off" }]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#212F3D" }]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "administrative",
+    "elementType": "geometry.stroke",
+    "stylers": [{ "color": "#c9c9c9" }]
+  },
+  {
+    "featureType": "administrative.land_parcel",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#bdbdbd" }]
+  },
+  {
+    "featureType": "poi",
+    "stylers": [{ "visibility": "off" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e5e5e5" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#757575" }]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e0e8f0" }]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "road.arterial",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "road.arterial",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#757575" }]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e0e8f0" }]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#616161" }]
+  },
+  {
+    "featureType": "road.local",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
+  },
+  {
+    "featureType": "transit.line",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e5e5e5" }]
+  },
+  {
+    "featureType": "transit.station",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#eeeeee" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#c9dcec" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
+  }
+];
 
-// Simplified Map for the details panel
 const mapContainerStyle = {
   width: '100%',
   height: '180px',
@@ -23,7 +124,8 @@ const mapContainerStyle = {
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: true,
-  gestureHandling: 'auto', // Make it interactive
+  gestureHandling: 'auto',
+  styles: mapStyle,
 };
 
 const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
@@ -39,7 +141,6 @@ const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
     }}
   />
 );
-
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
@@ -68,7 +169,6 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
 
 const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string; location: google.maps.LatLng | null; fallbackAddress: string }) => {
     const [address, setAddress] = useState<string | null>(null);
-
     useEffect(() => {
         const fetchAddress = async () => {
             if (location) {
@@ -100,7 +200,6 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
 const BusFeatures = ({ stmInfo, busLocations }: { stmInfo: StmInfo[], busLocations: BusLocation[] }) => {
     if (stmInfo.length === 0) return null;
     
-    // Find info for the first bus line in the trip
     const firstBusLineStmInfo = stmInfo.find(s => s.line);
     if (!firstBusLineStmInfo) return null;
 
@@ -140,6 +239,10 @@ const getUniqueBusLines = (steps: google.maps.DirectionsStep[]) => {
     return Array.from(busLines);
 }
 
+const transitPolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.8, strokeWeight: 6, zIndex: 3 };
+const walkingPolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, zIndex: 4, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }] };
+
+
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
@@ -150,25 +253,49 @@ export default function RouteDetailsPanel({
   const leg = route.legs[0];
   const busLines = getUniqueBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
-  const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT');
-  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
+  useEffect(() => {
+    if (mapRef.current && userLocation) {
+        mapRef.current.panTo(userLocation);
+        mapRef.current.setZoom(16);
+    } else if (mapRef.current && leg.start_location) {
+        mapRef.current.panTo(leg.start_location);
+        mapRef.current.setZoom(16);
+    }
+  }, [userLocation, leg.start_location]);
 
   if (!leg) return null;
+
+  const transitStops = leg.steps
+    .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
+    .map(step => step.transit!.departure_stop.location);
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
       <div className="p-4 space-y-3">
         <Card>
-            {isGoogleMapsLoaded && departureStopLocation ? (
+            {isGoogleMapsLoaded ? (
                  <CardContent className="p-2">
                     <GoogleMap
                         mapContainerStyle={mapContainerStyle}
-                        center={userLocation || { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }}
+                        center={userLocation || { lat: leg.start_location.lat(), lng: leg.start_location.lng() }}
                         zoom={16}
                         options={mapOptions}
+                        onLoad={map => mapRef.current = map}
                     >
-                        <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }}/>
+                       {leg.steps.map((step, index) => (
+                          <Polyline 
+                            key={index} 
+                            path={step.path} 
+                            options={step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions}
+                          />
+                        ))}
+                        
+                        {transitStops?.map((stop, index) => (
+                           stop && <StopMarker key={index} position={{ lat: stop.lat(), lng: stop.lng() }} />
+                        ))}
+
                         {userLocation && (
                            <Marker position={userLocation} zIndex={101} icon={{
                                 path: google.maps.SymbolPath.CIRCLE,
