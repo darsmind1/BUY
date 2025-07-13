@@ -1,11 +1,11 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2, Dot } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
