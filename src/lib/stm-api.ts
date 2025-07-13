@@ -147,18 +147,11 @@ export async function checkApiConnection(): Promise<boolean> {
 }
 
 export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLines = lines.filter(l => l.line).reduce((acc, current) => {
-        if (!acc.find(item => item.line === current.line)) {
-            acc.push(current);
-        }
-        return acc;
-    }, [] as {line?: string, destination?: string | null}[]);
-
-    if (uniqueLines.length === 0) return [];
-
-    const lineParams = uniqueLines.map(l => l.line).join(',');
+    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
+    if (uniqueLineNumbers.length === 0) return [];
     
-    let path = `/buses?lines=${lineParams}`;
+    const lineParams = uniqueLineNumbers.join(',');
+    const path = `/buses?lines=${lineParams}`;
     
     try {
         const data = await stmApiFetch(path);
@@ -169,33 +162,33 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        const allBuses = data.map((bus: any) => ({
+        const allBusesForLines = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
-
-        // Filter buses by destination if provided
-        const linesWithDestinations = lines.filter(l => l.destination);
-        if (linesWithDestinations.length > 0) {
-            return allBuses.filter(bus => {
-                const requiredLine = lines.find(l => l.line === bus.line);
-                // If the required line has no specific destination, include the bus.
-                if (!requiredLine?.destination) {
-                    return true;
-                }
-                // If it has a destination, check for a match.
-                return bus.destination === requiredLine.destination;
-            });
-        }
         
-        return allBuses;
+        // Filter buses by the specific line and destination combinations requested
+        const filteredBuses = allBusesForLines.filter(bus => {
+            // Check if this bus matches any of the required line/destination pairs
+            return lines.some(requiredLine => {
+                if (bus.line !== requiredLine.line) {
+                    return false;
+                }
+                // If the required line has a specific destination, it must match.
+                // If the required line has no destination, any bus of that line is a match.
+                return requiredLine.destination ? bus.destination === requiredLine.destination : true;
+            });
+        });
+
+        return filteredBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
         return []; // Return empty array on failure to prevent crashes
     }
 }
+
 
 export async function findClosestStmStop(lat: number, lng: number): Promise<StmBusStop | null> {
     const radius = 200; // Search within a 200-meter radius

@@ -274,6 +274,13 @@ export default function RouteDetailsPanel({
     .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
     .map(step => step.transit!.departure_stop.location);
 
+  const getArrivalColorClass = (eta: number) => {
+    const arrivalMinutes = eta / 60;
+    if (arrivalMinutes <= 5) return 'text-green-400';
+    if (arrivalMinutes <= 10) return 'text-yellow-400';
+    return 'text-red-500';
+  };
+
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
       <div className="p-4 space-y-3">
@@ -368,13 +375,6 @@ export default function RouteDetailsPanel({
                       busIsOnMap = true;
                   }
               }
-
-              const getArrivalColorClass = (eta: number) => {
-                  const arrivalMinutes = eta / 60;
-                  if (arrivalMinutes <= 5) return 'text-green-400';
-                  if (arrivalMinutes <= 10) return 'text-yellow-400';
-                  return 'text-red-500';
-              };
 
               if (hasDetailedWalkingSteps) {
                 return (

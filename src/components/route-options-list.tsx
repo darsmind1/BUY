@@ -320,7 +320,7 @@ export default function RouteOptionsList({
         const stmInfoForRoutePromises = transitSteps.map(async (step) => {
            const googleTransitLine = step.transit?.line.short_name;
            const departureStopLocation = step.transit?.departure_stop?.location;
-           const lineDestination = step.transit?.headsign || step.transit?.line.name?.split(' - ')[1] || null;
+           const lineDestination = step.transit?.headsign || null;
 
            if (departureStopLocation && googleTransitLine) {
              const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
