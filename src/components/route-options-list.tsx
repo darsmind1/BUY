@@ -59,6 +59,10 @@ const ArrivalInfoLegend = () => {
 
 const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return null;
+    // Do not show arrival text for very old signals, let the color speak.
+    const signalAge = getSignalAge(arrivalInfo);
+    if (signalAge !== null && signalAge > 150) return "Señal antigua";
+
     if (arrivalInfo.eta < 60) return "Llegando";
     const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
     return `Llega en ${arrivalMinutes} min`;
@@ -255,7 +259,6 @@ export default function RouteOptionsList({
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
   const [transferInfoByRoute, setTransferInfoByRoute] = useState<Record<number, TransferInfo | null>>({});
 
   const findAlternativeLines = useCallback(async (
@@ -296,6 +299,7 @@ export default function RouteOptionsList({
     });
   }, [isGoogleMapsLoaded]);
 
+  // Effect for initial data setup (stops, lines, etc.)
   useEffect(() => {
     if (!isGoogleMapsLoaded) return;
 
@@ -377,8 +381,9 @@ export default function RouteOptionsList({
   }, [routes, isApiConnected, isGoogleMapsLoaded, findAlternativeLines]);
 
 
+  // Effect for fetching and updating real-time data periodically
   useEffect(() => {
-    if (!isApiConnected || !isGoogleMapsLoaded || (Object.keys(stmInfoByRoute).length === 0 && Object.keys(transferInfoByRoute).length === 0)) {
+    if (isLoading || !isApiConnected || !isGoogleMapsLoaded || (Object.keys(stmInfoByRoute).length === 0 && Object.keys(transferInfoByRoute).length === 0)) {
       return;
     }
 
@@ -394,7 +399,7 @@ export default function RouteOptionsList({
         info!.alternativeLines.map(alt => ({ line: alt.line, destination: null }))
       );
 
-      const linesToFetch = [...primaryLines, ...transferLines];
+      const linesToFetch = [...primaryLines, ...transferLines].filter(l => l.line);
       if (linesToFetch.length === 0) return;
 
       try {
@@ -415,27 +420,27 @@ export default function RouteOptionsList({
             return null;
         }
 
-        // Update primary route arrivals
+        // Update primary route arrivals with persistence logic
         setStmInfoByRoute(currentStmInfo => {
             const newStmInfo: Record<number, StmInfo[]> = JSON.parse(JSON.stringify(currentStmInfo));
             Object.values(newStmInfo).forEach(infos => {
                 infos.forEach(info => {
                     if (info.departureStopLocation) {
-                        info.arrival = findArrivalForStop(info.line, info.departureStopLocation);
+                        const newArrival = findArrivalForStop(info.line, info.departureStopLocation);
+                        // If we get a new signal, update it.
+                        // If we don't, but the old signal is recent enough, keep it.
+                        const oldSignalAge = getSignalAge(info.arrival);
+                        if (newArrival) {
+                            info.arrival = newArrival;
+                        } else if (oldSignalAge !== null && oldSignalAge < 90) { // Keep old signal for 90s
+                            // Do nothing, keep the old info.arrival
+                        } else {
+                            info.arrival = null; // Clear old signal
+                        }
                     }
                 });
             });
             return newStmInfo;
-        });
-        
-        setBusArrivals(currentArrivals => {
-            const newArrivals: BusArrivalsState = {};
-            Object.entries(stmInfoByRoute).forEach(([routeIndexStr, infos]) => {
-                const routeIndex = parseInt(routeIndexStr);
-                const firstStepInfo = infos[0];
-                newArrivals[routeIndex] = firstStepInfo?.arrival ?? null;
-            });
-            return newArrivals;
         });
 
         // Update transfer alternatives arrivals
@@ -444,7 +449,15 @@ export default function RouteOptionsList({
             Object.values(newTransferInfo).forEach(info => {
                 if (info) {
                     info.alternativeLines.forEach(alt => {
-                        alt.arrival = findArrivalForStop(alt.line, info.stopLocation);
+                        const newArrival = findArrivalForStop(alt.line, info.stopLocation);
+                        const oldSignalAge = getSignalAge(alt.arrival);
+                         if (newArrival) {
+                            alt.arrival = newArrival;
+                        } else if (oldSignalAge !== null && oldSignalAge < 90) { // Keep old signal for 90s
+                            // Do nothing, keep the old alt.arrival
+                        } else {
+                            alt.arrival = null; // Clear old signal
+                        }
                     });
                 }
             });
@@ -456,11 +469,12 @@ export default function RouteOptionsList({
       }
     };
 
-    fetchAllArrivals();
-    const intervalId = setInterval(fetchAllArrivals, 30000);
+    fetchAllArrivals(); // Initial fetch
+    const intervalId = setInterval(fetchAllArrivals, 50000); // Update every 50 seconds
 
     return () => clearInterval(intervalId);
-  }, [stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
+  }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
+  
 
   if (isLoading) {
     return (
@@ -472,6 +486,11 @@ export default function RouteOptionsList({
   }
   
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
+
+  const getFirstArrival = (stmInfo: StmInfo[]): ArrivalInfo | null => {
+      const firstStepInfo = stmInfo[0];
+      return firstStepInfo?.arrival ?? null;
+  }
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
@@ -490,7 +509,7 @@ export default function RouteOptionsList({
           route={route} 
           index={index} 
           onSelectRoute={onSelectRoute}
-          arrivalInfo={busArrivals[index] ?? null}
+          arrivalInfo={getFirstArrival(stmInfoByRoute[index] ?? [])}
           stmInfo={stmInfoByRoute[index] ?? []}
           transferInfo={transferInfoByRoute[index] ?? null}
         />
