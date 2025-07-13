@@ -162,26 +162,12 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        const allBusesForLines = data.map((bus: any) => ({
+        // Return all buses for the requested lines without destination filtering for now
+        return data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
-        
-        // Filter buses by the specific line and destination combinations requested
-        const filteredBuses = allBusesForLines.filter(bus => {
-            // Check if this bus matches any of the required line/destination pairs
-            return lines.some(requiredLine => {
-                if (bus.line !== requiredLine.line) {
-                    return false;
-                }
-                // If the required line has a specific destination, it must match.
-                // If the required line has no destination, any bus of that line is a match.
-                return requiredLine.destination ? bus.destination === requiredLine.destination : true;
-            });
-        });
-
-        return filteredBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
