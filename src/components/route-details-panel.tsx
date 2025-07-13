@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Snowflake, Accessibility } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import MapView from './map-view';
 import { useEffect, useState } from 'react';
@@ -18,7 +18,6 @@ interface RouteDetailsPanelProps {
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
-  onToggleMap: () => void;
 }
 
 const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {

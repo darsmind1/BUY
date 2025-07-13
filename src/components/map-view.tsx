@@ -307,28 +307,18 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   
     if (view === 'details' && userLocation) {
         map.panTo(userLocation);
-        map.setZoom(16);
-    } else if (selectedRoute) {
-      const bounds = new window.google.maps.LatLngBounds();
-      selectedRoute.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
-      if (userLocation) {
-        bounds.extend(userLocation);
-      }
-      map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+        map.setZoom(16.5);
     } else if (directionsResponse) {
       const bounds = new window.google.maps.LatLngBounds();
-      directionsResponse.routes.forEach(route => {
-        route.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
-      });
+      const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
+      routeToBound.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+
       if (userLocation) {
         bounds.extend(userLocation);
       }
-      map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-    } else if (view === 'search' && userLocation) {
-      map.panTo(defaultCenter);
-      map.setZoom(12);
+      map.fitBounds(bounds, 50); // 50px padding
     } else {
-      map.panTo(defaultCenter);
+      map.panTo(userLocation || defaultCenter);
       map.setZoom(12);
     }
   }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation, view]);

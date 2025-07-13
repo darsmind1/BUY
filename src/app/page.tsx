@@ -173,6 +173,7 @@ export default function Home() {
         if (status === window.google.maps.DirectionsStatus.OK && result) {
           setDirectionsResponse(result);
           setView('options');
+          setMobileView('panel');
         } else {
           console.error(`Error fetching directions, status: ${status}`);
           let description = "No se pudo calcular la ruta. Intenta con otras direcciones.";
@@ -208,6 +209,7 @@ export default function Home() {
       setSelectedRoute(null);
       setSelectedStopId(null);
       setSelectedLineDestination(null);
+      setBusLocations([]);
     } else if (view === 'options') {
       setView('search');
       setDirectionsResponse(null);
@@ -215,7 +217,6 @@ export default function Home() {
   };
   
   const getHeaderTitle = () => {
-    if (mobileView === 'map') return 'Mapa';
     switch(view) {
       case 'search': return '¿A dónde vamos?';
       case 'options': return 'Opciones de trayecto';
@@ -224,8 +225,7 @@ export default function Home() {
     }
   }
 
-  const showBackButton = view !== 'search' || mobileView === 'map';
-  const showMapToggleButton = view === 'details' ? false : true;
+  const showBackButton = view !== 'search';
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
@@ -241,11 +241,9 @@ export default function Home() {
                 </div>
             )}
             <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
-            {showMapToggleButton && (
-              <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                  <Map className="h-5 w-5" />
-              </Button>
-            )}
+            <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
+                <Map className="h-5 w-5" />
+            </Button>
           </header>
           <Separator />
           
@@ -279,13 +277,17 @@ export default function Home() {
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
-                  onToggleMap={() => setMobileView(v => v === 'panel' ? 'map' : 'panel')}
                 />
               )}
           </main>
         </aside>
         
-        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
+        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full relative`}>
+            {mobileView === 'map' && (
+              <Button variant="secondary" size="icon" onClick={handleBack} aria-label="Volver al panel" className="absolute top-4 left-4 z-10 shadow-lg">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
               directionsResponse={directionsResponse} 
