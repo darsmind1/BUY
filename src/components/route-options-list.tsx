@@ -4,14 +4,8 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, Wifi, Info, Loader2 } from 'lucide-react';
+import { Clock, ArrowRight, Footprints, Info, Loader2 } from 'lucide-react';
 import type { RouteOption, BusArrivalInfo } from '@/lib/types';
-
-interface RouteOptionsListProps {
-  routes: RouteOption[];
-  onSelectRoute: (route: RouteOption) => void;
-  arrivals: Record<string, BusArrivalInfo>;
-}
 
 const ArrivalInfoLegend = ({ hasRealTime }: { hasRealTime: boolean }) => {
   return (
@@ -22,7 +16,11 @@ const ArrivalInfoLegend = ({ hasRealTime }: { hasRealTime: boolean }) => {
          </div>
          {hasRealTime && (
             <div className="flex items-center gap-2">
-                <Wifi className="h-3.5 w-3.5 text-green-400 animate-pulse-green" />
+                <svg className="h-3.5 w-3.5 text-green-400 animate-pulse-green" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M4.22,4.22a7,7,0,0,0,0,9.9,7,7,0,0,0,9.9,0,1,1,0,0,1,1.42,1.42,9,9,0,0,1-12.72,0,9,9,0,0,1,0-12.72,1,1,0,0,1,1.42,1.42Z"/>
+                    <path d="M12,10a2,2,0,1,0,2,2A2,2,0,0,0,12,10Z"/>
+                    <path d="M19.78,19.78a7,7,0,0,0,0-9.9,1,1,0,1,1-1.42-1.42,9,9,0,0,1,0,12.72,9,9,0,0,1-12.72,0,1,1,0,1,1-1.42-1.42,7,7,0,0,0,9.9,0Z"/>
+                </svg>
                 <span>En tiempo real (bus con GPS activo)</span>
             </div>
          )}
@@ -99,7 +97,11 @@ const RouteOptionItem = ({
               ) : arrivalText ? (
                  isRealTime ? (
                    <div className="flex items-center gap-2 font-medium text-green-400">
-                      <Wifi className="h-4 w-4 animate-pulse-green" />
+                      <svg className="h-4 w-4 animate-pulse-green" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M4.22,4.22a7,7,0,0,0,0,9.9,7,7,0,0,0,9.9,0,1,1,0,0,1,1.42,1.42,9,9,0,0,1-12.72,0,9,9,0,0,1,0-12.72,1,1,0,0,1,1.42,1.42Z"/>
+                          <path d="M12,10a2,2,0,1,0,2,2A2,2,0,0,0,12,10Z"/>
+                          <path d="M19.78,19.78a7,7,0,0,0,0-9.9,1,1,0,1,1-1.42-1.42,9,9,0,0,1,0,12.72,9,9,0,0,1-12.72,0,1,1,0,1,1-1.42-1.42,7,7,0,0,0,9.9,0Z"/>
+                      </svg>
                       <span>{arrivalText}</span>
                    </div>
                  ) : (
@@ -124,7 +126,7 @@ const RouteOptionItem = ({
 
 export default function RouteOptionsList({ routes, onSelectRoute, arrivals }: RouteOptionsListProps) {
   const hasApiData = Object.keys(arrivals).length > 0;
-  const hasAnyRealTime = Object.values(arrivals).some(a => a.arrival?.eta !== -1);
+  const hasAnyRealTime = Object.values(arrivals).some(a => a.arrival?.eta !== undefined && a.arrival.eta > -1);
   
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
@@ -143,5 +145,3 @@ export default function RouteOptionsList({ routes, onSelectRoute, arrivals }: Ro
     </div>
   );
 }
-
-    

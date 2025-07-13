@@ -4,7 +4,7 @@
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Eye } from 'lucide-react';
+import { Footprints, Bus, Clock, Accessibility, Snowflake, Eye } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -71,7 +71,6 @@ const StaticMapPreview = ({ route, apiKey, onCenterOnRoute }: { route: RouteOpti
     )
 }
 
-
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
@@ -85,8 +84,7 @@ export default function RouteDetailsPanel({
   
   if (!leg) return null;
 
-  const isBusLive = busLocations.length > 0;
-  const liveBusData = isBusLive ? busLocations[0] : null; 
+  const liveBusData = busLocations.length > 0 ? busLocations[0] : null; 
   
   if (!route || !route.transitDetails) return null;
 
@@ -97,9 +95,13 @@ export default function RouteDetailsPanel({
         
         <StaticMapPreview route={route} apiKey={googleMapsApiKey} onCenterOnRoute={onCenterOnRoute} />
 
-        {isBusLive && (
+        {liveBusData && (
             <div className="flex items-center gap-2 px-1 text-sm font-medium text-green-400">
-                <Wifi className="h-4 w-4 animate-pulse-green" />
+                <svg className="h-4 w-4 animate-pulse-green" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M4.22,4.22a7,7,0,0,0,0,9.9,7,7,0,0,0,9.9,0,1,1,0,0,1,1.42,1.42,9,9,0,0,1-12.72,0,9,9,0,0,1,0-12.72,1,1,0,0,1,1.42,1.42Z"/>
+                    <path d="M12,10a2,2,0,1,0,2,2A2,2,0,0,0,12,10Z"/>
+                    <path d="M19.78,19.78a7,7,0,0,0,0-9.9,1,1,0,1,1-1.42-1.42,9,9,0,0,1,0,12.72,9,9,0,0,1-12.72,0,1,1,0,1,1-1.42-1.42,7,7,0,0,0,9.9,0Z"/>
+                </svg>
                 <span>Bus en el mapa (tiempo real)</span>
             </div>
         )}
@@ -170,5 +172,3 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
-
-    

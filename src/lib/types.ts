@@ -1,5 +1,4 @@
 
-
 import type { BusArrival } from './stm-api';
 
 export interface RouteOption {
@@ -33,5 +32,3 @@ export interface BusArrivalInfo {
   arrival: BusArrival | null;
   isLoading: boolean;
 }
-
-    

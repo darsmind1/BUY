@@ -22,6 +22,7 @@ export interface BusLocation {
     line: string;
     destination?: string;
     location: {
+        type: 'Point',
         coordinates: [number, number]; // [lng, lat]
     };
     access?: string;
@@ -126,7 +127,6 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1)
     }
     
     const text = await response.text();
-    // Handle cases where the API returns an empty string or just whitespace
     if (!text.trim()) {
         return [];
     }
@@ -134,7 +134,6 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1)
     return JSON.parse(text);
 
   } catch (error) {
-    // This will catch JSON parsing errors and other exceptions
     console.error(`Exception during STM API fetch for path ${path}:`, error);
     if (retries > 0) {
       console.warn(`Retrying after exception... (${retries - 1} left)`);
@@ -158,10 +157,6 @@ export async function getBusLocation(line: string, destination?: string): Promis
     if (!line) return [];
     
     let path = `/buses?lines=${line}`;
-    // The STM API for bus locations by destination is not always reliable, 
-    // so we often get better results by querying just the line.
-    // If destination is provided, we can still use it for more precise queries if needed.
-    // For now, fetching all buses of a line is more robust.
     
     const data = await stmApiFetch(path);
 
@@ -185,7 +180,6 @@ export async function getBusLocation(line: string, destination?: string): Promis
         };
     }) as BusLocation[];
 
-    // If a destination was provided, filter the results. This is more reliable than the API's own filter.
     if (destination) {
         return allBuses.filter(bus => bus.destination?.toUpperCase().includes(destination.toUpperCase()));
     }
@@ -193,12 +187,9 @@ export async function getBusLocation(line: string, destination?: string): Promis
     return allBuses;
 }
 
-
-export async function getArrivalsForStop(stopId: number, lineId?: number): Promise<BusArrival[] | null> {
+export async function getArrivalsForStop(stopId: number): Promise<BusArrival[] | null> {
+    if (!stopId) return null;
     let path = `/buses/busstops/${stopId}/arrivals`;
-    if (lineId) {
-        path = `/buses/busstops/${stopId}/lines/${lineId}/arrivals`;
-    }
     
     const data = await stmApiFetch(path);
     

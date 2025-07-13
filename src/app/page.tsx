@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { Bus, ArrowLeft, Loader2, Map as MapIcon, Eye } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map as MapIcon } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -17,8 +17,7 @@ import { getBusLocation, BusLocation, checkApiConnection, getArrivalsForStop } f
 import type { RouteOption, BusArrivalInfo } from '@/lib/types';
 import { getStopIdFromStopName } from '@/lib/stop-id-mapper';
 
-
-const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
 const LIBRARIES: ("places" | "marker")[] = ['places', 'marker'];
 
 export default function Home() {
@@ -60,7 +59,6 @@ export default function Home() {
     verifyApiConnection();
   }, [toast]);
 
-
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
@@ -94,7 +92,7 @@ export default function Home() {
   }, [view, selectedRoute, apiStatus]);
   
   const fetchAllArrivals = async (routes: RouteOption[]) => {
-      if (!isApiConnected || routes.length === 0) {
+      if (apiStatus !== 'connected' || routes.length === 0) {
         setBusArrivals({});
         return;
       }
@@ -217,8 +215,8 @@ export default function Home() {
                            summary: route.summary || transitStep.transit.line.short_name || 'Ruta de bus',
                            duration: leg.duration?.value || 0,
                            walkingDuration: walkingDuration,
-                           gmapsRoute: result, // Store the full DirectionsResult
-                           routeIndex: index, // Store the index to identify the route within the result
+                           gmapsRoute: result,
+                           routeIndex: index,
                            transitDetails: {
                                line: {
                                    name: transitStep.transit.line.short_name || 'N/A',
@@ -265,17 +263,16 @@ export default function Home() {
     }
   };
 
-
   const handleSelectRoute = (route: RouteOption) => {
     setSelectedRoute(route);
     setDirectionsResult(route.gmapsRoute);
     setView('details');
-    setMobileView('map'); // On mobile, switch to map view first
+    setMobileView('map');
   };
 
   const handleBack = () => {
     if (mobileView === 'map' && view === 'details') {
-      setMobileView('panel'); // From map in details, go back to details panel
+      setMobileView('panel');
       return;
     }
     if (view === 'details') {
@@ -310,12 +307,11 @@ export default function Home() {
     map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
   };
 
-
   const showBackButton = view !== 'search';
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
-        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full bg-card`}>
+        <aside className={`${mobileView === 'map' && view !== 'search' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full bg-card`}>
           <header className="p-4 flex items-center gap-4 flex-shrink-0">
             {showBackButton ? (
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
@@ -387,6 +383,3 @@ export default function Home() {
       </div>
   );
 }
-    
-
-    

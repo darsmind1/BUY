@@ -174,7 +174,6 @@ export default function MapView({ isLoaded, directions, routeIndex, userLocation
     if (!map || !mapLoaded || !isLoaded) return;
     
     if ((view === 'details' || view === 'options') && directions?.routes[0]) {
-        // Fit map to the bounds of the selected Google Maps route
         const bounds = new window.google.maps.LatLngBounds();
         const routeToFit = (routeIndex !== undefined && directions.routes[routeIndex]) ? directions.routes[routeIndex] : directions.routes[0];
         routeToFit.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
@@ -204,12 +203,12 @@ export default function MapView({ isLoaded, directions, routeIndex, userLocation
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {directions && (
+          {directions && routeIndex !== undefined && (
              <DirectionsRenderer 
                 directions={directions}
                 routeIndex={routeIndex}
                 options={{
-                    suppressMarkers: true, // We'll draw our own markers
+                    suppressMarkers: true,
                     polylineOptions: {
                         strokeColor: '#A40034',
                         strokeOpacity: 0.8,
@@ -246,5 +245,3 @@ export default function MapView({ isLoaded, directions, routeIndex, userLocation
     </div>
   );
 }
-
-    
