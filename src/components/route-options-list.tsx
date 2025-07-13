@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { getBusLocation, StmBusStop, getAllBusStops, getArrivalsForStop, BusArrival, BusLocation } from '@/lib/stm-api';
+import { getArrivalsForStop, BusArrival, StmBusStop, getAllBusStops } from '@/lib/stm-api';
 import { haversineDistance, cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
@@ -241,9 +241,13 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
           
           let lineId : number | null = null;
           if (closestStmStop && firstTransitStep?.transit?.line.name) {
+              // Try to parse the lineId from Google's transit line name (e.g., "149 B,C,D... - Pocitos")
               const lineNameParts = firstTransitStep.transit.line.name.split(' ');
               if (lineNameParts.length > 0) {
-                  lineId = parseInt(lineNameParts[0], 10);
+                  const potentialId = parseInt(googleTransitLine, 10);
+                  if (!isNaN(potentialId)) {
+                      lineId = potentialId;
+                  }
               }
           }
 
@@ -276,11 +280,15 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     const fetchAllArrivals = async () => {
         const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndexStr, info]) => {
             const routeIndex = parseInt(routeIndexStr, 10);
-            if (info.stopId && info.lineId) {
+            if (info.stopId && info.line) { // Use line name from google for matching
                 try {
-                    const arrivals = await getArrivalsForStop(info.stopId, info.lineId);
-                    // Find the first arrival that is not on site and has a bus
-                    const nextArrival = arrivals?.find(a => a.eta > 0 && a.bus);
+                    const arrivals = await getArrivalsForStop(info.stopId);
+                    // Find the first arrival for the correct line that is not on site and has a bus
+                    const nextArrival = arrivals?.find(a => 
+                        a.bus && 
+                        a.bus.line === info.line && 
+                        a.eta > 0
+                    );
                     return { routeIndex, arrival: nextArrival || null };
                 } catch (error) {
                     console.error(`Error fetching bus arrivals for route ${routeIndex}:`, error);

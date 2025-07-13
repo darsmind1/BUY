@@ -205,22 +205,27 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
     return (Array.isArray(data) ? data : []) as StmLineInfo[];
 }
 
-export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[] | null> {
-    const data = await stmApiFetch(`/buses/busstops/${stopId}/lines/${lineId}/arrivals`);
+export async function getArrivalsForStop(stopId: number, lineId?: number): Promise<BusArrival[] | null> {
+    let path = `/buses/busstops/${stopId}/arrivals`;
+    if (lineId) {
+        path = `/buses/busstops/${stopId}/lines/${lineId}/arrivals`;
+    }
+    
+    const data = await stmApiFetch(path);
     
     if (data === null) { // Handle rate limit case
         return null;
     }
     
     if (!Array.isArray(data)) {
-        console.warn(`STM API response for arrivals was not an array for stop ${stopId} line ${lineId}.`, data);
+        console.warn(`STM API response for arrivals was not an array for stop ${stopId}.`, data);
         return [];
     }
     return data.map(arrival => ({
         ...arrival,
         bus: arrival.bus ? {
             ...arrival.bus,
-            line: arrival.bus.line.toString(),
+            line: arrival.bus.line?.toString(),
             id: arrival.bus.id?.toString()
         } : null,
     }));
