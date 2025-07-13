@@ -208,7 +208,7 @@ export default function Home() {
     }
 
     setView('details');
-    setMobileView('map'); // On mobile, show map first for details view
+    setMobileView('panel'); // On mobile, show panel first for details view
   };
 
   const handleBack = () => {
