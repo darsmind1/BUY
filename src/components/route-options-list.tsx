@@ -414,11 +414,14 @@ export default function RouteOptionsList({
         const locations = await getBusLocation(linesToFetch);
         
         const findArrivalForStop = (
-            line: string, 
+            line: string,
+            destination: string | null,
             stopLocation: google.maps.LatLngLiteral
         ): ArrivalInfo | null => {
             if (!isGoogleMapsLoaded) return null;
-            const liveBus = locations.find(l => l.line === line);
+            const liveBus = locations.find(l => 
+                l.line === line && l.destination === destination
+            );
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
                     new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
@@ -438,7 +441,7 @@ export default function RouteOptionsList({
               newStmInfo[routeIndex] = currentStmInfo[routeIndex].map(info => {
                 const newInfo = { ...info };
                 if (newInfo.departureStopLocation) {
-                  const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
+                  const newArrival = findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
                   const oldSignalAge = getSignalAge(newInfo.arrival);
                   if (newArrival) {
                     newInfo.arrival = newArrival;
@@ -463,7 +466,7 @@ export default function RouteOptionsList({
                   ...currentInfo,
                   alternativeLines: currentInfo.alternativeLines.map(alt => {
                     const newAlt = { ...alt };
-                    const newArrival = findArrivalForStop(alt.line, currentInfo.stopLocation);
+                    const newArrival = findArrivalForStop(alt.line, alt.destination, currentInfo.stopLocation);
                     const oldSignalAge = getSignalAge(newAlt.arrival);
                     if (newArrival) {
                       newAlt.arrival = newArrival;
