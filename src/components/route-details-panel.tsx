@@ -1,13 +1,15 @@
 
 "use client";
 
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2, Dot } from 'lucide-react';
-import type { BusLocation, StmInfo } from '@/lib/stm-api';
+import type { BusLocation } from '@/lib/stm-api';
+import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
-import { useEffect, useState } from 'react';
+
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
@@ -217,5 +219,3 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
-
-    
