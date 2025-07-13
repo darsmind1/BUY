@@ -109,9 +109,7 @@ export default function Home() {
               lat: position.coords.latitude,
               lng: position.coords.longitude,
             };
-            if (!currentUserLocation) {
-              setCurrentUserLocation(newLocation);
-            }
+            setCurrentUserLocation(newLocation);
           },
           (error) => {
             console.error("Error watching position:", error);
@@ -129,7 +127,7 @@ export default function Home() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [currentUserLocation]);
+  }, []);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -208,7 +206,7 @@ export default function Home() {
     }
 
     setView('details');
-    setMobileView('panel'); // On mobile, show panel first for details view
+    setMobileView('panel');
   };
 
   const handleBack = () => {
