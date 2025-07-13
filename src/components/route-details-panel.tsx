@@ -4,12 +4,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
-import MapView from './map-view';
-import { useEffect, useState } from 'react';
+import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFormattedAddress } from '@/lib/google-maps-api';
-
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
@@ -18,6 +17,116 @@ interface RouteDetailsPanelProps {
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
+}
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+};
+
+const mapStyle = [
+    { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+    { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+    { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
+    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#bdbdbd" }] },
+    { featureType: "poi", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#dadada" }] },
+    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+    { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+    { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
+    { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+];
+
+const mapOptions: google.maps.MapOptions = {
+    styles: mapStyle,
+    disableDefaultUI: true,
+    zoomControl: false,
+    gestureHandling: 'none', // Disable interaction for the mini-map
+};
+
+
+const RouteDetailMap = ({ 
+  isLoaded, 
+  userLocation, 
+  selectedRoute,
+  busLocations 
+} : {
+  isLoaded: boolean;
+  userLocation: google.maps.LatLngLiteral | null;
+  selectedRoute: google.maps.DirectionsRoute | null;
+  busLocations: BusLocation[];
+}) => {
+  const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
+
+  useEffect(() => {
+    if (isLoaded && window.google) {
+      setUserMarkerIcon({
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 7,
+        fillColor: "#4285F4",
+        fillOpacity: 1,
+        strokeWeight: 2,
+        strokeColor: "#ffffff",
+      });
+    }
+  }, [isLoaded]);
+
+  if (!isLoaded || !userLocation) {
+    return (
+      <div className="w-full h-full bg-muted flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const transitPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5 };
+  const walkingPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 2, scale: 2, strokeColor: '#4A4A4A' }, offset: '0', repeat: '10px' }] };
+  
+  return (
+    <GoogleMap
+      mapContainerStyle={mapContainerStyle}
+      center={userLocation}
+      zoom={16.5}
+      options={mapOptions}
+    >
+      {selectedRoute && selectedRoute.legs[0].steps.map((step, index) => (
+        <Polyline
+          key={index}
+          path={step.path}
+          options={step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions}
+        />
+      ))}
+      
+      {userLocation && userMarkerIcon && <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />}
+
+      {busLocations.map((bus) => (
+        <Marker 
+          key={`${bus.line}-${bus.id}`}
+          position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
+          zIndex={100}
+          icon={{
+              url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="24">
+                      <rect x="0" y="0" width="100%" height="100%" rx="8" ry="8" fill="#212F3D" stroke="#ffffff" stroke-width="2"/>
+                      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#ffffff">${bus.line}</text>
+                  </svg>
+              `)}`,
+              scaledSize: new window.google.maps.Size(40, 24),
+              anchor: new window.google.maps.Point(20, 12),
+          }}
+        />
+      ))}
+    </GoogleMap>
+  )
 }
 
 const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
@@ -107,8 +216,6 @@ export default function RouteDetailsPanel({
   route, 
   busLocations = [],
   isGoogleMapsLoaded,
-  directionsResponse,
-  routeIndex,
   userLocation,
 }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
@@ -130,15 +237,12 @@ export default function RouteDetailsPanel({
                 </div>
             )}
             <div className="relative h-[200px] bg-muted touch-none">
-                <MapView 
-                    isLoaded={isGoogleMapsLoaded}
-                    directionsResponse={directionsResponse}
-                    routeIndex={routeIndex}
-                    userLocation={userLocation}
-                    selectedRoute={route}
-                    busLocations={busLocations}
-                    view="details"
-                />
+              <RouteDetailMap 
+                isLoaded={isGoogleMapsLoaded}
+                userLocation={userLocation}
+                selectedRoute={route}
+                busLocations={busLocations}
+              />
             </div>
         </div>
 

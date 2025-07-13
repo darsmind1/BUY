@@ -14,7 +14,6 @@ interface MapViewProps {
   userLocation: google.maps.LatLngLiteral | null;
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
-  view: 'search' | 'options' | 'details';
 }
 
 const mapContainerStyle = {
@@ -159,29 +158,17 @@ const mapOptions: google.maps.MapOptions = {
     latLngBounds: montevideoBounds,
     strictBounds: false,
   },
-  styles: mapStyle
+  styles: mapStyle,
+  gestureHandling: 'auto',
+  zoomControl: true,
 };
 
-const mapOptionsWithZoomControl: google.maps.MapOptions = {
-    ...mapOptions,
-    zoomControl: true,
-    gestureHandling: 'auto',
-};
-
-const mapOptionsForDetailsPanel: google.maps.MapOptions = {
-    ...mapOptions,
-    gestureHandling: 'greedy',
-    zoomControl: false,
-};
-
-
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const [directionsRendererOptions, setDirectionsRendererOptions] = useState<google.maps.DirectionsRendererOptions | null>(null);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
-  const initialCenterSetRef = useRef(false);
 
   useEffect(() => {
     if (isLoaded && window.google) {
@@ -243,14 +230,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
     
-    // For the small map in the details panel, center on the user's location with a fixed zoom.
-    if (view === 'details' && userLocation && !initialCenterSetRef.current) {
-        map.panTo(userLocation);
-        map.setZoom(16.5);
-        initialCenterSetRef.current = true; // Mark as set to prevent re-centering on every location update
-    } 
-    // For other views (full-screen map, options list), fit the entire route.
-    else if (view !== 'details' && directionsResponse) {
+    if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
         routeToBound.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
@@ -259,20 +239,12 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
             bounds.extend(userLocation);
         }
         map.fitBounds(bounds, 50); // 50px padding
-    } else if (view !== 'details') {
+    } else {
         map.panTo(userLocation || defaultCenter);
         map.setZoom(12);
     }
     
-  }, [view, selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
-
-  // Effect to reset the initial centering flag when we leave the details view
-  useEffect(() => {
-    if (view !== 'details') {
-        initialCenterSetRef.current = false;
-    }
-  }, [view]);
-
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
 
   if (!isLoaded) {
     return (
@@ -281,15 +253,6 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
       </div>
     );
   }
-  
-  const getCurrentMapOptions = () => {
-      // The small map in the details panel needs 'greedy' gesture handling to be interactive.
-      if (view === 'details') {
-          return mapOptionsForDetailsPanel;
-      }
-      // The full-screen map uses 'auto' and has zoom controls.
-      return mapOptionsWithZoomControl;
-  }
 
   return (
     <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden")}>
@@ -297,7 +260,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
           mapContainerStyle={mapContainerStyle}
           center={defaultCenter}
           zoom={12}
-          options={getCurrentMapOptions()}
+          options={mapOptions}
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
