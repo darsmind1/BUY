@@ -285,7 +285,7 @@ export default function Home() {
           </main>
         </aside>
         
-        <div className={`${mobileView === 'panel' && view !== 'details' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
+        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full`}>
             <MapView 
               isLoaded={isGoogleMapsLoaded}
               directionsResponse={directionsResponse} 

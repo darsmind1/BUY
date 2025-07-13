@@ -6,12 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Footprints, Bus, Clock, Wifi, Map, Snowflake, Accessibility } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
-import { Button } from './ui/button';
+import MapView from './map-view';
+
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
   busLocations?: BusLocation[];
-  // Props for embedded map on mobile
   isGoogleMapsLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
   routeIndex: number;
@@ -92,31 +92,41 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
-  onToggleMap
+  isGoogleMapsLoaded,
+  directionsResponse,
+  routeIndex,
+  userLocation,
 }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
   const busLines = getBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
 
   const isBusLive = busLocations.length > 0;
-  const liveBusData = isBusLive ? busLocations[0] : null; // Assuming we care about the first bus in the list
+  const liveBusData = isBusLive ? busLocations[0] : null; 
   
   if (!leg) return null;
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
-       <div className="relative h-[200px] md:hidden">
-            <div className="absolute inset-0 bg-muted">
-                 <p className="flex items-center justify-center h-full text-muted-foreground text-sm">Cargando mapa...</p>
+        <div className="md:hidden">
+            {isBusLive && (
+                <div className="flex items-center gap-2 p-4 pb-2 text-sm font-medium text-green-400">
+                    <Wifi className="h-4 w-4" />
+                    <span>Bus en el mapa</span>
+                </div>
+            )}
+            <div className="relative h-[200px] bg-muted">
+                <MapView 
+                    isLoaded={isGoogleMapsLoaded}
+                    directionsResponse={directionsResponse}
+                    routeIndex={routeIndex}
+                    userLocation={userLocation}
+                    selectedRoute={route}
+                    busLocations={busLocations}
+                    view="details"
+                />
             </div>
-            <div className="absolute inset-x-0 bottom-4 flex justify-center">
-                <Button onClick={onToggleMap}>
-                    <Map className="mr-2 h-4 w-4" />
-                    Ver mapa completo
-                </Button>
-            </div>
-       </div>
-
+        </div>
 
       <div className="p-4 space-y-3">
         <Card>
