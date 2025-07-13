@@ -102,7 +102,7 @@ export default function Home() {
   useEffect(() => {
     let watchId: number | null = null;
 
-    if (navigator.geolocation) { 
+    if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
           (position) => {
             const newLocation = {
@@ -247,19 +247,24 @@ export default function Home() {
         <aside className={`${isMobile && mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
           <header className="p-4 flex items-center gap-4 flex-shrink-0">
             {showBackButton ? (
+              <div className="flex items-center gap-4 flex-1">
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
-              ) : (
+                <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-4 flex-1">
                 <div className="p-2 bg-primary text-primary-foreground rounded-lg">
-                  <Bus className="h-5 w-5"/>
+                  <Bus className="h-5 w-5" />
                 </div>
+                <h1 className="text-xl font-medium tracking-tight">{getHeaderTitle()}</h1>
+              </div>
             )}
-            <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
             {view !== 'search' && (
-                <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                    <Map className="h-5 w-5" />
-                </Button>
+              <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
+                <Map className="h-5 w-5" />
+              </Button>
             )}
           </header>
           <Separator />
