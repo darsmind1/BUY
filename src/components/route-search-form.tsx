@@ -5,7 +5,7 @@ import { useState, type FormEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Search, MapPin, LocateFixed, Loader2, AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import { Search, MapPin, Loader2, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +20,7 @@ interface RouteSearchFormProps {
 export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocationObtained, isApiChecking, isApiError }: RouteSearchFormProps) {
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
+  const [isGettingLocation, setIsGettingLocation] = useState(true);
   const { toast } = useToast();
 
   const originInputRef = useRef<HTMLInputElement>(null);
@@ -28,68 +29,67 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
   const destinationAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   useEffect(() => {
-    if (isGoogleMapsLoaded && originInputRef.current && !originAutocompleteRef.current) {
-        originAutocompleteRef.current = new window.google.maps.places.Autocomplete(originInputRef.current, {
-            componentRestrictions: { country: "uy" },
-            fields: ["formatted_address"],
-        });
-        originAutocompleteRef.current.addListener('place_changed', () => {
-            const place = originAutocompleteRef.current?.getPlace();
-            if (place?.formatted_address) {
-                setOrigin(place.formatted_address);
-            }
-        });
-    }
+    if (isGoogleMapsLoaded) {
+      if (originInputRef.current && !originAutocompleteRef.current) {
+          originAutocompleteRef.current = new window.google.maps.places.Autocomplete(originInputRef.current, {
+              componentRestrictions: { country: "uy" },
+              fields: ["formatted_address"],
+          });
+          originAutocompleteRef.current.addListener('place_changed', () => {
+              const place = originAutocompleteRef.current?.getPlace();
+              if (place?.formatted_address) {
+                  setOrigin(place.formatted_address);
+              }
+          });
+      }
 
-    if (isGoogleMapsLoaded && destinationInputRef.current && !destinationAutocompleteRef.current) {
-        destinationAutocompleteRef.current = new window.google.maps.places.Autocomplete(destinationInputRef.current, {
-            componentRestrictions: { country: "uy" },
-            fields: ["formatted_address"],
-        });
-        destinationAutocompleteRef.current.addListener('place_changed', () => {
-            const place = destinationAutocompleteRef.current?.getPlace();
-            if (place?.formatted_address) {
-                setDestination(place.formatted_address);
+      if (destinationInputRef.current && !destinationAutocompleteRef.current) {
+          destinationAutocompleteRef.current = new window.google.maps.places.Autocomplete(destinationInputRef.current, {
+              componentRestrictions: { country: "uy" },
+              fields: ["formatted_address"],
+          });
+          destinationAutocompleteRef.current.addListener('place_changed', () => {
+              const place = destinationAutocompleteRef.current?.getPlace();
+              if (place?.formatted_address) {
+                  setDestination(place.formatted_address);
+              }
+          });
+      }
+
+      // Automatically get location on component mount
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setOrigin('Mi ubicación actual');
+            const coords = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            onLocationObtained(coords);
+            setIsGettingLocation(false);
+          },
+          (error) => {
+            setIsGettingLocation(false);
+            setOrigin(''); // Clear origin if location fails
+            console.error("Error getting location automatically:", error.message);
+            // Optionally notify user that location access is needed for auto-origin
+            if(error.code === error.PERMISSION_DENIED) {
+                 toast({
+                    title: "Ubicación desactivada",
+                    description: "Habilita la ubicación para usarla como punto de partida.",
+                });
             }
-        });
+          }
+        );
+      } else {
+        setIsGettingLocation(false);
+        // Geolocation not supported
+      }
     }
-  }, [isGoogleMapsLoaded]);
+  }, [isGoogleMapsLoaded, onLocationObtained, toast]);
   
-  const handleGetLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setOrigin('Mi ubicación actual');
-          const coords = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          onLocationObtained(coords);
-          toast({
-            title: "Ubicación obtenida",
-            description: "Se usará tu ubicación actual como punto de partida.",
-          })
-        },
-        (error) => {
-           toast({
-            variant: "destructive",
-            title: "Error de ubicación",
-            description: "No se pudo obtener tu ubicación. Por favor, habilita los permisos.",
-          })
-        }
-      );
-    } else {
-       toast({
-        variant: "destructive",
-        title: "Navegador no compatible",
-        description: "Tu navegador no soporta la geolocalización.",
-      })
-    }
-  };
-
   const handleSwapLocations = () => {
-    // Avoid swapping if destination is empty and origin is "Mi ubicación actual"
-    if (!destination && origin === 'Mi ubicación actual') return;
+    if (origin === 'Mi ubicación actual' && !destination) return;
     if (!destination && !origin) return;
 
     const tempOrigin = origin;
@@ -114,6 +114,7 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
   }
   
   const isFormDisabled = isApiChecking || isApiError;
+  const isOriginDisabled = isGettingLocation || (origin === 'Mi ubicación actual');
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-500">
@@ -133,19 +134,14 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
                                 id="origin" 
                                 value={origin}
                                 onChange={(e) => setOrigin(e.target.value)}
-                                className="border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0 h-9"
-                                placeholder="Mi ubicación actual"
+                                className={cn(
+                                    "border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0 h-9",
+                                    isOriginDisabled && "bg-muted/50"
+                                )}
+                                placeholder="Obteniendo ubicación..."
+                                disabled={isOriginDisabled}
                             />
-                            <Button 
-                                type="button" 
-                                variant="ghost"
-                                size="icon"
-                                onClick={handleGetLocation} 
-                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                                aria-label="Usar mi ubicación actual"
-                            >
-                                <LocateFixed className="h-4 w-4" />
-                            </Button>
+                             {isGettingLocation && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
                         </div>
                         <div className="relative border-t border-border">
                           <Button 
@@ -197,4 +193,3 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
     </form>
   );
 }
-
