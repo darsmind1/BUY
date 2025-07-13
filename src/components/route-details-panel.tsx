@@ -387,10 +387,16 @@ export default function RouteDetailsPanel({
                         <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
                         <p className="text-xs text-muted-foreground">{step.duration?.text} {isTransit && `(${step.transit.num_stops} paradas)`}</p>
                         {isTransit && transitStepInfo?.arrival && (
+                          <>
                            <div className="flex items-center gap-1.5 text-green-400 text-xs font-medium pt-1">
                               <Wifi className="h-3.5 w-3.5" />
                               <span>Llega en {Math.round(transitStepInfo.arrival.eta / 60)} min</span>
                            </div>
+                           <div className="flex items-center gap-1.5 text-green-400/80 text-xs font-medium">
+                              <Bus className="h-3.5 w-3.5" />
+                              <span>Bus en mapa</span>
+                            </div>
+                          </>
                         )}
                         {isTransit && !transitStepInfo?.arrival && step.transit?.departure_time?.text && (
                            <div className="flex items-center gap-1.5 text-muted-foreground text-xs pt-1">
