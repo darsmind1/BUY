@@ -51,6 +51,8 @@ const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
 const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function getAccessToken(): Promise<string> {
   const credentials = config.stm.credentials;
   if (credentials.length === 0) {
@@ -105,7 +107,7 @@ async function getAccessToken(): Promise<string> {
   }
 }
 
-async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any> {
+async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3): Promise<any> {
   try {
     const accessToken = await getAccessToken();
     const url = `${STM_API_BASE_URL}${path}`;
@@ -120,8 +122,14 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
       next: { revalidate: 0 }
     });
 
+    // Special retry logic for the bus stops endpoint, as it can occasionally return 204 incorrectly.
     if (response.status === 204) {
-      return [];
+      if (path === '/buses/busstops' && retries > 0) {
+        console.warn(`Received 204 for /buses/busstops. Retrying... (${retries - 1} left)`);
+        await delay(1000); // Wait 1 second before retrying
+        return stmApiFetch(path, options, retries - 1);
+      }
+      return []; // Return empty for other 204s or after retries are exhausted.
     }
     
     if (response.status === 429) {
