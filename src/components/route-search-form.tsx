@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Search, MapPin, Loader2, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface RouteSearchFormProps {
   isGoogleMapsLoaded: boolean;
@@ -21,6 +22,7 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [isGettingLocation, setIsGettingLocation] = useState(true);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
   const { toast } = useToast();
 
   const originInputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +62,7 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
+            setLocationPermissionDenied(false);
             setOrigin('Mi ubicación actual');
             const coords = {
               lat: position.coords.latitude,
@@ -72,18 +75,15 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
             setIsGettingLocation(false);
             setOrigin(''); // Clear origin if location fails
             console.error("Error getting location automatically:", error.message);
-            // Optionally notify user that location access is needed for auto-origin
+            
             if(error.code === error.PERMISSION_DENIED) {
-                 toast({
-                    title: "Ubicación desactivada",
-                    description: "Habilita la ubicación para usarla como punto de partida.",
-                });
+                 setLocationPermissionDenied(true);
             }
           }
         );
       } else {
         setIsGettingLocation(false);
-        // Geolocation not supported
+        setLocationPermissionDenied(true);
       }
     }
   }, [isGoogleMapsLoaded, onLocationObtained, toast]);
@@ -117,79 +117,90 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
   const isOriginDisabled = isGettingLocation || (origin === 'Mi ubicación actual');
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-500">
-      <fieldset disabled={isFormDisabled} className="space-y-4 group">
-        <Card>
-            <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                     <div className="flex flex-col items-center self-stretch justify-between">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground shrink-0 h-5 w-5"><circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2"></circle></svg>
-                        <div className="border-l-2 border-dashed border-border flex-grow my-2"></div>
-                        <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
-                    </div>
-                    <div className="flex-1 space-y-2 relative">
-                        <div className="relative">
-                            <Input 
-                                ref={originInputRef}
-                                id="origin" 
-                                value={origin}
-                                onChange={(e) => setOrigin(e.target.value)}
-                                className={cn(
-                                    "border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0 h-9",
-                                    isOriginDisabled && "bg-muted/50"
-                                )}
-                                placeholder="Obteniendo ubicación..."
-                                disabled={isOriginDisabled}
-                            />
-                             {isGettingLocation && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
-                        </div>
-                        <div className="relative border-t border-border">
-                          <Button 
-                              type="button" 
-                              variant="outline" 
-                              size="icon"
-                              className="absolute top-0 right-1 -translate-y-1/2 h-7 w-7 bg-background rounded-full border shadow-sm group-disabled:pointer-events-none"
-                              onClick={handleSwapLocations}
-                              aria-label="Invertir origen y destino"
-                          >
-                              <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                        </div>
-                        <div className="relative">
-                            <Input 
-                                ref={destinationInputRef}
-                                id="destination" 
-                                value={destination}
-                                onChange={(e) => setDestination(e.target.value)}
-                                className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
-                                placeholder="Escribe una dirección o lugar"
-                                required
-                            />
-                        </div>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-        
-        <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold group-disabled:bg-accent/50">
-            {isApiChecking ? (
-                <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    <span>Conectando...</span>
-                </>
-            ) : isApiError ? (
-                 <>
-                    <AlertTriangle className="mr-2 h-4 w-4" />
-                    <span>Servicio no disponible</span>
-                </>
-            ) : (
-                <>
-                    <Search className="mr-2 h-5 w-5" />
-                    <span>Buscar ruta</span>
-                </>
-            )}
-        </Button>
-      </fieldset>
-    </form>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {locationPermissionDenied && (
+         <Alert variant="destructive" className="animate-in fade-in-0 slide-in-from-top-4 duration-500">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Atención</AlertTitle>
+            <AlertDescription>
+                Por favor, activa los permisos del servicio de localización (GPS) para recibir información precisa.
+            </AlertDescription>
+        </Alert>
+      )}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <fieldset disabled={isFormDisabled} className="space-y-4 group">
+          <Card>
+              <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                       <div className="flex flex-col items-center self-stretch justify-between">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground shrink-0 h-5 w-5"><circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2"></circle></svg>
+                          <div className="border-l-2 border-dashed border-border flex-grow my-2"></div>
+                          <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
+                      </div>
+                      <div className="flex-1 space-y-2 relative">
+                          <div className="relative">
+                              <Input 
+                                  ref={originInputRef}
+                                  id="origin" 
+                                  value={origin}
+                                  onChange={(e) => setOrigin(e.target.value)}
+                                  className={cn(
+                                      "border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0 h-9",
+                                      isOriginDisabled && "bg-muted/50"
+                                  )}
+                                  placeholder="Obteniendo ubicación..."
+                                  disabled={isOriginDisabled}
+                              />
+                               {isGettingLocation && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                          </div>
+                          <div className="relative border-t border-border">
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="icon"
+                                className="absolute top-0 right-1 -translate-y-1/2 h-7 w-7 bg-background rounded-full border shadow-sm group-disabled:pointer-events-none"
+                                onClick={handleSwapLocations}
+                                aria-label="Invertir origen y destino"
+                            >
+                                <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </div>
+                          <div className="relative">
+                              <Input 
+                                  ref={destinationInputRef}
+                                  id="destination" 
+                                  value={destination}
+                                  onChange={(e) => setDestination(e.target.value)}
+                                  className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
+                                  placeholder="Escribe una dirección o lugar"
+                                  required
+                              />
+                          </div>
+                      </div>
+                  </div>
+              </CardContent>
+          </Card>
+          
+          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold group-disabled:bg-accent/50">
+              {isApiChecking ? (
+                  <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <span>Conectando...</span>
+                  </>
+              ) : isApiError ? (
+                   <>
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      <span>Servicio no disponible</span>
+                  </>
+              ) : (
+                  <>
+                      <Search className="mr-2 h-5 w-5" />
+                      <span>Buscar ruta</span>
+                  </>
+              )}
+          </Button>
+        </fieldset>
+      </form>
+    </div>
   );
 }
