@@ -9,6 +9,7 @@ import type { BusLocation } from '@/lib/stm-api';
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFormattedAddress } from '@/lib/google-maps-api';
+import { StopMarker } from '@/components/map-view';
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
@@ -106,6 +107,9 @@ const RouteDetailMap = ({
   const transitPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5 };
   const walkingPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 2, scale: 2, strokeColor: '#4A4A4A' }, offset: '0', repeat: '10px' }] };
   
+  const firstTransitStep = selectedRoute?.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT');
+  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
+
   return (
     <GoogleMap
       onLoad={onLoad}
@@ -123,6 +127,10 @@ const RouteDetailMap = ({
       ))}
       
       {userLocation && userMarkerIcon && <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />}
+
+      {departureStopLocation && (
+        <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }} />
+      )}
 
       {busLocations.map((bus) => (
         <Marker 
@@ -252,7 +260,7 @@ export default function RouteDetailsPanel({
                     <span>Bus en el mapa</span>
                 </div>
             )}
-            <div className="relative h-[200px] bg-muted touch-none">
+            <div className="relative h-[200px] bg-muted">
               <RouteDetailMap 
                 isLoaded={isGoogleMapsLoaded}
                 userLocation={userLocation}

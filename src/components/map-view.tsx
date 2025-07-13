@@ -7,6 +7,22 @@ import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { cn } from '@/lib/utils';
 
+// Reusable StopMarker component
+export const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
+  <Marker
+    position={position}
+    zIndex={99} // Below bus markers but above polylines
+    icon={{
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 6,
+      fillColor: "#A40034",
+      fillOpacity: 1,
+      strokeWeight: 2,
+      strokeColor: "#ffffff",
+    }}
+  />
+);
+
 interface MapViewProps {
   isLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
@@ -14,6 +30,7 @@ interface MapViewProps {
   userLocation: google.maps.LatLngLiteral | null;
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
+  view: string;
 }
 
 const mapContainerStyle = {
@@ -148,7 +165,7 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -237,6 +254,9 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     
   }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
 
+  const firstTransitStep = selectedRoute?.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT');
+  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
+
   if (!isLoaded) {
     return (
       <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -266,7 +286,11 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
           )}
 
           {userLocation && userMarkerIcon && (
-            <Marker position={userLocation} icon={userMarkerIcon} />
+            <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />
+          )}
+
+          {departureStopLocation && (
+            <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }} />
           )}
 
           {busLocations.map((bus) => (
