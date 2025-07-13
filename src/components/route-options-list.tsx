@@ -4,16 +4,23 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin } from 'lucide-react';
+import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
 import { getBusLocation, findClosestStmStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+
+interface AlternativeLineInfo {
+    line: string;
+    arrival: ArrivalInfo | null;
+}
 
 interface TransferInfo {
     stopName: string;
     stopLocation: google.maps.LatLngLiteral;
-    alternativeLines: string[];
+    mainTransferLine: string | null;
+    alternativeLines: AlternativeLineInfo[];
 }
 
 
@@ -49,6 +56,30 @@ const ArrivalInfoLegend = () => {
   )
 }
 
+const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
+    if (!arrivalInfo) return null;
+    if (arrivalInfo.eta < 60) return "Llegando";
+    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
+    return `Llega en ${arrivalMinutes} min`;
+};
+  
+const getSignalAge = (arrivalInfo: ArrivalInfo | null) => {
+    if (!arrivalInfo) return null;
+    const now = new Date().getTime();
+    const signalTimestamp = new Date(arrivalInfo.timestamp).getTime();
+    return (now - signalTimestamp) / 1000; // age in seconds
+};
+
+const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
+    const signalAge = getSignalAge(arrivalInfo);
+    if (signalAge === null) return 'text-primary'; // Default color
+  
+    if (signalAge < 90) return 'text-green-400'; // Fresh signal
+    if (signalAge < 180) return 'text-yellow-400'; // Slightly delayed signal
+    return 'text-red-500'; // Old signal
+};
+
+
 const RouteOptionItem = ({ 
   route, 
   index, 
@@ -75,29 +106,6 @@ const RouteOptionItem = ({
     return () => clearInterval(timer);
   }, []);
 
-  const getArrivalText = () => {
-    if (!arrivalInfo) return null;
-    if (arrivalInfo.eta < 60) return "Llegando";
-    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
-    return `Llega en ${arrivalMinutes} min`;
-  };
-  
-  const getSignalAge = () => {
-    if (!arrivalInfo) return null;
-    const now = new Date().getTime();
-    const signalTimestamp = new Date(arrivalInfo.timestamp).getTime();
-    return (now - signalTimestamp) / 1000; // age in seconds
-  };
-  
-  const getArrivalColorClass = () => {
-    const signalAge = getSignalAge();
-    if (signalAge === null) return 'text-primary'; // Default color
-  
-    if (signalAge < 90) return 'text-green-400'; // Fresh signal
-    if (signalAge < 180) return 'text-yellow-400'; // Slightly delayed signal
-    return 'text-red-500'; // Old signal
-  };
-
   const getScheduledArrivalInMinutes = () => {
       if (!scheduledDepartureTimeValue) return null;
       const departureTime = new Date(scheduledDepartureTimeValue);
@@ -110,24 +118,22 @@ const RouteOptionItem = ({
       return `Sale en ${diffMins} min`;
   };
 
-  const arrivalText = getArrivalText();
+  const arrivalText = getArrivalText(arrivalInfo);
   const scheduledText = getScheduledArrivalInMinutes();
     
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
   const totalDuration = getTotalDuration(route.legs);
   
-  const mainLines = leg.steps
-    .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
-    .map(step => step.transit!.line.short_name);
-
   return (
     <Card 
-      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
-      onClick={() => onSelectRoute(route, index, stmInfo)}
+      className="hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
       style={{ animationDelay: `${index * 100}ms`}}
     >
       <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between">
+        <div 
+            className="flex items-start justify-between cursor-pointer"
+            onClick={() => onSelectRoute(route, index, stmInfo)}
+        >
             <div className="flex items-center gap-1.5 flex-wrap flex-1">
               {renderableSteps.map((step, stepIndex) => {
                   const isLastStep = stepIndex === renderableSteps.length - 1;
@@ -162,9 +168,9 @@ const RouteOptionItem = ({
                 <span>{totalDuration} min</span>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground cursor-pointer" onClick={() => onSelectRoute(route, index, stmInfo)}>
             {arrivalInfo && arrivalText ? (
-              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
+              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass(arrivalInfo))}>
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
@@ -178,23 +184,47 @@ const RouteOptionItem = ({
             ) : null}
           </div>
           {transferInfo && (
-            <div className="border-t pt-3 mt-3 text-xs space-y-1.5">
-                <div className="flex items-center gap-2 text-muted-foreground font-medium">
-                    <Bus className="h-3.5 w-3.5" />
-                    <span>Transbordo</span>
-                </div>
-                <div className="flex items-center gap-2 pl-1">
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="text-foreground truncate">{transferInfo.stopName}</span>
-                </div>
-                <div className="flex items-center gap-2 pl-1">
-                    <ChevronsRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="text-foreground">
-                       {mainLines.length > 1 ? mainLines[1] : ''}
-                       {transferInfo.alternativeLines.length > 0 && ` y ${transferInfo.alternativeLines.length} opciones más`}
-                    </span>
-                </div>
-            </div>
+            <Accordion type="single" collapsible className="w-full -mb-3">
+                <AccordionItem value="item-1" className="border-t mt-3 border-dashed">
+                    <AccordionTrigger className="text-xs hover:no-underline py-3">
+                        <div className="flex flex-col text-left space-y-1.5">
+                             <div className="flex items-center gap-2 text-muted-foreground font-medium">
+                                <Bus className="h-3.5 w-3.5" />
+                                <span>Transbordo en <span className="text-foreground">{transferInfo.stopName.split(',')[0]}</span></span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <ChevronsRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <span className="text-foreground">
+                                    {transferInfo.mainTransferLine}
+                                    {transferInfo.alternativeLines.length > 0 && ` y ${transferInfo.alternativeLines.length} ${transferInfo.alternativeLines.length === 1 ? 'opción más' : 'opciones más'}`}
+                                </span>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-3 pr-2 space-y-2">
+                        {[
+                            { line: transferInfo.mainTransferLine, arrival: transferInfo.alternativeLines.find(l => l.line === transferInfo.mainTransferLine)?.arrival ?? null },
+                            ...transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine)
+                        ].map((alt, altIndex) => {
+                            if (!alt.line) return null;
+                            const altArrivalText = getArrivalText(alt.arrival);
+                            return (
+                                <div key={altIndex} className="flex items-center justify-between text-xs ml-5 pl-1.5 border-l border-dashed">
+                                    <Badge variant="secondary" className="font-mono">{alt.line}</Badge>
+                                    {altArrivalText ? (
+                                        <div className={cn("flex items-center gap-1.5 font-medium", getArrivalColorClass(alt.arrival))}>
+                                            <Wifi className="h-3 w-3" />
+                                            <span>{altArrivalText}</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-muted-foreground">Sin arribos</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
           )}
       </CardContent>
     </Card>
@@ -269,18 +299,13 @@ export default function RouteOptionsList({
     if (!isGoogleMapsLoaded) return;
 
     const mapStopsAndFetchArrivals = async () => {
-      if (!isApiConnected) {
-        setIsLoading(false);
-        return;
-      }
       setIsLoading(true);
 
       const allRoutesStmInfoPromises = routes.map(async (route, index) => {
-        const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
+        if (!isApiConnected) return { index, stmInfo: [] };
 
-        if (!transitSteps || transitSteps.length === 0) {
-          return { index, stmInfo: [] };
-        }
+        const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
+        if (!transitSteps || transitSteps.length === 0) return { index, stmInfo: [] };
         
         const stmInfoForRoutePromises = transitSteps.map(async (step) => {
            const googleTransitLine = step.transit?.line.short_name;
@@ -310,7 +335,6 @@ export default function RouteOptionsList({
       stmInfoResults.forEach(result => {
         newStmInfo[result.index] = result.stmInfo;
       });
-      
       setStmInfoByRoute(newStmInfo);
 
       // Handle transfer info
@@ -323,13 +347,16 @@ export default function RouteOptionsList({
                 const stopLocationLiteral = { lat: transferStopLocation.lat(), lng: transferStopLocation.lng() };
                 const stopName = await getFormattedAddress(stopLocationLiteral.lat, stopLocationLiteral.lng);
                 
-                const mainTransferLine = transferStep.transit?.line.short_name;
-                const alternativeLines = await findAlternativeLines(stopLocationLiteral, route.legs[0].end_location);
+                const mainTransferLine = transferStep.transit?.line.short_name ?? null;
+                let alternativeLines: string[] = [];
+                if (isApiConnected) {
+                    alternativeLines = await findAlternativeLines(stopLocationLiteral, route.legs[0].end_location);
+                }
 
-                // Filter out the main line from alternatives
-                const filteredAlternatives = alternativeLines.filter(line => line !== mainTransferLine);
-                
-                return { index, info: { stopName, stopLocation: stopLocationLiteral, alternativeLines: filteredAlternatives } };
+                const alternativeLinesInfo: AlternativeLineInfo[] = alternativeLines
+                    .map(line => ({ line, arrival: null }));
+
+                return { index, info: { stopName, stopLocation: stopLocationLiteral, mainTransferLine, alternativeLines: alternativeLinesInfo } };
             }
         }
         return { index, info: null };
@@ -350,50 +377,73 @@ export default function RouteOptionsList({
 
 
   useEffect(() => {
-    if (!isApiConnected || Object.keys(stmInfoByRoute).length === 0 || !isGoogleMapsLoaded) {
+    if (!isApiConnected || !isGoogleMapsLoaded || (Object.keys(stmInfoByRoute).length === 0 && Object.keys(transferInfoByRoute).length === 0)) {
       return;
     }
 
     const fetchAllArrivals = async () => {
-      const linesToFetch = Object.values(stmInfoByRoute).flat().map(info => ({
+      // Collect lines from primary route steps
+      const primaryLines = Object.values(stmInfoByRoute).flat().map(info => ({
         line: info.line,
         destination: info.lineDestination,
       }));
 
+      // Collect lines from transfer alternatives
+      const transferLines = Object.values(transferInfoByRoute).filter(Boolean).flatMap(info => 
+        info!.alternativeLines.map(alt => ({ line: alt.line, destination: null }))
+      );
+
+      const linesToFetch = [...primaryLines, ...transferLines];
       if (linesToFetch.length === 0) return;
 
       try {
         const locations = await getBusLocation(linesToFetch);
         const newArrivals: BusArrivalsState = {};
-        const newStmInfoByRoute: Record<number, StmInfo[]> = { ...stmInfoByRoute };
+        const newStmInfoByRoute: Record<number, StmInfo[]> = JSON.parse(JSON.stringify(stmInfoByRoute));
+        const newTransferInfoByRoute: Record<number, TransferInfo | null> = JSON.parse(JSON.stringify(transferInfoByRoute));
 
-        Object.entries(stmInfoByRoute).forEach(([routeIndexStr, infos]) => {
+        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral) => {
+            const liveBus = locations.find(l => l.line === line);
+            if (liveBus) {
+                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
+                    new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
+                    new window.google.maps.LatLng(stopLocation)
+                );
+                // Rough ETA: 30km/h average speed => 8.33 m/s
+                const eta = distance / 8.33; 
+                return { eta, timestamp: liveBus.timestamp };
+            }
+            return null;
+        }
+
+        // Update primary route arrivals
+        Object.entries(newStmInfoByRoute).forEach(([routeIndexStr, infos]) => {
           const routeIndex = parseInt(routeIndexStr);
           let firstArrival: ArrivalInfo | null = null;
-
-          const updatedInfos = infos.map(info => {
-              const liveBus = locations.find(l => l.line === info.line && l.direction === (info.lineDestination?.includes('Entrante') ? 1 : 2));
-              if (liveBus && info.departureStopLocation) {
-                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
-                  new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
-                  new window.google.maps.LatLng(info.departureStopLocation)
-                );
-                const eta = distance / 8.33; // ETA based on average speed (e.g., 30km/h = 8.33m/s)
-                const arrivalData = { eta, timestamp: liveBus.timestamp };
-                if (!firstArrival) {
-                  firstArrival = arrivalData;
-                }
-                return { ...info, arrival: arrivalData };
+          infos.forEach(info => {
+              if (info.departureStopLocation) {
+                  const arrivalData = findArrivalForStop(info.line, info.departureStopLocation);
+                  info.arrival = arrivalData;
+                  if (!firstArrival && arrivalData) {
+                    firstArrival = arrivalData;
+                  }
               }
-              return info;
           });
-          
           newArrivals[routeIndex] = firstArrival;
-          newStmInfoByRoute[routeIndex] = updatedInfos;
+        });
+
+        // Update transfer alternatives arrivals
+        Object.values(newTransferInfoByRoute).forEach(info => {
+            if (info) {
+                info.alternativeLines.forEach(alt => {
+                    alt.arrival = findArrivalForStop(alt.line, info.stopLocation);
+                });
+            }
         });
 
         setBusArrivals(prev => ({ ...prev, ...newArrivals }));
         setStmInfoByRoute(newStmInfoByRoute);
+        setTransferInfoByRoute(newTransferInfoByRoute);
 
       } catch (error) {
         console.error(`Error fetching bus locations:`, error);
@@ -404,7 +454,7 @@ export default function RouteOptionsList({
     const intervalId = setInterval(fetchAllArrivals, 30000);
 
     return () => clearInterval(intervalId);
-  }, [stmInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
+  }, [stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
 
   if (isLoading) {
     return (
@@ -414,11 +464,19 @@ export default function RouteOptionsList({
       </div>
     );
   }
+  
+  const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-      {isApiConnected && routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT')) && (
+      {isApiConnected && hasTransitRoutes && (
         <ArrivalInfoLegend />
+      )}
+      {!isApiConnected && hasTransitRoutes && (
+        <Alert variant="warning" className="text-xs">
+           <AlertTriangle className="h-4 w-4" />
+           <p>No se pudo conectar con el servicio de buses. Los horarios en tiempo real no están disponibles.</p>
+        </Alert>
       )}
       {routes.map((route, index) => (
         <RouteOptionItem 
@@ -434,3 +492,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
