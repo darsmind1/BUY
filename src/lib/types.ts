@@ -3,6 +3,7 @@ export interface RouteOption {
   id: string;
   summary: string;
   duration: number; // in seconds
+  walkingDuration: number; // in seconds
   gmapsRoute: google.maps.DirectionsRoute;
   transitDetails: {
     line: {

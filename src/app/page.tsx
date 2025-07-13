@@ -137,10 +137,14 @@ export default function Home() {
                            return null;
                        }
 
+                       const walkingSteps = leg.steps.filter(s => s.travel_mode === "WALKING");
+                       const walkingDuration = walkingSteps.reduce((total, step) => total + (step.duration?.value || 0), 0);
+
                        return {
                            id: `route-${index}`,
                            summary: route.summary || transitStep.transit.line.short_name || 'Ruta de bus',
                            duration: leg.duration?.value || 0, // in seconds
+                           walkingDuration: walkingDuration,
                            gmapsRoute: route,
                            transitDetails: {
                                line: {
@@ -158,7 +162,7 @@ export default function Home() {
                                headsign: transitStep.transit.headsign,
                                numStops: transitStep.transit.num_stops
                            },
-                           walkingSteps: leg.steps.filter(s => s.travel_mode === "WALKING")
+                           walkingSteps: walkingSteps
                        };
                     }).filter((route): route is RouteOption => route !== null);
 
@@ -210,9 +214,9 @@ export default function Home() {
   
   const getHeaderTitle = () => {
     switch(view) {
-      case 'search': return '¿A dónde vamos?';
-      case 'options': return 'Opciones de trayecto';
-      case 'details': return 'Detalles del viaje';
+      case 'search': return 'Indica tu viaje';
+      case 'options': return 'Opciones de Trayecto';
+      case 'details': return 'Detalles del Viaje';
       default: return 'BusesUY';
     }
   }
@@ -266,6 +270,7 @@ export default function Home() {
                   route={selectedRoute}
                   busLocations={busLocations}
                   userLocation={currentUserLocation}
+                  googleMapsApiKey={googleMapsApiKey}
                 />
               )}
           </main>

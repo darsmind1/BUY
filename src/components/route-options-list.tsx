@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, Wifi, Info } from 'lucide-react';
 import { getArrivalsForStop, BusArrival } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
-import { haversineDistance } from '@/lib/utils';
 import { getStopIdFromStopName } from '@/lib/stop-id-mapper';
 
 interface RouteOptionsListProps {
@@ -25,15 +24,15 @@ const ArrivalInfoLegend = () => {
       <div className="p-3 mb-2 rounded-lg bg-muted/50 border border-dashed text-xs text-muted-foreground space-y-2">
          <div className="flex items-center gap-2 font-medium text-foreground">
               <Info className="h-4 w-4" />
-              <span>Leyenda de arribos</span>
+              <span>Leyenda de Arribos</span>
          </div>
         <div className="flex items-center gap-2">
            <Wifi className="h-3.5 w-3.5 text-green-400 animate-pulse-green" />
-           <span>En tiempo real (bus con GPS)</span>
+           <span>En tiempo real (bus con GPS activo)</span>
         </div>
          <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-primary" />
-              <span>Horario programado para la línea</span>
+              <span>Horario programado (sin GPS)</span>
          </div>
       </div>
     
@@ -62,8 +61,7 @@ const RouteOptionItem = ({
   };
 
   const arrivalText = getArrivalText();
-  const walkingStep = route.walkingSteps[0];
-  const walkingDistance = walkingStep?.distance?.value || 0;
+  const walkingDuration = Math.round(route.walkingDuration / 60);
 
   return (
     <Card 
@@ -71,42 +69,39 @@ const RouteOptionItem = ({
       onClick={() => onSelectRoute(route)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
-      <CardContent className="p-4 flex items-center justify-between">
+      <CardContent className="p-4 flex items-center">
         <div className="flex flex-col gap-3 flex-1">
-          <div className="flex items-center gap-2">
-             <Badge variant="secondary" className="font-mono">{route.transitDetails.line.name}</Badge>
-             <span className="text-sm text-muted-foreground truncate">hacia {route.transitDetails.headsign}</span>
+          <div className="flex items-start justify-between">
+             <div className="flex flex-col gap-1.5">
+                <Badge variant="secondary" className="font-mono text-sm">{route.transitDetails.line.name}</Badge>
+                <span className="text-sm text-muted-foreground">hacia {route.transitDetails.headsign}</span>
+             </div>
+             <div className="text-right">
+                <p className="font-bold text-lg">~{Math.round(route.duration / 60)} min</p>
+                <p className="text-xs text-muted-foreground">Total</p>
+             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Footprints className="h-4 w-4" />
-                <span>{Math.round(walkingDistance)} m a parada {route.transitDetails.departureStop.name}</span>
-              </div>
-          </div>
-          
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {arrivalInfo ? (
-               arrivalInfo.eta > -1 ? (
-                 <div className="flex items-center gap-2 text-xs font-medium text-green-400">
-                    <Wifi className="h-3.5 w-3.5 animate-pulse-green" />
+          <div className="flex items-center gap-4 text-sm text-muted-foreground border-t pt-3 mt-1">
+              {arrivalInfo && arrivalInfo.eta > -1 ? (
+                 <div className="flex items-center gap-2 font-medium text-green-400">
+                    <Wifi className="h-4 w-4 animate-pulse-green" />
                     <span>{arrivalText}</span>
                  </div>
                ) : (
-                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>Horario programado</span>
+                 <div className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    <span>Próximo bus programado</span>
                  </div>
                )
-            ) : (
-                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>~{Math.round(route.duration / 60)} min en total</span>
-                 </div>
-            )}
+            }
+            <div className="flex items-center gap-2">
+              <Footprints className="h-4 w-4" />
+              <span>{walkingDuration > 0 ? `${walkingDuration} min a pie` : 'Menos de 1 min a pie'}</span>
+            </div>
           </div>
         </div>
-        <ArrowRight className="h-5 w-5 text-muted-foreground" />
+        <ArrowRight className="h-5 w-5 text-muted-foreground ml-4" />
       </CardContent>
     </Card>
   )
@@ -124,33 +119,37 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     const fetchAllArrivals = async () => {
         const arrivalPromises = routes.map(async (route) => {
             const stopName = route.transitDetails.departureStop.name;
-            const stopId = getStopIdFromStopName(stopName); // Use mapper
+            const stopId = getStopIdFromStopName(stopName);
             
             if (!stopId) {
                 console.warn(`Could not find a mapping for stop name: "${stopName}"`);
                 return { routeId: route.id, arrival: null };
             }
 
-            const lineId = parseInt(route.transitDetails.line.name, 10);
+            const lineName = route.transitDetails.line.name;
             
             try {
-                const arrivals = await getArrivalsForStop(stopId, lineId);
+                // Fetch for a specific line if possible, otherwise all arrivals for the stop
+                const arrivals = await getArrivalsForStop(stopId);
                 if (!arrivals) return { routeId: route.id, arrival: null };
 
-                // Find the next real-time arrival for the correct destination
-                const nextArrival = arrivals.find(a => 
+                // Find the next real-time arrival for the correct line and destination
+                const nextRealtimeArrival = arrivals.find(a => 
                     a.bus && 
                     a.eta > 0 &&
+                    a.bus.line === lineName &&
                     a.bus.destination?.toUpperCase().includes(route.transitDetails.headsign.toUpperCase())
                 );
                 
-                // If no real-time arrival, find a scheduled one as fallback
-                if (!nextArrival) {
-                    const scheduled = arrivals.find(a => a.eta === -1);
-                    return { routeId: route.id, arrival: scheduled || null };
+                if (nextRealtimeArrival) {
+                    return { routeId: route.id, arrival: nextRealtimeArrival };
                 }
 
-                return { routeId: route.id, arrival: nextArrival || null };
+                // Fallback: find any scheduled arrival for the correct line
+                const nextScheduledArrival = arrivals.find(a => a.eta === -1 && a.bus?.line === lineName);
+
+                return { routeId: route.id, arrival: nextScheduledArrival || null };
+
             } catch (error) {
                 console.error(`Error fetching bus arrivals for route ${route.id}:`, error);
                 return { routeId: route.id, arrival: null };

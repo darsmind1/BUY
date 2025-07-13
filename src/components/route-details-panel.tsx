@@ -1,18 +1,21 @@
 
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Image from 'next/image';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { useEffect, useState } from 'react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 interface RouteDetailsPanelProps {
   route: RouteOption;
   busLocations?: BusLocation[];
   userLocation: google.maps.LatLngLiteral | null;
+  googleMapsApiKey: string;
 }
 
 const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
@@ -28,8 +31,8 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
     useEffect(() => {
         const fetchAddress = async () => {
             if (location) {
-                const lat = 'lat' in location ? location.lat : location.lat;
-                const lng = 'lng' in location ? location.lng : location.lng;
+                const lat = 'lat' in location ? location.lat : location.lat();
+                const lng = 'lng' in location ? location.lng : location.lng();
                 const formattedAddr = await getFormattedAddress(lat, lng);
                 setAddress(formattedAddr);
             } else {
@@ -41,12 +44,12 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
     
     if (address === null) {
         return (
-             <p className="text-xs text-muted-foreground h-4 bg-muted/50 rounded animate-pulse w-3/4"></p>
+             <p className="text-sm text-muted-foreground h-4 bg-muted/50 rounded animate-pulse w-3/4"></p>
         );
     }
     
     return (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
             {prefix}: <span className="font-semibold text-foreground">{address}</span>
         </p>
     )
@@ -76,10 +79,33 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
     )
 }
 
+const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: string }) => {
+    const leg = route.gmapsRoute.legs[0];
+    const origin = leg.start_location.toUrlValue();
+    const destination = leg.end_location.toUrlValue();
+    const busPath = route.gmapsRoute.overview_path.map(p => p.toUrlValue()).join('|');
+
+    const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=600x200&scale=2&maptype=roadmap&language=es&region=UY&markers=color:blue|label:A|${origin}&markers=color:red|label:B|${destination}&path=color:0xA40034|weight:4|${busPath}&key=${apiKey}`;
+
+    return (
+        <div className="relative mb-4 overflow-hidden rounded-lg aspect-video w-full bg-muted">
+             <Image 
+                src={mapUrl}
+                alt="Mapa de la ruta" 
+                layout="fill"
+                objectFit="cover"
+                unoptimized
+             />
+        </div>
+    )
+}
+
+
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
   userLocation,
+  googleMapsApiKey
 }: RouteDetailsPanelProps) {
 
   const duration = Math.round(route.duration / 60);
@@ -90,60 +116,78 @@ export default function RouteDetailsPanel({
   
   if (!route || !route.transitDetails) return null;
 
+  const firstWalkingStep = route.walkingSteps.length > 0 ? route.walkingSteps[0] : null;
+
   return (
-    <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500">
+    <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-500">
+        
+        <StaticMapPreview route={route} apiKey={googleMapsApiKey} />
+
         {isBusLive && (
-            <div className="flex items-center gap-2 px-4 text-sm font-medium text-green-400">
+            <div className="flex items-center gap-2 px-1 text-sm font-medium text-green-400">
                 <Wifi className="h-4 w-4" />
-                <span>Bus en el mapa</span>
+                <span>Bus en el mapa (tiempo real)</span>
             </div>
         )}
 
-      <div className="p-4 space-y-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2">
-                 <Badge variant="outline" className="text-sm font-mono">{route.transitDetails.line.name}</Badge>
+      <div className="space-y-4">
+        <Card className="overflow-hidden">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <Badge variant="secondary" className="text-base font-mono py-1 px-3">{route.transitDetails.line.name}</Badge>
+              <div className="flex items-center gap-1.5 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span>Duración total: ~{duration} min</span>
               </div>
-              <div className="flex items-center gap-3 text-sm font-normal">
-                <div className="flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>~{duration} min</span>
-                </div>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-1">
-             <AddressDisplay prefix="Desde" location={userLocation} fallbackAddress={"Tu ubicación"} />
-             <AddressDisplay prefix="Hasta" location={leg.end_location.toJSON()} fallbackAddress={leg.end_address} />
+            </div>
+            <div className="text-sm text-muted-foreground">
+                Hacia <span className="font-bold text-foreground">{route.transitDetails.headsign}</span>
+            </div>
             {liveBusData && <BusFeatures bus={liveBusData} />}
           </CardContent>
         </Card>
 
         <div>
-          <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
+          <h3 className="mb-2 text-sm font-semibold text-muted-foreground px-1">Indicaciones del Viaje</h3>
           <div className="w-full space-y-1">
-            {leg.steps.map((step, index) => (
-               <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                   <div className="mt-0.5"><StepIcon type={step.travel_mode as 'WALKING' | 'TRANSIT'} /></div>
-                   <div className="flex-1 space-y-0.5">
-                        {step.travel_mode === 'TRANSIT' && step.transit ? (
-                            <>
-                                <p className="font-medium text-xs leading-tight">Toma el bus línea <strong>{step.transit.line.short_name}</strong> hacia <strong>{step.transit.headsign}</strong></p>
-                                <p className="text-xs text-muted-foreground">Viaje de {step.transit.num_stops} paradas ({step.duration?.text})</p>
-                                <p className="text-xs text-muted-foreground pt-1">Baja en la parada {step.transit.arrival_stop.name}</p>
-                            </>
-                        ) : (
-                             <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions }}></p>
-                        )}
-                        <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
-                   </div>
-                   {step.travel_mode === 'TRANSIT' && step.transit && (
-                     <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name}</Badge>
-                   )}
-               </div>
-            ))}
+            {firstWalkingStep && (
+                <Card>
+                    <CardContent className="p-0">
+                         <Accordion type="single" collapsible>
+                            <AccordionItem value="item-1" className="border-b-0">
+                                <AccordionTrigger className="flex items-center gap-3 p-3 text-sm hover:no-underline">
+                                     <Footprints className="h-5 w-5 text-primary shrink-0" />
+                                     <div className="flex-1 text-left">
+                                         <p className="font-medium">Caminar a la parada {route.transitDetails.departureStop.name}</p>
+                                         <p className="text-xs text-muted-foreground">{firstWalkingStep.duration?.text}</p>
+                                     </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pb-2">
+                                    <div className="px-3 space-y-2 border-t pt-3">
+                                        {route.walkingSteps.map((step, index) => (
+                                            <div key={index} className="flex items-start gap-3 text-xs">
+                                                <Footprints className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                                <p className="flex-1" dangerouslySetInnerHTML={{ __html: step.instructions }}></p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    </CardContent>
+                </Card>
+            )}
+
+            <Card>
+                 <CardContent className="flex items-center gap-3 p-3 text-sm">
+                     <Bus className="h-5 w-5 text-primary shrink-0" />
+                     <div className="flex-1 text-left">
+                         <p className="font-medium">Tomar el bus <strong>{route.transitDetails.line.name}</strong></p>
+                         <p className="text-xs text-muted-foreground">{route.transitDetails.numStops} paradas ({leg.steps.find(s=>s.travel_mode === 'TRANSIT')?.duration?.text})</p>
+                         <p className="text-xs text-muted-foreground pt-1">Bajar en: {route.transitDetails.arrivalStop.name}</p>
+                     </div>
+                 </CardContent>
+            </Card>
           </div>
         </div>
       </div>
