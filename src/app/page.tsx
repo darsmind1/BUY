@@ -22,7 +22,7 @@ const LIBRARIES: ("places" | "marker")[] = ['places', 'marker'];
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
-  const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
+  const [walkingDirections, setWalkingDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeOptions, setRouteOptions] = useState<StmRouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<StmRouteOption | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -156,7 +156,7 @@ export default function Home() {
 
     if (!originParam || !destination) return;
     
-    setDirectionsResponse(null);
+    setWalkingDirections(null);
     setSelectedRoute(null);
     setRouteOptions([]);
     setIsLoading(true);
@@ -194,7 +194,7 @@ export default function Home() {
   const handleSelectRoute = (route: StmRouteOption) => {
     setSelectedRoute(route);
 
-    // Now, get directions for walking to the stop and for the bus route itself
+    // Now, get directions for walking to the stop
     if (currentUserLocation && window.google) {
         const directionsService = new window.google.maps.DirectionsService();
         directionsService.route(
@@ -208,13 +208,13 @@ export default function Home() {
             },
             (result, status) => {
                 if (status === window.google.maps.DirectionsStatus.OK && result) {
-                    setDirectionsResponse(result);
+                    setWalkingDirections(result);
                     setView('details');
                     setMobileView('panel');
                 } else {
                     console.error(`Error fetching walking directions: ${status}`);
                     // Fallback to showing details without walking path
-                    setDirectionsResponse(null);
+                    setWalkingDirections(null);
                     setView('details');
                     setMobileView('panel');
                 }
@@ -222,7 +222,7 @@ export default function Home() {
         );
     } else {
         // Can't get walking directions, just show details
-        setDirectionsResponse(null);
+        setWalkingDirections(null);
         setView('details');
         setMobileView('panel');
     }
@@ -236,7 +236,7 @@ export default function Home() {
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
-      setDirectionsResponse(null);
+      setWalkingDirections(null);
       setBusLocations([]);
     } else if (view === 'options') {
       setView('search');
@@ -302,7 +302,7 @@ export default function Home() {
                   route={selectedRoute}
                   busLocations={busLocations}
                   isGoogleMapsLoaded={isGoogleMapsLoaded}
-                  walkingDirections={directionsResponse}
+                  walkingDirections={walkingDirections}
                   userLocation={currentUserLocation}
                 />
               )}
@@ -318,7 +318,7 @@ export default function Home() {
             <MapView 
               isLoaded={isGoogleMapsLoaded}
               stmRoute={selectedRoute}
-              walkingDirections={directionsResponse}
+              walkingDirections={walkingDirections}
               userLocation={currentUserLocation}
               busLocations={busLocations}
               view={view}

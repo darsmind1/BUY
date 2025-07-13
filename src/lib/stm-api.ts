@@ -139,12 +139,12 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1)
     if (response.status >= 500 && response.status <= 504) {
       console.error(`STM API Server Error for path ${path}. Status: ${response.status}. Retrying... (${retries} left)`);
       if (retries > 0) {
-        await delay(1000); // Wait 1s before retrying
+        await delay(500); // Wait 0.5s before retrying
         return stmApiFetch(path, options, retries - 1);
       } else {
         console.error(`STM API request failed after multiple retries for path ${path}. Status: ${response.status}.`);
-        // Throw an error that can be caught by the calling function
-        throw new Error(`STM API server error: ${response.status}`);
+        // Return empty array to avoid crashing the app
+        return [];
       }
     }
 
@@ -168,15 +168,16 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1)
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`STM API request to ${path} failed:`, response.status, errorText);
-      throw new Error(`STM API request failed for ${path}: ${response.status} ${errorText}`);
+       // Return empty array to avoid crashing the app
+      return [];
     }
     
     return await response.json();
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
-    // Re-throw the error to be handled by the calling function (e.g., findDirectBusRoutes)
-    throw error;
+    // Return empty array to avoid crashing the app
+    return [];
   }
 }
 
@@ -273,22 +274,16 @@ export async function getNearbyStops(coords: { lat: number, lng: number }, radiu
 }
 
 async function getLineShape(line: number, stopId: number): Promise<{ shape: [number, number, number][], destination: string } | null> {
-    try {
-        const path = `/buses/lines/${line}/busstops/${stopId}/shape`;
-        const data = await stmApiFetch(path);
-        if (data && data.shape && data.shape.coordinates && data.destination) {
-            return {
-                shape: data.shape.coordinates, // [lng, lat, stopId?]
-                destination: data.destination.name
-            };
-        }
-        console.warn(`No shape data returned for line ${line} at stop ${stopId}`);
-        return null;
-    } catch (error) {
-        // Don't rethrow, just return null so one failed shape doesn't break everything
-        console.error(`Error fetching shape for line ${line} at stop ${stopId}:`, error);
-        return null;
+    const path = `/buses/lines/${line}/busstops/${stopId}/shape`;
+    const data = await stmApiFetch(path);
+    if (data && data.shape && data.shape.coordinates && data.destination) {
+        return {
+            shape: data.shape.coordinates, // [lng, lat, stopId?]
+            destination: data.destination.name
+        };
     }
+    console.warn(`No shape data returned for line ${line} at stop ${stopId}`);
+    return null;
 }
 
 export async function findDirectBusRoutes(origin: { lat: number, lng: number }, destination: { lat: number, lng: number }): Promise<StmRouteOption[]> {
