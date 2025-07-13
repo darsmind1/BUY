@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection, getLineRoute } from '@/lib/stm-api';
 import type { StmLineRoute, StmInfo } from '@/lib/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -34,6 +35,7 @@ export default function Home() {
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   
   const { isLoaded: isGoogleMapsLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -238,7 +240,9 @@ export default function Home() {
 
   const showBackButton = view !== 'search';
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  if (isMobile === undefined) {
+    return null; // or a loading skeleton
+  }
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
