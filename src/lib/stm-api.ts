@@ -169,11 +169,27 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        return data.map((bus: any) => ({
+        const allBuses = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
+
+        // Filter buses by destination if provided
+        const linesWithDestinations = lines.filter(l => l.destination);
+        if (linesWithDestinations.length > 0) {
+            return allBuses.filter(bus => {
+                const requiredLine = lines.find(l => l.line === bus.line);
+                // If the required line has no specific destination, include the bus.
+                if (!requiredLine?.destination) {
+                    return true;
+                }
+                // If it has a destination, check for a match.
+                return bus.destination === requiredLine.destination;
+            });
+        }
+        
+        return allBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
@@ -225,5 +241,3 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
         return null;
     }
 }
-
-    

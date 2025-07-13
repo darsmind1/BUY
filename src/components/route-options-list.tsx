@@ -14,6 +14,7 @@ import { Alert } from '@/components/ui/alert';
 
 interface AlternativeLineInfo {
     line: string;
+    destination: string | null;
     arrival: ArrivalInfo | null;
 }
 
@@ -21,6 +22,7 @@ interface TransferInfo {
     stopName: string;
     stopLocation: google.maps.LatLngLiteral;
     mainTransferLine: string | null;
+    mainTransferLineDestination: string | null;
     alternativeLines: AlternativeLineInfo[];
 }
 
@@ -72,7 +74,7 @@ const getSignalAge = (arrivalInfo: ArrivalInfo | null) => {
 };
 
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
-    if (!arrivalInfo) return 'text-primary'; // Default color
+    if (!arrivalInfo) return 'text-primary';
     
     const arrivalMinutes = arrivalInfo.eta / 60;
     
@@ -198,15 +200,15 @@ const RouteOptionItem = ({
                                 <ChevronsRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                 <span className="text-foreground">
                                     {transferInfo.mainTransferLine}
-                                    {transferInfo.alternativeLines.length > 0 && ` y ${transferInfo.alternativeLines.length} ${transferInfo.alternativeLines.length === 1 ? 'opción más' : 'opciones más'}`}
+                                    {transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine).length > 0 && ` y ${transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine).length} ${transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine).length === 1 ? 'opción más' : 'opciones más'}`}
                                 </span>
                             </div>
                         </div>
                     </AccordionTrigger>
                     <AccordionContent className="pb-3 pr-2 space-y-2">
                         {[
-                            { line: transferInfo.mainTransferLine, arrival: transferInfo.alternativeLines.find(l => l.line === transferInfo.mainTransferLine)?.arrival ?? null },
-                            ...transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine)
+                            { line: transferInfo.mainTransferLine, destination: transferInfo.mainTransferLineDestination, arrival: transferInfo.alternativeLines.find(l => l.line === transferInfo.mainTransferLine && l.destination === transferInfo.mainTransferLineDestination)?.arrival ?? null },
+                            ...transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine || l.destination !== transferInfo.mainTransferLineDestination)
                         ].map((alt, altIndex) => {
                             if (!alt.line) return null;
                             const altArrivalText = getArrivalText(alt.arrival);
@@ -261,7 +263,7 @@ export default function RouteOptionsList({
   const findAlternativeLines = useCallback(async (
         transferStopLocation: google.maps.LatLngLiteral, 
         destination: google.maps.LatLng | string
-    ): Promise<string[]> => {
+    ): Promise<{line: string, destination: string | null}[]> => {
     
     return new Promise((resolve) => {
         if (!isGoogleMapsLoaded) return resolve([]);
@@ -278,17 +280,23 @@ export default function RouteOptionsList({
             region: 'UY'
         }, (result, status) => {
             if (status === google.maps.DirectionsStatus.OK && result) {
-                const alternativeLines = new Set<string>();
+                const alternativeLines = new Map<string, {line: string, destination: string | null}>();
                 result.routes.forEach(route => {
                     route.legs.forEach(leg => {
                         leg.steps.forEach(step => {
                             if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
-                                alternativeLines.add(step.transit.line.short_name);
+                                const line = step.transit.line.short_name;
+                                const headsign = step.transit.headsign || null;
+                                // Use a composite key to store unique line-destination pairs
+                                const key = `${line}-${headsign}`;
+                                if (!alternativeLines.has(key)) {
+                                    alternativeLines.set(key, { line, destination: headsign });
+                                }
                             }
                         })
                     })
                 });
-                resolve(Array.from(alternativeLines));
+                resolve(Array.from(alternativeLines.values()));
             } else {
                 resolve([]);
             }
@@ -350,15 +358,17 @@ export default function RouteOptionsList({
                 const stopName = await getFormattedAddress(stopLocationLiteral.lat, stopLocationLiteral.lng);
                 
                 const mainTransferLine = transferStep.transit?.line.short_name ?? null;
-                let alternativeLines: string[] = [];
+                const mainTransferLineDestination = transferStep.transit?.headsign ?? null;
+                
+                let alternativeLines: {line: string, destination: string | null}[] = [];
                 if (isApiConnected) {
                     alternativeLines = await findAlternativeLines(stopLocationLiteral, route.legs[0].end_location);
                 }
 
                 const alternativeLinesInfo: AlternativeLineInfo[] = alternativeLines
-                    .map(line => ({ line, arrival: null }));
+                    .map(lineInfo => ({ ...lineInfo, arrival: null }));
 
-                return { index, info: { stopName, stopLocation: stopLocationLiteral, mainTransferLine, alternativeLines: alternativeLinesInfo } };
+                return { index, info: { stopName, stopLocation: stopLocationLiteral, mainTransferLine, mainTransferLineDestination, alternativeLines: alternativeLinesInfo } };
             }
         }
         return { index, info: null };
@@ -393,7 +403,7 @@ export default function RouteOptionsList({
 
       // Collect lines from transfer alternatives
       const transferLines = Object.values(transferInfoByRoute).filter(Boolean).flatMap(info => 
-        info!.alternativeLines.map(alt => ({ line: alt.line, destination: null }))
+        info!.alternativeLines.map(alt => ({ line: alt.line, destination: alt.destination }))
       );
 
       const linesToFetch = [...primaryLines, ...transferLines].filter(l => l.line);
@@ -402,9 +412,9 @@ export default function RouteOptionsList({
       try {
         const locations = await getBusLocation(linesToFetch);
         
-        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral) => {
+        const findArrivalForStop = (line: string, destination: string | null, stopLocation: google.maps.LatLngLiteral) => {
             if (!isGoogleMapsLoaded) return null;
-            const liveBus = locations.find(l => l.line === line);
+            const liveBus = locations.find(l => l.line === line && l.destination === destination);
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
                     new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
@@ -424,7 +434,7 @@ export default function RouteOptionsList({
               newStmInfo[routeIndex] = currentStmInfo[routeIndex].map(info => {
                 const newInfo = { ...info };
                 if (newInfo.departureStopLocation) {
-                  const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
+                  const newArrival = findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
                   const oldSignalAge = getSignalAge(newInfo.arrival);
                   if (newArrival) {
                     newInfo.arrival = newArrival;
@@ -449,7 +459,7 @@ export default function RouteOptionsList({
                   ...currentInfo,
                   alternativeLines: currentInfo.alternativeLines.map(alt => {
                     const newAlt = { ...alt };
-                    const newArrival = findArrivalForStop(newAlt.line, currentInfo.stopLocation);
+                    const newArrival = findArrivalForStop(newAlt.line, newAlt.destination, currentInfo.stopLocation);
                     const oldSignalAge = getSignalAge(newAlt.arrival);
                     if (newArrival) {
                       newAlt.arrival = newArrival;

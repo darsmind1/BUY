@@ -18,6 +18,7 @@ export interface BusLocation {
     routeId: string;
     tripId: string;
     thermalConfort: string;
+    destination: string | null;
 }
 
 export interface StmBusStop {
@@ -57,5 +58,3 @@ export interface StmLineRoute {
         lng: number;
     }[];
 }
-
-    
