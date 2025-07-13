@@ -1,11 +1,12 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api';
+import { GoogleMap, DirectionsRenderer, Marker, Polyline } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { cn } from '@/lib/utils';
+import type { StmLineRoute } from '@/lib/types';
 
 // Reusable StopMarker component
 export const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
@@ -30,6 +31,7 @@ interface MapViewProps {
   userLocation: google.maps.LatLngLiteral | null;
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
+  lineRoute: StmLineRoute | null;
   view: string;
 }
 
@@ -165,7 +167,7 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, lineRoute, view }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -214,8 +216,8 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     const route = directionsResponse.routes[routeIndex];
     if (!route) return;
   
-    const transitPolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.8, strokeWeight: 6, zIndex: 1 };
-    const walkingPolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, zIndex: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }] };
+    const transitPolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.8, strokeWeight: 6, zIndex: 3 };
+    const walkingPolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, zIndex: 4, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }] };
   
     route.legs[0].steps.forEach((step: google.maps.DirectionsStep) => {
       const polyline = new window.google.maps.Polyline(
@@ -225,16 +227,29 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
       polyline.setMap(mapRef.current);
       customPolylinesRef.current.push(polyline);
     });
+
+    if (lineRoute) {
+        const fullLinePath = lineRoute.route.map(p => ({ lat: p.lat, lng: p.lng }));
+        const linePolyline = new window.google.maps.Polyline({
+            path: fullLinePath,
+            strokeColor: '#B0B0B0', // A lighter grey for the background route
+            strokeOpacity: 0.7,
+            strokeWeight: 4,
+            zIndex: 1 // Lower zIndex to be behind the main route
+        });
+        linePolyline.setMap(mapRef.current);
+        customPolylinesRef.current.push(linePolyline);
+    }
   
     setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: true });
-  }, [directionsResponse, routeIndex, mapLoaded, isLoaded]);
+  }, [directionsResponse, routeIndex, lineRoute, mapLoaded, isLoaded]);
 
   // Effect to set the map bounds or center based on the current view
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || hasCenteredRef.current) return;
     
-    // For full map view, fit to route bounds. This runs only once.
+    // For full map view, fit to route bounds. This runs only once per route.
     if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];

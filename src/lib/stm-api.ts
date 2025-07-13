@@ -2,7 +2,7 @@
 'use server';
 
 import config from './config';
-import type { BusLocation, StmBusStop } from './types';
+import type { BusLocation, StmBusStop, StmLineRoute } from './types';
 import { haversineDistance } from './utils';
 
 // Initialize with a random index to distribute load initially
@@ -201,6 +201,21 @@ export async function findClosestStmStop(lat: number, lng: number): Promise<StmB
         return closestStop;
     } catch (error) {
         console.error(`Error finding closest stop for coords ${lat},${lng}:`, error);
+        return null;
+    }
+}
+
+export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
+    const path = `/buses/line/${line}/route`;
+    try {
+        const data = await stmApiFetch(path);
+        if (!data || !Array.isArray(data.route) || data.route.length === 0) {
+            console.warn(`Could not get route for line ${line}`);
+            return null;
+        }
+        return data as StmLineRoute;
+    } catch (error) {
+        console.error(`Error in getLineRoute for line ${line}:`, error);
         return null;
     }
 }

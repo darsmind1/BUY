@@ -1,13 +1,33 @@
 
-import type { BusLocation as StmBusLocation } from './stm-api';
-
-export interface RouteOption {
-  id: string;
-  gmapsRoute: google.maps.DirectionsResult;
-  routeIndex: number;
+export interface BusLocation {
+    timestamp: string;
+    line: string;
+    id: string;
+    direction: number;
+    access: string;
+    lastStopId: number;
+    nextStopId: number;
+    nextStopDistance: number;
+    nextStopArrival: number;
+    location: {
+      type: "Point",
+      coordinates: [number, number]
+    },
+    angle: number;
+    lastUpdate: string;
+    routeId: string;
+    tripId: string;
+    thermalConfort: string;
 }
 
-export type BusLocation = StmBusLocation;
+export interface StmBusStop {
+    busstopId: number;
+    name: string;
+    location: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+}
 
 export interface ArrivalInfo {
   eta: number; // calculated ETA in seconds
@@ -23,4 +43,16 @@ export interface StmInfo {
 
 export interface BusArrivalsState {
   [routeIndex: number]: ArrivalInfo | null;
+}
+
+export interface StmLineRoute {
+    line: string;
+    description: string;
+    route: {
+        type: number;
+        stopId: number;
+        name: string;
+        lat: number;
+        lng: number;
+    }[];
 }

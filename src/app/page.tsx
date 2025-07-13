@@ -13,7 +13,8 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, checkApiConnection, getLineRoute } from '@/lib/stm-api';
+import type { StmLineRoute } from '@/lib/types';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -27,6 +28,7 @@ export default function Home() {
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
   const [selectedLineDestination, setSelectedLineDestination] = useState<string | null>(null);
+  const [selectedLineRoute, setSelectedLineRoute] = useState<StmLineRoute | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
@@ -158,6 +160,7 @@ export default function Home() {
     setSelectedRouteIndex(0);
     setSelectedStopId(null);
     setSelectedLineDestination(null);
+    setSelectedLineRoute(null);
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
@@ -195,11 +198,20 @@ export default function Home() {
     );
   };
 
-  const handleSelectRoute = (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => {
+  const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
     setSelectedStopId(stopId);
     setSelectedLineDestination(lineDestination);
+
+    const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+    const lineName = firstTransitStep?.transit?.line.short_name;
+    
+    if (lineName && apiStatus === 'connected') {
+        const lineRouteData = await getLineRoute(lineName);
+        setSelectedLineRoute(lineRouteData);
+    }
+
     setView('details');
     setMobileView('panel');
   };
@@ -214,6 +226,7 @@ export default function Home() {
       setSelectedRoute(null);
       setSelectedStopId(null);
       setSelectedLineDestination(null);
+      setSelectedLineRoute(null);
       setBusLocations([]);
     } else if (view === 'options') {
       setView('search');
@@ -279,8 +292,6 @@ export default function Home() {
                   route={selectedRoute}
                   busLocations={busLocations}
                   isGoogleMapsLoaded={isGoogleMapsLoaded}
-                  directionsResponse={directionsResponse}
-                  routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
                 />
               )}
@@ -300,6 +311,7 @@ export default function Home() {
               userLocation={currentUserLocation}
               selectedRoute={selectedRoute}
               busLocations={busLocations}
+              lineRoute={selectedLineRoute}
               view={view}
             />
         </div>

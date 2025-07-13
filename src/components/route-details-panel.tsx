@@ -15,8 +15,6 @@ interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
   busLocations?: BusLocation[];
   isGoogleMapsLoaded: boolean;
-  directionsResponse: google.maps.DirectionsResult | null;
-  routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
 }
 
