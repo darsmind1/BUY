@@ -4,7 +4,7 @@
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, ChevronDown } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -55,8 +55,8 @@ const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: strin
              <Image 
                 src={mapUrl}
                 alt="Mapa de la ruta" 
-                layout="fill"
-                objectFit="cover"
+                fill
+                className="object-cover"
                 unoptimized
              />
         </div>
@@ -127,7 +127,7 @@ export default function RouteDetailsPanel({
                                 </AccordionTrigger>
                                 <AccordionContent className="pb-2">
                                     <div className="px-3 space-y-2 border-t pt-3">
-                                        {route.walkingSteps.flatMap(ws => ws.steps).map((step, index) => (
+                                        {route.walkingSteps.flatMap(ws => ws.steps || []).map((step, index) => (
                                             <div key={index} className="flex items-start gap-3 text-xs">
                                                 <Footprints className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                                                 <p className="flex-1" dangerouslySetInnerHTML={{ __html: step.instructions }}></p>
@@ -159,5 +159,3 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
-
-    

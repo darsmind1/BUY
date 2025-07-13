@@ -14,33 +14,55 @@ const stopNameMap: Record<string, number> = {
   "Terminal Tres Cruces": 2981,
   "Av. Italia y Bv. Gral. Artigas": 2102,
   "Av. Rivera y Bv. Gral. Artigas": 3288,
-  // This helps map variations like "y" vs "&"
-  "Av 8 de Octubre y Bv José Batlle y Ordoñez": 2988,
-  "Av 18 de Julio y Dr Pablo de Maria": 4022,
-  "Av 18 de Julio y Ejido": 3939,
-  "Av Gral Flores y Av Gral San Martin": 2296,
-  "Av Millan y Clemenceau": 1826,
-  "Bv Gral Artigas y Av Millan": 1696,
-  "Av Italia y Bv Gral Artigas": 2102,
-  "Av Rivera y Bv Gral Artigas": 3288,
+  "Av. Gral. Rivera y Bv. Gral. Artigas": 3288, // Variation
+  "Mercedes y Dr Javier Barrios Amorin": 3940,
+  "Mercedes y Ejido": 3941,
+  "Yaguaron y Av 18 de Julio": 3942,
+  "Av 18 de Julio y Andes": 4204,
+  "Av 18 de Julio y Convencion": 4205,
+  "Plaza Independencia": 4060,
+  "Ciudadela y Rincon": 4721,
+  "Buenos Aires y Misiones": 4720,
+  "Cerrito y Colon": 4719,
 };
 
 /**
  * Tries to find a corresponding STM bus stop ID from a stop name provided by Google.
  * This is a workaround for the discrepancy between Google's stop names and STM's IDs.
+ * It's intentionally flexible to handle variations.
  * @param stopName - The name of the stop, usually from Google Directions API.
  * @returns The STM bus stop ID number, or null if not found.
  */
 export function getStopIdFromStopName(stopName: string): number | null {
-  const normalizedStopName = stopName.replace(/ y /g, ' & ').replace(/\./g, '');
-  
-  // Try direct match first
-  if (stopNameMap[stopName]) {
-    return stopNameMap[stopName];
+  // Normalize the input name: remove dots, convert to lowercase, and handle '&' vs 'y'
+  const normalizedStopName = stopName
+    .replace(/\./g, '')
+    .toLowerCase()
+    .replace(/ y | & /g, ' y ');
+
+  // Try for a direct, exact match first after normalization
+  for (const key in stopNameMap) {
+    const normalizedKey = key
+      .replace(/\./g, '')
+      .toLowerCase()
+      .replace(/ y | & /g, ' y ');
+    if (normalizedKey === normalizedStopName) {
+      return stopNameMap[key];
+    }
   }
-  
-  // Try finding a key that is contained within the stop name
-  const key = Object.keys(stopNameMap).find(k => normalizedStopName.includes(k.replace(/ y /g, ' & ').replace(/\./g, '')));
-  
-  return key ? stopNameMap[key] : null;
+
+  // If no exact match, try a more lenient search: check if a known stop name is part of the Google stop name.
+  // This helps with cases where Google adds extra info like " (esquina...)"
+  for (const key in stopNameMap) {
+    const normalizedKey = key
+      .replace(/\./g, '')
+      .toLowerCase()
+      .replace(/ y | & /g, ' y ');
+
+    if (normalizedStopName.includes(normalizedKey)) {
+      return stopNameMap[key];
+    }
+  }
+
+  return null;
 }

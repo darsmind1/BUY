@@ -132,9 +132,11 @@ export default function Home() {
                 if (status === window.google.maps.DirectionsStatus.OK && result && result.routes.length > 0) {
                     const parsedRoutes: RouteOption[] = result.routes.map((route, index) => {
                        const leg = route.legs[0];
+                       if (!leg) return null;
+
                        const transitStep = leg.steps.find(step => step.travel_mode === "TRANSIT" && step.transit);
                        
-                       if (!leg || !transitStep || !transitStep.transit) {
+                       if (!transitStep || !transitStep.transit) {
                            return null;
                        }
 
@@ -227,7 +229,7 @@ export default function Home() {
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
-        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full bg-sidebar`}>
+        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full bg-card`}>
           <header className="p-4 flex items-center gap-4 flex-shrink-0">
             {showBackButton ? (
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
@@ -295,6 +297,4 @@ export default function Home() {
       </div>
   );
 }
-    
-
     

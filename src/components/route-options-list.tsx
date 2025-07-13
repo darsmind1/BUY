@@ -54,23 +54,28 @@ const RouteOptionItem = ({
 }) => {
   
   const getArrivalText = () => {
-    if (!arrivalData || !arrivalData.arrival) return "Horario programado";
+    if (!arrivalData) return "Horario programado";
     const { arrival, isLoading } = arrivalData;
 
     if (isLoading) return "Buscando arribo...";
 
-    const arrivalMinutes = Math.round(arrival.eta / 60);
-
+    // Handle case where no arrival was found
+    if (!arrival) return "Horario no disponible";
+    
+    // Scheduled arrival
     if (arrival.eta === -1) {
        return "Horario programado";
     }
+
+    const arrivalMinutes = Math.round(arrival.eta / 60);
+
     if (arrivalMinutes < 1) {
       return `Llegando`;
     }
     return `Llega en ${arrivalMinutes} min`;
   };
 
-  const isRealTime = arrivalData?.arrival?.eta ?? -1 > -1;
+  const isRealTime = arrivalData?.arrival?.eta !== undefined && arrivalData.arrival.eta > -1;
   const arrivalText = getArrivalText();
   const walkingDuration = Math.round(route.walkingDuration / 60);
   const totalDuration = Math.round(route.duration / 60);
@@ -125,12 +130,16 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
   useEffect(() => {
     if (!isApiConnected || routes.length === 0) {
+        setBusArrivals({}); // Clear arrivals when routes change or API disconnects
         return;
     }
 
     const fetchAllArrivals = async () => {
         const arrivalPromises = routes.map(async (route) => {
-            setBusArrivals(prev => ({ ...prev, [route.id]: { arrival: null, isLoading: true } }));
+            const currentState = busArrivals[route.id];
+            if (!currentState || currentState.isLoading) {
+                 setBusArrivals(prev => ({ ...prev, [route.id]: { arrival: null, isLoading: true } }));
+            }
 
             const stopId = route.transitDetails.departureStop.stopId;
             if (!stopId) {
@@ -144,9 +153,10 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                 const arrivals = await getArrivalsForStop(stopId);
                 if (!arrivals) return { routeId: route.id, arrival: null };
 
+                // First, look for a real-time arrival for the correct line and destination
                 const nextRealtimeArrival = arrivals.find(a => 
                     a.bus && 
-                    a.eta > 0 &&
+                    a.eta > -1 && // Realtime indicator
                     a.bus.line === lineName &&
                     a.bus.destination?.toUpperCase().includes(route.transitDetails.headsign.toUpperCase())
                 );
@@ -155,7 +165,13 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                     return { routeId: route.id, arrival: nextRealtimeArrival };
                 }
                 
-                const nextScheduledArrival = arrivals.find(a => a.eta === -1 && a.bus?.line === lineName);
+                // If no real-time arrival, look for a scheduled one for the same line
+                const nextScheduledArrival = arrivals.find(a => 
+                  a.eta === -1 && 
+                  a.bus?.line === lineName &&
+                  a.bus.destination?.toUpperCase().includes(route.transitDetails.headsign.toUpperCase())
+                );
+
                 return { routeId: route.id, arrival: nextScheduledArrival || null };
 
             } catch (error) {
@@ -165,15 +181,16 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         });
 
         const results = await Promise.all(arrivalPromises);
-        const newArrivals: BusArrivalsState = {};
         
-        results.forEach(result => {
-            if (result) {
-                newArrivals[result.routeId] = { arrival: result.arrival, isLoading: false };
-            }
+        setBusArrivals(prev => {
+            const newArrivals = {...prev};
+            results.forEach(result => {
+                if (result) {
+                    newArrivals[result.routeId] = { arrival: result.arrival, isLoading: false };
+                }
+            });
+            return newArrivals;
         });
-        
-        setBusArrivals(prev => ({ ...prev, ...newArrivals }));
     };
 
     fetchAllArrivals();
@@ -206,5 +223,3 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
-
-    

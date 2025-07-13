@@ -158,10 +158,11 @@ export async function getBusLocation(line: string, destination?: string): Promis
     if (!line) return [];
     
     let path = `/buses?lines=${line}`;
-    if (destination) {
-        path += `&destination=${encodeURIComponent(destination)}`;
-    }
-
+    // The STM API for bus locations by destination is not always reliable, 
+    // so we often get better results by querying just the line.
+    // If destination is provided, we can still use it for more precise queries if needed.
+    // For now, fetching all buses of a line is more robust.
+    
     const data = await stmApiFetch(path);
 
     if (!Array.isArray(data)) {
@@ -172,7 +173,7 @@ export async function getBusLocation(line: string, destination?: string): Promis
         return [];
     }
 
-    return data.map((bus: any) => {
+    const allBuses = data.map((bus: any) => {
         const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
         return {
             ...bus,
@@ -183,6 +184,13 @@ export async function getBusLocation(line: string, destination?: string): Promis
             destination: bus.destination,
         };
     }) as BusLocation[];
+
+    // If a destination was provided, filter the results. This is more reliable than the API's own filter.
+    if (destination) {
+        return allBuses.filter(bus => bus.destination?.toUpperCase().includes(destination.toUpperCase()));
+    }
+
+    return allBuses;
 }
 
 

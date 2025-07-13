@@ -36,7 +36,7 @@ const montevideoBounds = {
 const mapStyle = [
   {
     "elementType": "geometry",
-    "stylers": [{ "color": "#F0F4F8" }]
+    "stylers": [{ "color": "#f5f5f5" }]
   },
   {
     "elementType": "labels.icon",
@@ -44,29 +44,40 @@ const mapStyle = [
   },
   {
     "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#212F3D" }]
+    "stylers": [{ "color": "#616161" }]
   },
   {
     "elementType": "labels.text.stroke",
-    "stylers": [{ "color": "#ffffff" }]
-  },
-  {
-    "featureType": "administrative",
-    "elementType": "geometry.stroke",
-    "stylers": [{ "color": "#c9c9c9" }]
+    "stylers": [{ "color": "#f5f5f5" }]
   },
   {
     "featureType": "administrative.land_parcel",
     "stylers": [{ "visibility": "off" }]
   },
   {
+    "featureType": "administrative.land_parcel",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#bdbdbd" }]
+  },
+  {
     "featureType": "poi",
-    "stylers": [{ "visibility": "off" }]
+    "elementType": "geometry",
+    "stylers": [{ "color": "#eeeeee" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#757575" }]
   },
   {
     "featureType": "poi.park",
     "elementType": "geometry",
-    "stylers": [{ "color": "#e0e8f0" }]
+    "stylers": [{ "color": "#e5e5e5" }]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
   },
   {
     "featureType": "road",
@@ -81,7 +92,7 @@ const mapStyle = [
   {
     "featureType": "road.highway",
     "elementType": "geometry",
-    "stylers": [{ "color": "#e0e8f0" }]
+    "stylers": [{ "color": "#dadada" }]
   },
   {
     "featureType": "road.highway",
@@ -106,7 +117,7 @@ const mapStyle = [
   {
     "featureType": "water",
     "elementType": "geometry",
-    "stylers": [{ "color": "#c9dcec" }]
+    "stylers": [{ "color": "#c9c9c9" }]
   },
   {
     "featureType": "water",
@@ -238,5 +249,3 @@ export default function MapView({ isLoaded, selectedRoute, userLocation, busLoca
     </div>
   );
 }
-
-    
