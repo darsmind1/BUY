@@ -4,16 +4,17 @@
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Eye } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from './ui/button';
 
 interface RouteDetailsPanelProps {
   route: RouteOption;
   busLocations?: BusLocation[];
-  userLocation: google.maps.LatLngLiteral | null;
   googleMapsApiKey: string;
+  onCenterOnRoute: () => void;
 }
 
 const BusFeatures = ({ bus }: { bus: BusLocation }) => {
@@ -40,18 +41,19 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
     )
 }
 
-const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: string }) => {
-    if (!route.gmapsRoute || !route.gmapsRoute.legs[0]) return null;
+const StaticMapPreview = ({ route, apiKey, onCenterOnRoute }: { route: RouteOption, apiKey: string, onCenterOnRoute: () => void }) => {
+    const routeData = route.gmapsRoute.routes[route.routeIndex];
+    if (!routeData || !routeData.legs[0]) return null;
 
-    const leg = route.gmapsRoute.legs[0];
+    const leg = routeData.legs[0];
     const origin = leg.start_location.toUrlValue();
     const destination = leg.end_location.toUrlValue();
-    const busPath = route.gmapsRoute.overview_path.map(p => p.toUrlValue()).join('|');
+    const busPath = routeData.overview_path.map(p => p.toUrlValue()).join('|');
 
     const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=600x200&scale=2&maptype=roadmap&language=es&region=UY&markers=color:blue|label:A|${origin}&markers=color:red|label:B|${destination}&path=color:0xA40034|weight:4|${busPath}&key=${apiKey}`;
 
     return (
-        <div className="relative mb-4 overflow-hidden rounded-lg aspect-[16/7] w-full bg-muted">
+        <div className="relative mb-4 overflow-hidden rounded-lg aspect-[16/7] w-full bg-muted group">
              <Image 
                 src={mapUrl}
                 alt="Mapa de la ruta" 
@@ -59,6 +61,12 @@ const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: strin
                 className="object-cover"
                 unoptimized
              />
+             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Button variant="secondary" onClick={onCenterOnRoute}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Ver en el mapa
+                </Button>
+             </div>
         </div>
     )
 }
@@ -67,13 +75,16 @@ const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: strin
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
-  userLocation,
-  googleMapsApiKey
+  googleMapsApiKey,
+  onCenterOnRoute
 }: RouteDetailsPanelProps) {
 
   const duration = Math.round(route.duration / 60);
-  const leg = route.gmapsRoute.legs[0];
+  const routeData = route.gmapsRoute.routes[route.routeIndex];
+  const leg = routeData?.legs[0];
   
+  if (!leg) return null;
+
   const isBusLive = busLocations.length > 0;
   const liveBusData = isBusLive ? busLocations[0] : null; 
   
@@ -84,7 +95,7 @@ export default function RouteDetailsPanel({
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-500">
         
-        <StaticMapPreview route={route} apiKey={googleMapsApiKey} />
+        <StaticMapPreview route={route} apiKey={googleMapsApiKey} onCenterOnRoute={onCenterOnRoute} />
 
         {isBusLive && (
             <div className="flex items-center gap-2 px-1 text-sm font-medium text-green-400">
@@ -159,3 +170,5 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
+
+    

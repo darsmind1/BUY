@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { Bus, ArrowLeft, Loader2, Map } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map as MapIcon, Eye } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -13,8 +13,8 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
-import type { RouteOption } from '@/lib/types';
+import { getBusLocation, BusLocation, checkApiConnection, getArrivalsForStop } from '@/lib/stm-api';
+import type { RouteOption, BusArrivalInfo } from '@/lib/types';
 import { getStopIdFromStopName } from '@/lib/stop-id-mapper';
 
 
@@ -26,10 +26,14 @@ export default function Home() {
   const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
+  const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [busArrivals, setBusArrivals] = useState<Record<string, BusArrivalInfo>>({});
+  
+  const mapRef = useRef<google.maps.Map | null>(null);
   const { toast } = useToast();
   
   const { isLoaded: isGoogleMapsLoaded } = useJsApiLoader({
@@ -89,6 +93,70 @@ export default function Home() {
     };
   }, [view, selectedRoute, apiStatus]);
   
+  const fetchAllArrivals = async (routes: RouteOption[]) => {
+      if (!isApiConnected || routes.length === 0) {
+        setBusArrivals({});
+        return;
+      }
+      
+      setBusArrivals(prev => {
+        const newArrivals = {...prev};
+        routes.forEach(route => {
+          newArrivals[route.id] = { isLoading: true, arrival: null };
+        });
+        return newArrivals;
+      });
+
+      const arrivalPromises = routes.map(async (route) => {
+          const stopId = route.transitDetails.departureStop.stopId;
+          if (!stopId) {
+              return { routeId: route.id, data: { arrival: null, isLoading: false } };
+          }
+
+          const lineName = route.transitDetails.line.name;
+          
+          try {
+              const arrivals = await getArrivalsForStop(stopId);
+              if (!arrivals) return { routeId: route.id, data: { arrival: null, isLoading: false } };
+
+              const nextRealtimeArrival = arrivals.find(a => 
+                  a.bus && 
+                  a.eta > -1 && 
+                  a.bus.line === lineName &&
+                  a.bus.destination?.toUpperCase().includes(route.transitDetails.headsign.toUpperCase())
+              );
+              
+              if (nextRealtimeArrival) {
+                  return { routeId: route.id, data: { arrival: nextRealtimeArrival, isLoading: false } };
+              }
+              
+              const nextScheduledArrival = arrivals.find(a => 
+                a.eta === -1 && 
+                a.bus?.line === lineName &&
+                a.bus.destination?.toUpperCase().includes(route.transitDetails.headsign.toUpperCase())
+              );
+
+              return { routeId: route.id, data: { arrival: nextScheduledArrival || null, isLoading: false } };
+
+          } catch (error) {
+              console.error(`Error fetching bus arrivals for route ${route.id}:`, error);
+              return { routeId: route.id, data: { arrival: null, isLoading: false } };
+          }
+      });
+
+      const results = await Promise.all(arrivalPromises);
+      
+      setBusArrivals(prev => {
+          const newArrivals = {...prev};
+          results.forEach(result => {
+              if (result) {
+                  newArrivals[result.routeId] = result.data;
+              }
+          });
+          return newArrivals;
+      });
+  };
+
   const handleSearch = async (origin: string, destination: string) => {
     if (!isGoogleMapsLoaded || !window.google) {
         toast({ variant: "destructive", title: "Error", description: "El mapa no está listo. Intenta de nuevo en unos segundos." });
@@ -112,6 +180,7 @@ export default function Home() {
     setRouteOptions([]);
     setSelectedRoute(null);
     setBusLocations([]);
+    setDirectionsResult(null);
 
     const directionsService = new window.google.maps.DirectionsService();
     
@@ -146,9 +215,10 @@ export default function Home() {
                        return {
                            id: `route-${index}`,
                            summary: route.summary || transitStep.transit.line.short_name || 'Ruta de bus',
-                           duration: leg.duration?.value || 0, // in seconds
+                           duration: leg.duration?.value || 0,
                            walkingDuration: walkingDuration,
-                           gmapsRoute: route,
+                           gmapsRoute: result, // Store the full DirectionsResult
+                           routeIndex: index, // Store the index to identify the route within the result
                            transitDetails: {
                                line: {
                                    name: transitStep.transit.line.short_name || 'N/A',
@@ -174,6 +244,7 @@ export default function Home() {
                         toast({ title: "No se encontraron rutas", description: "No se encontraron líneas de ómnibus directas. Intenta con otras direcciones." });
                     } else {
                         setRouteOptions(parsedRoutes);
+                        fetchAllArrivals(parsedRoutes);
                         setView('options');
                         setMobileView('panel');
                     }
@@ -197,22 +268,26 @@ export default function Home() {
 
   const handleSelectRoute = (route: RouteOption) => {
     setSelectedRoute(route);
+    setDirectionsResult(route.gmapsRoute);
     setView('details');
-    setMobileView('panel');
+    setMobileView('map'); // On mobile, switch to map view first
   };
 
   const handleBack = () => {
-    if (mobileView === 'map') {
-      setMobileView('panel');
+    if (mobileView === 'map' && view === 'details') {
+      setMobileView('panel'); // From map in details, go back to details panel
       return;
     }
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
+      setDirectionsResult(null);
       setBusLocations([]);
+      setMobileView('panel');
     } else if (view === 'options') {
       setView('search');
       setRouteOptions([]);
+      setMobileView('panel');
     }
   };
   
@@ -224,6 +299,17 @@ export default function Home() {
       default: return 'BusesUY';
     }
   }
+
+  const handleCenterOnRoute = () => {
+    const map = mapRef.current;
+    if (!map || !selectedRoute?.gmapsRoute.routes[selectedRoute.routeIndex]) return;
+
+    const route = selectedRoute.gmapsRoute.routes[selectedRoute.routeIndex];
+    const bounds = new window.google.maps.LatLngBounds();
+    route.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+    map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+  };
+
 
   const showBackButton = view !== 'search';
 
@@ -241,9 +327,11 @@ export default function Home() {
                 </div>
             )}
             <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
-            <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                <Map className="h-5 w-5" />
-            </Button>
+            {view !== 'search' && (
+              <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
+                  <MapIcon className="h-5 w-5" />
+              </Button>
+            )}
           </header>
           <Separator />
           
@@ -266,35 +354,39 @@ export default function Home() {
                 <RouteOptionsList 
                   routes={routeOptions} 
                   onSelectRoute={handleSelectRoute}
-                  isApiConnected={apiStatus === 'connected'}
+                  arrivals={busArrivals}
                 />
               )}
               {view === 'details' && selectedRoute && (
                 <RouteDetailsPanel 
                   route={selectedRoute}
                   busLocations={busLocations}
-                  userLocation={currentUserLocation}
                   googleMapsApiKey={googleMapsApiKey}
+                  onCenterOnRoute={handleCenterOnRoute}
                 />
               )}
           </main>
         </aside>
         
-        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full relative`}>
+        <div className={`${mobileView === 'panel' && view !== 'search' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full relative`}>
             {mobileView === 'map' && view !== 'search' && (
-              <Button variant="secondary" size="icon" onClick={handleBack} aria-label="Volver al panel" className="absolute top-4 left-4 z-10 shadow-lg">
+              <Button variant="secondary" size="icon" onClick={handleBack} aria-label="Volver al panel" className="absolute top-4 left-4 z-10 shadow-lg md:hidden">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
-              selectedRoute={selectedRoute}
+              directions={directionsResult}
+              routeIndex={selectedRoute?.routeIndex}
               userLocation={currentUserLocation}
               busLocations={busLocations}
               view={view}
+              mapRef={mapRef}
             />
         </div>
       </div>
   );
 }
+    
+
     

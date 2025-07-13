@@ -2,18 +2,19 @@
 "use client";
 
 import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api';
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
-import type { RouteOption } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface MapViewProps {
   isLoaded: boolean;
-  selectedRoute: RouteOption | null;
+  directions: google.maps.DirectionsResult | null;
+  routeIndex?: number;
   userLocation: google.maps.LatLngLiteral | null;
   busLocations: BusLocation[];
   view: string;
+  mapRef: React.MutableRefObject<google.maps.Map | null>;
 }
 
 const mapContainerStyle = {
@@ -141,11 +142,9 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, selectedRoute, userLocation, busLocations, view }: MapViewProps) {
-  const mapRef = useRef<google.maps.Map | null>(null);
+export default function MapView({ isLoaded, directions, routeIndex, userLocation, busLocations, view, mapRef }: MapViewProps) {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
-  const hasCenteredRef = useRef(false);
 
   useEffect(() => {
     if (isLoaded && window.google) {
@@ -163,32 +162,29 @@ export default function MapView({ isLoaded, selectedRoute, userLocation, busLoca
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
     setMapLoaded(true);
-    hasCenteredRef.current = false; // Reset on new map load
-  }, []);
+  }, [mapRef]);
 
   const onUnmount = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
     setMapLoaded(false);
-  }, []);
+  }, [mapRef]);
   
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || !isLoaded) return;
     
-    if ((view === 'details' || view === 'options') && selectedRoute?.gmapsRoute) {
+    if ((view === 'details' || view === 'options') && directions?.routes[0]) {
         // Fit map to the bounds of the selected Google Maps route
         const bounds = new window.google.maps.LatLngBounds();
-        selectedRoute.gmapsRoute.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+        const routeToFit = (routeIndex !== undefined && directions.routes[routeIndex]) ? directions.routes[routeIndex] : directions.routes[0];
+        routeToFit.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
         map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-        hasCenteredRef.current = true;
     } else if (view === 'search') {
-        if(hasCenteredRef.current) return;
         map.panTo(userLocation || defaultCenter);
         map.setZoom(13);
-        hasCenteredRef.current = true;
     }
     
-  }, [selectedRoute, mapLoaded, userLocation, view, isLoaded]);
+  }, [directions, routeIndex, mapLoaded, userLocation, view, isLoaded, mapRef]);
 
   if (!isLoaded) {
     return (
@@ -208,9 +204,10 @@ export default function MapView({ isLoaded, selectedRoute, userLocation, busLoca
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {selectedRoute?.gmapsRoute && (
+          {directions && (
              <DirectionsRenderer 
-                directions={selectedRoute.gmapsRoute} 
+                directions={directions}
+                routeIndex={routeIndex}
                 options={{
                     suppressMarkers: true, // We'll draw our own markers
                     polylineOptions: {
@@ -249,3 +246,5 @@ export default function MapView({ isLoaded, selectedRoute, userLocation, busLoca
     </div>
   );
 }
+
+    
