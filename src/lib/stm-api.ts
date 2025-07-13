@@ -146,8 +146,8 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
+export async function getBusLocation(lines: {line: string, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
@@ -162,13 +162,30 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        const allBuses = data.map((bus: any) => ({
+        const allBusesRaw = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
+        
+        // Filter buses by the required line and destination pairs.
+        const filteredBuses = allBusesRaw.filter(bus => {
+            // Find if this bus's line number is in our required list.
+            return lines.some(requiredLine => {
+                if (bus.line !== requiredLine.line) {
+                    return false;
+                }
+                // If the required line has a specific destination, the bus must match it.
+                // The API can return null or empty strings for destinations, so we treat them as equivalent.
+                if (requiredLine.destination) {
+                    return (bus.destination || null) === requiredLine.destination;
+                }
+                // If the required line has no specific destination, any bus of that line number is a match.
+                return true;
+            });
+        });
 
-        return allBuses;
+        return filteredBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
