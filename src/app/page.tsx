@@ -13,7 +13,8 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection, findDirectBusRoutes, StmRouteOption } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
+import type { RouteOption } from '@/lib/types';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -22,9 +23,8 @@ const LIBRARIES: ("places" | "marker")[] = ['places', 'marker'];
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
-  const [walkingDirections, setWalkingDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [routeOptions, setRouteOptions] = useState<StmRouteOption[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<StmRouteOption | null>(null);
+  const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
@@ -60,16 +60,16 @@ export default function Home() {
     let intervalId: NodeJS.Timeout | null = null;
 
     const fetchBusLocations = async () => {
-      if (!selectedRoute || apiStatus !== 'connected') {
+      if (!selectedRoute || !selectedRoute.transitDetails || apiStatus !== 'connected') {
         setBusLocations([]);
         return;
       }
       
       try {
-        const locations = await getBusLocation(selectedRoute.line.toString(), selectedRoute.destination);
+        const locations = await getBusLocation(selectedRoute.transitDetails.line.name, selectedRoute.transitDetails.headsign);
         setBusLocations(locations);
       } catch (error) {
-        console.error(`Error fetching locations for line ${selectedRoute.line}:`, error);
+        console.error(`Error fetching locations for line ${selectedRoute.transitDetails.line.name}:`, error);
         setBusLocations([]);
       }
     };
@@ -87,61 +87,14 @@ export default function Home() {
       }
     };
   }, [view, selectedRoute, apiStatus]);
-
-  useEffect(() => {
-    let watchId: number | null = null;
-
-    if (navigator.geolocation) { 
-        watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            const newLocation = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-            };
-            setCurrentUserLocation(newLocation);
-          },
-          (error) => {
-            console.error("Error watching position:", error);
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          }
-        );
+  
+  const handleSearch = async (origin: string, destination: string) => {
+    if (!isGoogleMapsLoaded || !window.google) {
+        toast({ variant: "destructive", title: "Error", description: "El mapa no está listo. Intenta de nuevo en unos segundos." });
+        return;
     }
 
-    return () => {
-      if (watchId !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-    };
-  }, []);
-
-  const geocodeAddress = (address: string | google.maps.LatLngLiteral): Promise<google.maps.LatLngLiteral> => {
-    return new Promise((resolve, reject) => {
-        if (!isGoogleMapsLoaded) {
-            return reject(new Error("Google Maps API not loaded."));
-        }
-        if (typeof address !== 'string') {
-            resolve(address); // It's already a lat/lng literal
-            return;
-        }
-
-        const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ address, region: 'UY' }, (results, status) => {
-            if (status === 'OK' && results && results[0]) {
-                const location = results[0].geometry.location;
-                resolve({ lat: location.lat(), lng: location.lng() });
-            } else {
-                reject(new Error(`Geocoding failed for ${address}: ${status}`));
-            }
-        });
-    });
-  };
-
-  const handleSearch = async (origin: string, destination: string) => {
-    let originParam: string | google.maps.LatLngLiteral = origin;
+    let originParam: string | google.maps.LatLng = origin;
     if (origin === 'Mi ubicación actual') {
       if (!currentUserLocation) {
         toast({
@@ -151,81 +104,93 @@ export default function Home() {
         });
         return;
       }
-      originParam = currentUserLocation;
+      originParam = new window.google.maps.LatLng(currentUserLocation.lat, currentUserLocation.lng);
     }
-
-    if (!originParam || !destination) return;
     
-    setWalkingDirections(null);
-    setSelectedRoute(null);
-    setRouteOptions([]);
     setIsLoading(true);
+    setRouteOptions([]);
+    setSelectedRoute(null);
+    setBusLocations([]);
 
+    const directionsService = new window.google.maps.DirectionsService();
+    
     try {
-        const [originCoords, destinationCoords] = await Promise.all([
-            geocodeAddress(originParam),
-            geocodeAddress(destination),
-        ]);
-
-        const stmRoutes = await findDirectBusRoutes(originCoords, destinationCoords);
-
-        if (stmRoutes.length === 0) {
-             toast({
-                title: "No se encontraron rutas",
-                description: "No se encontraron líneas de ómnibus directas. Intenta con otras direcciones.",
-             });
-        } else {
-            setRouteOptions(stmRoutes);
-            setView('options');
-            setMobileView('panel');
-        }
-    } catch (error) {
-        console.error('Error during route search:', error);
-        toast({
-            variant: "destructive",
-            title: "Error al buscar ruta",
-            description: "No se pudo calcular la ruta. Verifica las direcciones o intenta de nuevo más tarde.",
-        });
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-  const handleSelectRoute = (route: StmRouteOption) => {
-    setSelectedRoute(route);
-
-    // Now, get directions for walking to the stop
-    if (currentUserLocation && window.google) {
-        const directionsService = new window.google.maps.DirectionsService();
         directionsService.route(
             {
-                origin: currentUserLocation,
-                destination: {
-                    lat: route.departureStop.location.coordinates[1],
-                    lng: route.departureStop.location.coordinates[0],
+                origin: originParam,
+                destination: destination,
+                travelMode: window.google.maps.TravelMode.TRANSIT,
+                transitOptions: {
+                    modes: [google.maps.TransitMode.BUS],
                 },
-                travelMode: window.google.maps.TravelMode.WALKING,
+                provideRouteAlternatives: true,
+                region: 'UY'
             },
             (result, status) => {
-                if (status === window.google.maps.DirectionsStatus.OK && result) {
-                    setWalkingDirections(result);
-                    setView('details');
-                    setMobileView('panel');
+                setIsLoading(false);
+                if (status === window.google.maps.DirectionsStatus.OK && result && result.routes.length > 0) {
+                    const parsedRoutes: RouteOption[] = result.routes.map((route, index) => {
+                       const leg = route.legs[0];
+                       const transitStep = leg.steps.find(step => step.travel_mode === "TRANSIT" && step.transit);
+                       
+                       if (!leg || !transitStep || !transitStep.transit) {
+                           return null;
+                       }
+
+                       return {
+                           id: `route-${index}`,
+                           summary: route.summary || transitStep.transit.line.short_name || 'Ruta de bus',
+                           duration: leg.duration?.value || 0, // in seconds
+                           gmapsRoute: route,
+                           transitDetails: {
+                               line: {
+                                   name: transitStep.transit.line.short_name || 'N/A',
+                                   vehicle: transitStep.transit.line.vehicle.name
+                               },
+                               departureStop: {
+                                   name: transitStep.transit.departure_stop.name,
+                                   location: transitStep.transit.departure_stop.location.toJSON()
+                               },
+                               arrivalStop: {
+                                   name: transitStep.transit.arrival_stop.name,
+                                   location: transitStep.transit.arrival_stop.location.toJSON()
+                               },
+                               headsign: transitStep.transit.headsign,
+                               numStops: transitStep.transit.num_stops
+                           },
+                           walkingSteps: leg.steps.filter(s => s.travel_mode === "WALKING")
+                       };
+                    }).filter((route): route is RouteOption => route !== null);
+
+                    if (parsedRoutes.length === 0) {
+                        toast({ title: "No se encontraron rutas", description: "No se encontraron líneas de ómnibus directas. Intenta con otras direcciones." });
+                    } else {
+                        setRouteOptions(parsedRoutes);
+                        setView('options');
+                        setMobileView('panel');
+                    }
                 } else {
-                    console.error(`Error fetching walking directions: ${status}`);
-                    // Fallback to showing details without walking path
-                    setWalkingDirections(null);
-                    setView('details');
-                    setMobileView('panel');
+                    console.error(`Directions request failed due to ${status}`);
+                    toast({
+                        title: "No se encontraron rutas",
+                        description: status === 'ZERO_RESULTS' ? "No hay rutas de ómnibus para este trayecto." : "Hubo un error al buscar la ruta. Verifica las direcciones.",
+                        variant: "destructive"
+                    });
                 }
             }
         );
-    } else {
-        // Can't get walking directions, just show details
-        setWalkingDirections(null);
-        setView('details');
-        setMobileView('panel');
+    } catch(e) {
+        setIsLoading(false);
+        console.error("Error in handleSearch:", e);
+        toast({ variant: "destructive", title: "Error", description: "Ocurrió un error inesperado al buscar la ruta." });
     }
+  };
+
+
+  const handleSelectRoute = (route: RouteOption) => {
+    setSelectedRoute(route);
+    setView('details');
+    setMobileView('panel');
   };
 
   const handleBack = () => {
@@ -236,7 +201,6 @@ export default function Home() {
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
-      setWalkingDirections(null);
       setBusLocations([]);
     } else if (view === 'options') {
       setView('search');
@@ -301,8 +265,6 @@ export default function Home() {
                 <RouteDetailsPanel 
                   route={selectedRoute}
                   busLocations={busLocations}
-                  isGoogleMapsLoaded={isGoogleMapsLoaded}
-                  walkingDirections={walkingDirections}
                   userLocation={currentUserLocation}
                 />
               )}
@@ -317,8 +279,7 @@ export default function Home() {
             )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
-              stmRoute={selectedRoute}
-              walkingDirections={walkingDirections}
+              selectedRoute={selectedRoute}
               userLocation={currentUserLocation}
               busLocations={busLocations}
               view={view}

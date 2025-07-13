@@ -1,0 +1,24 @@
+
+export interface RouteOption {
+  id: string;
+  summary: string;
+  duration: number; // in seconds
+  gmapsRoute: google.maps.DirectionsRoute;
+  transitDetails: {
+    line: {
+      name: string;
+      vehicle: string;
+    };
+    departureStop: {
+      name: string;
+      location: google.maps.LatLngLiteral;
+    };
+    arrivalStop: {
+      name: string;
+      location: google.maps.LatLngLiteral;
+    };
+    headsign: string;
+    numStops: number;
+  };
+  walkingSteps: google.maps.DirectionsStep[];
+}

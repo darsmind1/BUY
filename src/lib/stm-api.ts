@@ -2,7 +2,6 @@
 'use server';
 
 import config from './config';
-import { haversineDistance } from './utils';
 
 // Initialize with a random index to distribute load initially
 let currentCredentialIndex = Math.floor(Math.random() * config.stm.credentials.length);
@@ -33,30 +32,6 @@ export interface BusArrival {
     bus: BusLocation | null;
     eta: number; // in seconds, -1 for scheduled
     lastUpdate: number;
-}
-
-export interface StmBusStop {
-    busstopId: number;
-    location: {
-        coordinates: [number, number]; // [lng, lat]
-    };
-    name: string;
-}
-
-export interface StmLineInfo {
-    line: number;
-    description: string;
-}
-
-export interface StmRouteOption {
-    line: number;
-    destination: string;
-    departureStop: StmBusStop;
-    arrivalStop: StmBusStop;
-    userLocation: { lat: number, lng: number };
-    stops: number;
-    duration: number; // in minutes
-    shape: [number, number][]; // Array of [lng, lat]
 }
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -150,9 +125,16 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1)
       return []; 
     }
     
-    return await response.json();
+    const text = await response.text();
+    // Handle cases where the API returns an empty string or just whitespace
+    if (!text.trim()) {
+        return [];
+    }
+
+    return JSON.parse(text);
 
   } catch (error) {
+    // This will catch JSON parsing errors and other exceptions
     console.error(`Exception during STM API fetch for path ${path}:`, error);
     if (retries > 0) {
       console.warn(`Retrying after exception... (${retries - 1} left)`);
@@ -203,25 +185,6 @@ export async function getBusLocation(line: string, destination?: string): Promis
     }) as BusLocation[];
 }
 
-export async function getAllBusStops(): Promise<StmBusStop[]> {
-    const data = await stmApiFetch('/buses/busstops');
-    return (Array.isArray(data) ? data : []) as StmBusStop[];
-}
-
-export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[]> {
-    const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
-    return (Array.isArray(data) ? data : []) as StmLineInfo[];
-}
-
-export async function getLinesForStops(stopIds: number[]): Promise<Map<number, number[]>> {
-    const promises = stopIds.map(id => getLinesForBusStop(id));
-    const results = await Promise.all(promises);
-    const stopLinesMap = new Map<number, number[]>();
-    stopIds.forEach((id, index) => {
-        stopLinesMap.set(id, results[index].map(l => l.line));
-    });
-    return stopLinesMap;
-}
 
 export async function getArrivalsForStop(stopId: number, lineId?: number): Promise<BusArrival[] | null> {
     let path = `/buses/busstops/${stopId}/arrivals`;
@@ -248,146 +211,4 @@ export async function getArrivalsForStop(stopId: number, lineId?: number): Promi
             destination: arrival.bus.destination,
         } : null,
     }));
-}
-
-export async function getNearbyStops(coords: { lat: number, lng: number }, radius: number = 500): Promise<StmBusStop[]> {
-    const data = await stmApiFetch(`/buses/busstops?latitude=${coords.lat}&longitude=${coords.lng}&radius=${radius}`);
-    return (Array.isArray(data) ? data : []) as StmBusStop[];
-}
-
-async function getLineShape(line: number, stopId: number): Promise<{ shape: [number, number, number][], destination: string } | null> {
-    const path = `/buses/lines/${line}/busstops/${stopId}/shape`;
-    const data = await stmApiFetch(path);
-    if (data && data.shape && data.shape.coordinates && data.destination) {
-        return {
-            shape: data.shape.coordinates, // [lng, lat, stopId?]
-            destination: data.destination.name
-        };
-    }
-    return null;
-}
-
-export async function findDirectBusRoutes(origin: { lat: number, lng: number }, destination: { lat: number, lng: number }): Promise<StmRouteOption[]> {
-    const [originStops, destinationStops] = await Promise.all([
-        getNearbyStops(origin, 500),
-        getNearbyStops(destination, 800)
-    ]);
-
-    if (originStops.length === 0 || destinationStops.length === 0) {
-        return [];
-    }
-
-    const originStopIds = originStops.map(s => s.busstopId);
-    const destinationStopIds = destinationStops.map(s => s.busstopId);
-
-    const [originLinesMap, destinationLinesMap] = await Promise.all([
-        getLinesForStops(originStopIds),
-        getLinesForStops(destinationStopIds)
-    ]);
-
-    const commonLines = new Map<number, { departureStops: number[], arrivalStops: number[] }>();
-
-    originLinesMap.forEach((lines, stopId) => {
-        lines.forEach(line => {
-            if (!commonLines.has(line)) {
-                commonLines.set(line, { departureStops: [], arrivalStops: [] });
-            }
-            commonLines.get(line)!.departureStops.push(stopId);
-        });
-    });
-
-    destinationLinesMap.forEach((lines, stopId) => {
-        lines.forEach(line => {
-            if (commonLines.has(line)) {
-                commonLines.get(line)!.arrivalStops.push(stopId);
-            }
-        });
-    });
-
-    const routeOptions: StmRouteOption[] = [];
-    
-    for (const [line, stops] of commonLines.entries()) {
-        if (stops.departureStops.length > 0 && stops.arrivalStops.length > 0) {
-            // Find the closest departure stop to the user
-            let closestDepStop: StmBusStop | null = null;
-            let minDepDist = Infinity;
-            stops.departureStops.forEach(depId => {
-                const stop = originStops.find(s => s.busstopId === depId);
-                if (stop) {
-                    const dist = haversineDistance(origin, { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] });
-                    if (dist < minDepDist) {
-                        minDepDist = dist;
-                        closestDepStop = stop;
-                    }
-                }
-            });
-
-            // Find the closest arrival stop to the destination
-            let closestArrStop: StmBusStop | null = null;
-            let minArrDist = Infinity;
-            stops.arrivalStops.forEach(arrId => {
-                const stop = destinationStops.find(s => s.busstopId === arrId);
-                if (stop) {
-                    const dist = haversineDistance(destination, { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] });
-                    if (dist < minArrDist) {
-                        minArrDist = dist;
-                        closestArrStop = stop;
-                    }
-                }
-            });
-            
-            if (closestDepStop && closestArrStop) {
-                // This is a simplified placeholder, as we are not fetching the shape anymore to improve performance.
-                routeOptions.push({
-                    line,
-                    destination: "Destino", // Placeholder
-                    departureStop: closestDepStop,
-                    arrivalStop: closestArrStop,
-                    userLocation: origin,
-                    stops: 10, // Placeholder
-                    duration: 20, // Placeholder
-                    shape: [], // Shape is no longer fetched here
-                });
-            }
-        }
-    }
-    
-    // Now, fetch shapes and destinations for the valid routes
-    const finalRoutes: StmRouteOption[] = [];
-    const shapePromises = routeOptions.map(async (route) => {
-        const shapeInfo = await getLineShape(route.line, route.departureStop.busstopId);
-        if (shapeInfo && shapeInfo.shape.length > 0) {
-             const depStopIndex = shapeInfo.shape.findIndex(p => p[2] === route.departureStop.busstopId);
-             const arrStopIndex = shapeInfo.shape.findIndex(p => p[2] === route.arrivalStop.busstopId);
-
-             // Ensure the arrival stop comes after the departure stop in the bus's path
-             if (arrStopIndex > depStopIndex) {
-                 finalRoutes.push({
-                     ...route,
-                     destination: shapeInfo.destination,
-                     shape: shapeInfo.shape.map(p => [p[0], p[1]]),
-                     stops: arrStopIndex - depStopIndex,
-                     duration: Math.max(1, (arrStopIndex - depStopIndex) * 2), // Approx 2 mins per stop
-                 });
-             }
-        }
-    });
-
-    await Promise.all(shapePromises);
-
-    finalRoutes.sort((a, b) => {
-        const distA = haversineDistance(origin, { lat: a.departureStop.location.coordinates[1], lng: a.departureStop.location.coordinates[0] });
-        const distB = haversineDistance(origin, { lat: b.departureStop.location.coordinates[1], lng: b.departureStop.location.coordinates[0] });
-        return distA - distB;
-    });
-
-    const uniqueRoutes = new Map<string, StmRouteOption>();
-    finalRoutes.forEach(route => {
-        const key = `${route.line}-${route.destination}`;
-        if (!uniqueRoutes.has(key)) {
-            uniqueRoutes.set(key, route);
-        }
-    });
-
-    return Array.from(uniqueRoutes.values());
 }

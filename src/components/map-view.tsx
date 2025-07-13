@@ -4,29 +4,13 @@
 import { GoogleMap, DirectionsRenderer, Marker, Polyline } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { BusLocation, StmRouteOption } from '@/lib/stm-api';
+import type { BusLocation } from '@/lib/stm-api';
+import type { RouteOption } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-// Reusable StopMarker component
-export const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
-  <Marker
-    position={position}
-    zIndex={99} // Below bus markers but above polylines
-    icon={{
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: 6,
-      fillColor: "#A40034",
-      fillOpacity: 1,
-      strokeWeight: 2,
-      strokeColor: "#ffffff",
-    }}
-  />
-);
 
 interface MapViewProps {
   isLoaded: boolean;
-  walkingDirections: google.maps.DirectionsResult | null;
-  stmRoute: StmRouteOption | null;
+  selectedRoute: RouteOption | null;
   userLocation: google.maps.LatLngLiteral | null;
   busLocations: BusLocation[];
   view: string;
@@ -164,7 +148,7 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, walkingDirections, stmRoute, userLocation, busLocations, view }: MapViewProps) {
+export default function MapView({ isLoaded, selectedRoute, userLocation, busLocations, view }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
@@ -194,39 +178,24 @@ export default function MapView({ isLoaded, walkingDirections, stmRoute, userLoc
     setMapLoaded(false);
   }, []);
   
-  // Effect to set the map bounds or center based on the current view
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || !isLoaded) return;
     
-    if (view === 'details' && stmRoute && walkingDirections) {
-      if(hasCenteredRef.current) return;
-      const bounds = new window.google.maps.LatLngBounds();
-      
-      // Add walking route to bounds
-      walkingDirections.routes[0].legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
-      
-      // Add bus stops to bounds
-      const depStop = stmRoute.departureStop.location.coordinates;
-      const arrStop = stmRoute.arrivalStop.location.coordinates;
-      bounds.extend({ lat: depStop[1], lng: depStop[0] });
-      bounds.extend({ lat: arrStop[1], lng: arrStop[0] });
-
-      map.fitBounds(bounds, 50); // 50px padding
-      hasCenteredRef.current = true;
-    } else if (view === 'search' || view === 'options') {
-      if(hasCenteredRef.current && view !== 'search') return;
-      map.panTo(userLocation || defaultCenter);
-      map.setZoom(13);
-      hasCenteredRef.current = true;
+    if ((view === 'details' || view === 'options') && selectedRoute?.gmapsRoute) {
+        // Fit map to the bounds of the selected Google Maps route
+        const bounds = new window.google.maps.LatLngBounds();
+        selectedRoute.gmapsRoute.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+        hasCenteredRef.current = true;
+    } else if (view === 'search') {
+        if(hasCenteredRef.current) return;
+        map.panTo(userLocation || defaultCenter);
+        map.setZoom(13);
+        hasCenteredRef.current = true;
     }
     
-  }, [stmRoute, walkingDirections, mapLoaded, userLocation, view, isLoaded]);
-
-  const departureStopLocation = stmRoute?.departureStop?.location?.coordinates;
-  const arrivalStopLocation = stmRoute?.arrivalStop?.location?.coordinates;
-
-  const busRoutePath = stmRoute?.shape.map(p => ({ lat: p[1], lng: p[0] }));
+  }, [selectedRoute, mapLoaded, userLocation, view, isLoaded]);
 
   if (!isLoaded) {
     return (
@@ -246,44 +215,24 @@ export default function MapView({ isLoaded, walkingDirections, stmRoute, userLoc
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {walkingDirections && (
+          {selectedRoute?.gmapsRoute && (
              <DirectionsRenderer 
-                directions={walkingDirections} 
+                directions={selectedRoute.gmapsRoute} 
                 options={{
-                    suppressMarkers: true,
+                    suppressMarkers: true, // We'll draw our own markers
                     polylineOptions: {
-                        strokeColor: '#4A4A4A',
-                        strokeOpacity: 0,
-                        strokeWeight: 2,
-                        zIndex: 2,
-                        icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }]
-                    }
+                        strokeColor: '#A40034',
+                        strokeOpacity: 0.8,
+                        strokeWeight: 6,
+                        zIndex: 1
+                    },
+                    // We can customize the walking polyline in the future if needed
                 }} 
              />
           )}
 
-          {busRoutePath && (
-            <Polyline
-              path={busRoutePath}
-              options={{
-                strokeColor: '#A40034',
-                strokeOpacity: 0.8,
-                strokeWeight: 6,
-                zIndex: 1
-              }}
-            />
-          )}
-
-
           {userLocation && userMarkerIcon && (
             <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />
-          )}
-
-          {departureStopLocation && (
-            <StopMarker position={{ lat: departureStopLocation[1], lng: departureStopLocation[0] }} />
-          )}
-           {arrivalStopLocation && (
-            <StopMarker position={{ lat: arrivalStopLocation[1], lng: arrivalStopLocation[0] }} />
           )}
 
           {busLocations.map((bus) => (
@@ -308,5 +257,3 @@ export default function MapView({ isLoaded, walkingDirections, stmRoute, userLoc
     </div>
   );
 }
-
-    
