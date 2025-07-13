@@ -230,8 +230,8 @@ export default function Home() {
   const getHeaderTitle = () => {
     switch(view) {
       case 'search': return '¿A DÓNDE VAMOS?';
-      case 'options': return 'Opciones de trayecto';
-      case 'details': return 'Detalles del viaje';
+      case 'options': return 'OPCIONES DE TRAYECTO';
+      case 'details': return 'DETALLES DEL VIAJE';
       default: return 'BusesUY';
     }
   }
@@ -251,7 +251,7 @@ export default function Home() {
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
+                <h1 className="text-sm font-semibold tracking-tight uppercase flex-1">{getHeaderTitle()}</h1>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-4 flex-1">
