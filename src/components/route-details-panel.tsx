@@ -123,7 +123,7 @@ const mapContainerStyle = {
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
-  zoomControl: true,
+  zoomControl: false,
   gestureHandling: 'auto',
   styles: mapStyle,
 };
