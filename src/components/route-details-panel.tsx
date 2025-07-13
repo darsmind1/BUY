@@ -7,6 +7,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Footprints, Bus, Clock, Wifi, Snowflake, Accessibility } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import MapView from './map-view';
+import { useEffect, useState } from 'react';
+import { getFormattedAddress } from '@/lib/google-maps-api';
 
 
 interface RouteDetailsPanelProps {
@@ -46,21 +48,34 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
   return Math.round(totalSeconds / 60);
 }
 
-const AddressText = ({ prefix, fullAddress }: { prefix: string, fullAddress: string }) => {
-    if (!fullAddress) {
+const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string; location: google.maps.LatLng | null; fallbackAddress: string }) => {
+    const [address, setAddress] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchAddress = async () => {
+            if (location) {
+                const formattedAddr = await getFormattedAddress(location.lat(), location.lng());
+                setAddress(formattedAddr);
+            } else if (fallbackAddress === 'Mi ubicación actual') {
+                 setAddress('Tu ubicación actual');
+            } else {
+                // If location is null but there's a fallback address from Google, use that initially
+                const parts = fallbackAddress.split(',');
+                setAddress(parts[0]);
+            }
+        };
+        fetchAddress();
+    }, [location, fallbackAddress]);
+    
+    if (address === null) {
         return (
-            <p className="text-xs text-muted-foreground">
-                {prefix}: <span className="font-semibold text-foreground">Ubicación actual</span>
-            </p>
+             <p className="text-xs text-muted-foreground h-4 bg-muted/50 rounded animate-pulse w-3/4"></p>
         );
     }
-    const parts = fullAddress.split(',');
-    const mainAddress = parts[0];
-    const rest = parts.slice(1, -2).join(',').trim(); // Omit last 2 parts (usually Montevideo, Uruguay)
     
     return (
         <p className="text-xs text-muted-foreground">
-            {prefix}: <span className="font-semibold text-foreground">{mainAddress}</span>{rest && `, ${rest}`}
+            {prefix}: <span className="font-semibold text-foreground">{address}</span>
         </p>
     )
 }
@@ -115,7 +130,7 @@ export default function RouteDetailsPanel({
                     <span>Bus en el mapa</span>
                 </div>
             )}
-            <div className="relative h-[200px] bg-muted">
+            <div className="relative h-[200px] bg-muted touch-none">
                 <MapView 
                     isLoaded={isGoogleMapsLoaded}
                     directionsResponse={directionsResponse}
@@ -149,8 +164,8 @@ export default function RouteDetailsPanel({
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 space-y-1">
-            <AddressText prefix="Desde" fullAddress={leg.start_address} />
-            <AddressText prefix="Hasta" fullAddress={leg.end_address} />
+             <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
+             <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
             {liveBusData && <BusFeatures bus={liveBusData} />}
           </CardContent>
         </Card>
