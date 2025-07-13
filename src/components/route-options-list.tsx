@@ -422,45 +422,51 @@ export default function RouteOptionsList({
 
         // Update primary route arrivals with persistence logic
         setStmInfoByRoute(currentStmInfo => {
-            const newStmInfo: Record<number, StmInfo[]> = JSON.parse(JSON.stringify(currentStmInfo));
-            Object.values(newStmInfo).forEach(infos => {
-                infos.forEach(info => {
-                    if (info.departureStopLocation) {
-                        const newArrival = findArrivalForStop(info.line, info.departureStopLocation);
-                        // If we get a new signal, update it.
-                        // If we don't, but the old signal is recent enough, keep it.
-                        const oldSignalAge = getSignalAge(info.arrival);
-                        if (newArrival) {
-                            info.arrival = newArrival;
-                        } else if (oldSignalAge !== null && oldSignalAge < 90) { // Keep old signal for 90s
-                            // Do nothing, keep the old info.arrival
-                        } else {
-                            info.arrival = null; // Clear old signal
-                        }
-                    }
-                });
-            });
+            const newStmInfo: Record<number, StmInfo[]> = {};
+            for (const routeIndex in currentStmInfo) {
+              newStmInfo[routeIndex] = currentStmInfo[routeIndex].map(info => {
+                const newInfo = { ...info };
+                if (newInfo.departureStopLocation) {
+                  const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
+                  const oldSignalAge = getSignalAge(newInfo.arrival);
+                  if (newArrival) {
+                    newInfo.arrival = newArrival;
+                  } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
+                    newInfo.arrival = null;
+                  }
+                  // Otherwise, keep the old (still valid) signal
+                }
+                return newInfo;
+              });
+            }
             return newStmInfo;
         });
 
         // Update transfer alternatives arrivals
         setTransferInfoByRoute(currentTransferInfo => {
-            const newTransferInfo: Record<number, TransferInfo | null> = JSON.parse(JSON.stringify(currentTransferInfo));
-            Object.values(newTransferInfo).forEach(info => {
-                if (info) {
-                    info.alternativeLines.forEach(alt => {
-                        const newArrival = findArrivalForStop(alt.line, info.stopLocation);
-                        const oldSignalAge = getSignalAge(alt.arrival);
-                         if (newArrival) {
-                            alt.arrival = newArrival;
-                        } else if (oldSignalAge !== null && oldSignalAge < 90) { // Keep old signal for 90s
-                            // Do nothing, keep the old alt.arrival
-                        } else {
-                            alt.arrival = null; // Clear old signal
-                        }
-                    });
-                }
-            });
+            const newTransferInfo: Record<number, TransferInfo | null> = {};
+            for (const routeIndex in currentTransferInfo) {
+              const currentInfo = currentTransferInfo[routeIndex];
+              if (currentInfo) {
+                newTransferInfo[routeIndex] = {
+                  ...currentInfo,
+                  alternativeLines: currentInfo.alternativeLines.map(alt => {
+                    const newAlt = { ...alt };
+                    const newArrival = findArrivalForStop(newAlt.line, currentInfo.stopLocation);
+                    const oldSignalAge = getSignalAge(newAlt.arrival);
+                    if (newArrival) {
+                      newAlt.arrival = newArrival;
+                    } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
+                      newAlt.arrival = null;
+                    }
+                    // Otherwise, keep the old (still valid) signal
+                    return newAlt;
+                  }),
+                };
+              } else {
+                newTransferInfo[routeIndex] = null;
+              }
+            }
             return newTransferInfo;
         });
 
@@ -517,3 +523,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
