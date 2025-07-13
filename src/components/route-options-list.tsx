@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
 import { getBusLocation, findClosestStmStop } from '@/lib/stm-api';
-import type { BusLocation, ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
+import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 
@@ -145,8 +145,8 @@ const RouteOptionItem = ({
                 </div>
               )}
             </div>
-             <div className="flex items-center gap-2 text-sm font-semibold">
-                <Clock className="h-4 w-4 text-muted-foreground" />
+             <div className="flex items-center gap-1.5 text-sm font-normal text-muted-foreground">
+                <Clock className="h-4 w-4" />
                 <span>{totalDuration} min</span>
             </div>
           </div>
