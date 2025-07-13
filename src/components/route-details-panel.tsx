@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Map, Snowflake, Accessibility } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Snowflake, Accessibility } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import MapView from './map-view';
 
@@ -141,12 +141,6 @@ export default function RouteDetailsPanel({
                   )}
               </div>
               <div className="flex items-center gap-3 text-sm font-normal">
-                {isBusLive && (
-                  <div className="flex items-center gap-1.5 text-green-400 animate-pulse">
-                      <Wifi className="h-4 w-4" />
-                      <span className="text-xs font-medium">En el mapa</span>
-                  </div>
-                )}
                 <div className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{duration} min</span>

@@ -36,13 +36,18 @@ const montevideoBounds = {
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
-  zoomControl: true,
-  mapId: '6579f49a03449c66ec2a188b',
+  zoomControl: false,
+  mapId: '6579f49a03449c66',
   gestureHandling: 'greedy',
   restriction: {
     latLngBounds: montevideoBounds,
     strictBounds: false,
   },
+};
+
+const mapOptionsWithZoomControl: google.maps.MapOptions = {
+    ...mapOptions,
+    zoomControl: true,
 };
 
 export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
@@ -149,13 +154,15 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     );
   }
   
+  const currentMapOptions = view === 'details' ? mapOptions : mapOptionsWithZoomControl;
+
   return (
     <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden")}>
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           center={defaultCenter}
           zoom={12}
-          options={mapOptions}
+          options={currentMapOptions}
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
