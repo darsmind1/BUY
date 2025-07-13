@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
+import { getStopIdFromStopName } from '@/lib/stop-id-mapper';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -153,7 +154,8 @@ export default function Home() {
                                },
                                departureStop: {
                                    name: transitStep.transit.departure_stop.name,
-                                   location: transitStep.transit.departure_stop.location.toJSON()
+                                   location: transitStep.transit.departure_stop.location.toJSON(),
+                                   stopId: getStopIdFromStopName(transitStep.transit.departure_stop.name)
                                },
                                arrivalStop: {
                                    name: transitStep.transit.arrival_stop.name,
@@ -225,7 +227,7 @@ export default function Home() {
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
-        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
+        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full bg-sidebar`}>
           <header className="p-4 flex items-center gap-4 flex-shrink-0">
             {showBackButton ? (
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
@@ -293,4 +295,6 @@ export default function Home() {
       </div>
   );
 }
+    
+
     

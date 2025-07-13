@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, Wifi, Info } from 'lucide-react';
 import { getArrivalsForStop, BusArrival } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
-import { getStopIdFromStopName } from '@/lib/stop-id-mapper';
 
 interface RouteOptionsListProps {
   routes: RouteOption[];
@@ -16,7 +15,10 @@ interface RouteOptionsListProps {
 }
 
 interface BusArrivalsState {
-    [routeId: string]: BusArrival | null;
+    [routeId: string]: {
+      arrival: BusArrival | null;
+      isLoading: boolean;
+    };
 }
 
 const ArrivalInfoLegend = () => {
@@ -32,7 +34,7 @@ const ArrivalInfoLegend = () => {
         </div>
          <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-primary" />
-              <span>Horario programado (sin GPS)</span>
+              <span>Horario programado (bus sin GPS)</span>
          </div>
       </div>
     
@@ -43,25 +45,35 @@ const RouteOptionItem = ({
   route, 
   index, 
   onSelectRoute,
-  arrivalInfo,
+  arrivalData,
 }: { 
   route: RouteOption, 
   index: number, 
   onSelectRoute: (route: RouteOption) => void,
-  arrivalInfo: BusArrival | null,
+  arrivalData?: { arrival: BusArrival | null, isLoading: boolean },
 }) => {
   
   const getArrivalText = () => {
-    if (!arrivalInfo) return null;
-    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
-    if (arrivalMinutes <= 1) {
+    if (!arrivalData || !arrivalData.arrival) return "Horario programado";
+    const { arrival, isLoading } = arrivalData;
+
+    if (isLoading) return "Buscando arribo...";
+
+    const arrivalMinutes = Math.round(arrival.eta / 60);
+
+    if (arrival.eta === -1) {
+       return "Horario programado";
+    }
+    if (arrivalMinutes < 1) {
       return `Llegando`;
     }
     return `Llega en ${arrivalMinutes} min`;
   };
 
+  const isRealTime = arrivalData?.arrival?.eta ?? -1 > -1;
   const arrivalText = getArrivalText();
   const walkingDuration = Math.round(route.walkingDuration / 60);
+  const totalDuration = Math.round(route.duration / 60);
 
   return (
     <Card 
@@ -73,17 +85,17 @@ const RouteOptionItem = ({
         <div className="flex flex-col gap-3 flex-1">
           <div className="flex items-start justify-between">
              <div className="flex flex-col gap-1.5">
-                <Badge variant="secondary" className="font-mono text-sm">{route.transitDetails.line.name}</Badge>
+                <Badge variant="secondary" className="font-mono text-lg">{route.transitDetails.line.name}</Badge>
                 <span className="text-sm text-muted-foreground">hacia {route.transitDetails.headsign}</span>
              </div>
              <div className="text-right">
-                <p className="font-bold text-lg">~{Math.round(route.duration / 60)} min</p>
+                <p className="font-bold text-lg">~{totalDuration} min</p>
                 <p className="text-xs text-muted-foreground">Total</p>
              </div>
           </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground border-t pt-3 mt-1">
-              {arrivalInfo && arrivalInfo.eta > -1 ? (
+              { isRealTime ? (
                  <div className="flex items-center gap-2 font-medium text-green-400">
                     <Wifi className="h-4 w-4 animate-pulse-green" />
                     <span>{arrivalText}</span>
@@ -91,7 +103,7 @@ const RouteOptionItem = ({
                ) : (
                  <div className="flex items-center gap-2 text-muted-foreground">
                     <Clock className="h-4 w-4" />
-                    <span>Próximo bus programado</span>
+                    <span>{arrivalText}</span>
                  </div>
                )
             }
@@ -118,22 +130,20 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
     const fetchAllArrivals = async () => {
         const arrivalPromises = routes.map(async (route) => {
-            const stopName = route.transitDetails.departureStop.name;
-            const stopId = getStopIdFromStopName(stopName);
-            
+            setBusArrivals(prev => ({ ...prev, [route.id]: { arrival: null, isLoading: true } }));
+
+            const stopId = route.transitDetails.departureStop.stopId;
             if (!stopId) {
-                console.warn(`Could not find a mapping for stop name: "${stopName}"`);
+                console.warn(`No Stop ID for stop name: "${route.transitDetails.departureStop.name}"`);
                 return { routeId: route.id, arrival: null };
             }
 
             const lineName = route.transitDetails.line.name;
             
             try {
-                // Fetch for a specific line if possible, otherwise all arrivals for the stop
                 const arrivals = await getArrivalsForStop(stopId);
                 if (!arrivals) return { routeId: route.id, arrival: null };
 
-                // Find the next real-time arrival for the correct line and destination
                 const nextRealtimeArrival = arrivals.find(a => 
                     a.bus && 
                     a.eta > 0 &&
@@ -144,10 +154,8 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                 if (nextRealtimeArrival) {
                     return { routeId: route.id, arrival: nextRealtimeArrival };
                 }
-
-                // Fallback: find any scheduled arrival for the correct line
+                
                 const nextScheduledArrival = arrivals.find(a => a.eta === -1 && a.bus?.line === lineName);
-
                 return { routeId: route.id, arrival: nextScheduledArrival || null };
 
             } catch (error) {
@@ -161,11 +169,11 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         
         results.forEach(result => {
             if (result) {
-                newArrivals[result.routeId] = result.arrival;
+                newArrivals[result.routeId] = { arrival: result.arrival, isLoading: false };
             }
         });
         
-        setBusArrivals(newArrivals);
+        setBusArrivals(prev => ({ ...prev, ...newArrivals }));
     };
 
     fetchAllArrivals();
@@ -192,9 +200,11 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             route={route} 
             index={index} 
             onSelectRoute={onSelectRoute}
-            arrivalInfo={busArrivals[route.id] ?? null}
+            arrivalData={busArrivals[route.id]}
         />
       ))}
     </div>
   );
 }
+
+    

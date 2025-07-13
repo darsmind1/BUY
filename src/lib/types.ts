@@ -13,6 +13,7 @@ export interface RouteOption {
     departureStop: {
       name: string;
       location: google.maps.LatLngLiteral;
+      stopId: number | null;
     };
     arrivalStop: {
       name: string;
@@ -23,3 +24,5 @@ export interface RouteOption {
   };
   walkingSteps: google.maps.DirectionsStep[];
 }
+
+    

@@ -4,55 +4,16 @@
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, ChevronDown } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { RouteOption } from '@/lib/types';
-import { getFormattedAddress } from '@/lib/google-maps-api';
-import { useEffect, useState } from 'react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface RouteDetailsPanelProps {
   route: RouteOption;
   busLocations?: BusLocation[];
   userLocation: google.maps.LatLngLiteral | null;
   googleMapsApiKey: string;
-}
-
-const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
-  if (type === 'WALKING') {
-    return <Footprints className="h-5 w-5 text-primary" />;
-  }
-  return <Bus className="h-5 w-5 text-primary" />;
-};
-
-const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string; location: google.maps.LatLng | google.maps.LatLngLiteral | null; fallbackAddress: string }) => {
-    const [address, setAddress] = useState<string | null>(null);
-
-    useEffect(() => {
-        const fetchAddress = async () => {
-            if (location) {
-                const lat = 'lat' in location ? location.lat : location.lat();
-                const lng = 'lng' in location ? location.lng : location.lng();
-                const formattedAddr = await getFormattedAddress(lat, lng);
-                setAddress(formattedAddr);
-            } else {
-                setAddress(fallbackAddress.split(',')[0]);
-            }
-        };
-        fetchAddress();
-    }, [location, fallbackAddress]);
-    
-    if (address === null) {
-        return (
-             <p className="text-sm text-muted-foreground h-4 bg-muted/50 rounded animate-pulse w-3/4"></p>
-        );
-    }
-    
-    return (
-        <p className="text-sm text-muted-foreground">
-            {prefix}: <span className="font-semibold text-foreground">{address}</span>
-        </p>
-    )
 }
 
 const BusFeatures = ({ bus }: { bus: BusLocation }) => {
@@ -80,6 +41,8 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
 }
 
 const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: string }) => {
+    if (!route.gmapsRoute || !route.gmapsRoute.legs[0]) return null;
+
     const leg = route.gmapsRoute.legs[0];
     const origin = leg.start_location.toUrlValue();
     const destination = leg.end_location.toUrlValue();
@@ -88,7 +51,7 @@ const StaticMapPreview = ({ route, apiKey }: { route: RouteOption, apiKey: strin
     const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=600x200&scale=2&maptype=roadmap&language=es&region=UY&markers=color:blue|label:A|${origin}&markers=color:red|label:B|${destination}&path=color:0xA40034|weight:4|${busPath}&key=${apiKey}`;
 
     return (
-        <div className="relative mb-4 overflow-hidden rounded-lg aspect-video w-full bg-muted">
+        <div className="relative mb-4 overflow-hidden rounded-lg aspect-[16/7] w-full bg-muted">
              <Image 
                 src={mapUrl}
                 alt="Mapa de la ruta" 
@@ -116,7 +79,7 @@ export default function RouteDetailsPanel({
   
   if (!route || !route.transitDetails) return null;
 
-  const firstWalkingStep = route.walkingSteps.length > 0 ? route.walkingSteps[0] : null;
+  const transitStep = leg.steps.find(s=>s.travel_mode === 'TRANSIT' && s.transit);
 
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-500">
@@ -125,7 +88,7 @@ export default function RouteDetailsPanel({
 
         {isBusLive && (
             <div className="flex items-center gap-2 px-1 text-sm font-medium text-green-400">
-                <Wifi className="h-4 w-4" />
+                <Wifi className="h-4 w-4 animate-pulse-green" />
                 <span>Bus en el mapa (tiempo real)</span>
             </div>
         )}
@@ -150,7 +113,7 @@ export default function RouteDetailsPanel({
         <div>
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground px-1">Indicaciones del Viaje</h3>
           <div className="w-full space-y-1">
-            {firstWalkingStep && (
+            {route.walkingSteps.length > 0 && (
                 <Card>
                     <CardContent className="p-0">
                          <Accordion type="single" collapsible>
@@ -159,12 +122,12 @@ export default function RouteDetailsPanel({
                                      <Footprints className="h-5 w-5 text-primary shrink-0" />
                                      <div className="flex-1 text-left">
                                          <p className="font-medium">Caminar a la parada {route.transitDetails.departureStop.name}</p>
-                                         <p className="text-xs text-muted-foreground">{firstWalkingStep.duration?.text}</p>
+                                         <p className="text-xs text-muted-foreground">{Math.round(route.walkingDuration / 60)} min a pie</p>
                                      </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="pb-2">
                                     <div className="px-3 space-y-2 border-t pt-3">
-                                        {route.walkingSteps.map((step, index) => (
+                                        {route.walkingSteps.flatMap(ws => ws.steps).map((step, index) => (
                                             <div key={index} className="flex items-start gap-3 text-xs">
                                                 <Footprints className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                                                 <p className="flex-1" dangerouslySetInnerHTML={{ __html: step.instructions }}></p>
@@ -178,19 +141,23 @@ export default function RouteDetailsPanel({
                 </Card>
             )}
 
-            <Card>
-                 <CardContent className="flex items-center gap-3 p-3 text-sm">
-                     <Bus className="h-5 w-5 text-primary shrink-0" />
-                     <div className="flex-1 text-left">
-                         <p className="font-medium">Tomar el bus <strong>{route.transitDetails.line.name}</strong></p>
-                         <p className="text-xs text-muted-foreground">{route.transitDetails.numStops} paradas ({leg.steps.find(s=>s.travel_mode === 'TRANSIT')?.duration?.text})</p>
-                         <p className="text-xs text-muted-foreground pt-1">Bajar en: {route.transitDetails.arrivalStop.name}</p>
-                     </div>
-                 </CardContent>
-            </Card>
+            {transitStep && (
+              <Card>
+                   <CardContent className="flex items-center gap-3 p-3 text-sm">
+                       <Bus className="h-5 w-5 text-primary shrink-0" />
+                       <div className="flex-1 text-left">
+                           <p className="font-medium">Tomar el bus <strong>{route.transitDetails.line.name}</strong></p>
+                           <p className="text-xs text-muted-foreground">{route.transitDetails.numStops} paradas ({transitStep.duration?.text})</p>
+                           <p className="text-xs text-muted-foreground pt-1">Bajar en: {route.transitDetails.arrivalStop.name}</p>
+                       </div>
+                   </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+    

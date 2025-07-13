@@ -1,7 +1,7 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, Marker, Polyline } from '@react-google-maps/api';
+import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
@@ -57,22 +57,11 @@ const mapStyle = [
   },
   {
     "featureType": "administrative.land_parcel",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#bdbdbd" }]
-  },
-  {
-    "featureType": "poi",
     "stylers": [{ "visibility": "off" }]
   },
   {
     "featureType": "poi",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#e5e5e5" }]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#757575" }]
+    "stylers": [{ "visibility": "off" }]
   },
   {
     "featureType": "poi.park",
@@ -80,17 +69,7 @@ const mapStyle = [
     "stylers": [{ "color": "#e0e8f0" }]
   },
   {
-    "featureType": "poi.park",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#9e9e9e" }]
-  },
-  {
     "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#ffffff" }]
-  },
-  {
-    "featureType": "road.arterial",
     "elementType": "geometry",
     "stylers": [{ "color": "#ffffff" }]
   },
@@ -139,7 +118,10 @@ const mapStyle = [
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: true,
-  rotateControl: true,
+  rotateControl: false,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
   restriction: {
     latLngBounds: montevideoBounds,
     strictBounds: false,
@@ -226,7 +208,6 @@ export default function MapView({ isLoaded, selectedRoute, userLocation, busLoca
                         strokeWeight: 6,
                         zIndex: 1
                     },
-                    // We can customize the walking polyline in the future if needed
                 }} 
              />
           )}
@@ -257,3 +238,5 @@ export default function MapView({ isLoaded, selectedRoute, userLocation, busLoca
     </div>
   );
 }
+
+    
