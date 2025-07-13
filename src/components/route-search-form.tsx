@@ -119,11 +119,10 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {locationPermissionDenied && (
-         <Alert variant="destructive" className="animate-in fade-in-0 slide-in-from-top-4 duration-500">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Atención</AlertTitle>
+         <Alert variant="warning" className="animate-in fade-in-0 slide-in-from-top-4 duration-500">
+            <MapPin className="h-4 w-4" />
             <AlertDescription>
-                Por favor, activa los permisos del servicio de localización (GPS) para recibir información precisa.
+                Por favor, activa los permisos del Servicio de Localización (GPS) para recibir información precisa sobre tu viaje.
             </AlertDescription>
         </Alert>
       )}
