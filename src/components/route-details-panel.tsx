@@ -2,13 +2,43 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { GoogleMap, Marker } from '@react-google-maps/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot, Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
+import { cn } from '@/lib/utils';
+
+
+// Simplified Map for the details panel
+const mapContainerStyle = {
+  width: '100%',
+  height: '180px',
+  borderRadius: '0.5rem',
+};
+
+const mapOptions: google.maps.MapOptions = {
+  disableDefaultUI: true,
+  zoomControl: false,
+  gestureHandling: 'none', // Make it non-interactive
+};
+
+const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
+  <Marker
+    position={position}
+    icon={{
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 8,
+      fillColor: "#A40034",
+      fillOpacity: 1,
+      strokeWeight: 2,
+      strokeColor: "#ffffff",
+    }}
+  />
+);
 
 
 interface RouteDetailsPanelProps {
@@ -67,10 +97,15 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
     )
 }
 
-const BusFeatures = ({ bus }: { bus: BusLocation | null }) => {
-    if (!bus) return null;
-    const hasAccessibility = bus.access === "PLATAFORMA ELEVADORA";
-    const hasAC = bus.thermalConfort === "Aire Acondicionado";
+const BusFeatures = ({ stmInfo, busLocations }: { stmInfo: StmInfo[], busLocations: BusLocation[] }) => {
+    if (stmInfo.length === 0) return null;
+    const firstBusLine = stmInfo[0].line;
+    const relevantBus = busLocations.find(b => b.line === firstBusLine);
+
+    if (!relevantBus) return null;
+    
+    const hasAccessibility = relevantBus.access === "PLATAFORMA ELEVADORA";
+    const hasAC = relevantBus.thermalConfort === "Aire Acondicionado";
 
     if (!hasAccessibility && !hasAC) return null;
 
@@ -113,13 +148,42 @@ export default function RouteDetailsPanel({
   const busLines = getUniqueBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
 
+  const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT');
+  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
+
   if (!leg) return null;
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
       <div className="p-4 space-y-3">
         <Card>
-          <CardHeader className="pb-3">
+            {isGoogleMapsLoaded && departureStopLocation ? (
+                 <CardContent className="p-2">
+                    <GoogleMap
+                        mapContainerStyle={mapContainerStyle}
+                        center={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }}
+                        zoom={16}
+                        options={mapOptions}
+                    >
+                        <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }}/>
+                        {userLocation && (
+                           <Marker position={userLocation} zIndex={101} icon={{
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 6,
+                                fillColor: "#4285F4",
+                                fillOpacity: 1,
+                                strokeWeight: 2,
+                                strokeColor: "#ffffff",
+                            }}/>
+                        )}
+                    </GoogleMap>
+                 </CardContent>
+            ) : (
+                <div className="h-[180px] flex items-center justify-center bg-muted rounded-t-lg">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+            )}
+          <CardHeader className="pt-4 pb-3">
             <CardTitle className="flex items-center justify-between text-base">
               <div className="flex items-center gap-2 flex-wrap">
                   {busLines.map((bus, index) => (
@@ -143,7 +207,7 @@ export default function RouteDetailsPanel({
           <CardContent className="pt-0 space-y-1">
              <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
              <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
-            <BusFeatures bus={busLocations?.[0] ?? null} />
+            <BusFeatures stmInfo={stmInfo} busLocations={busLocations} />
           </CardContent>
         </Card>
 
@@ -158,8 +222,6 @@ export default function RouteDetailsPanel({
                   info.line === step.transit?.line.short_name &&
                   info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
               ) : null;
-
-              const liveBusForStep = transitStepInfo ? busLocations.find(bus => bus.line === transitStepInfo.line) : null;
               
               if (hasDetailedWalkingSteps) {
                 return (
@@ -219,3 +281,5 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
+
+    
