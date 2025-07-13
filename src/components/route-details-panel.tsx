@@ -11,6 +11,8 @@ import type { BusLocation } from '@/lib/stm-api';
 import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { haversineDistance } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+
 
 // Reusing style from main map view for consistency
 const mapStyle = [
@@ -367,6 +369,13 @@ export default function RouteDetailsPanel({
                   }
               }
 
+              const getArrivalColorClass = (eta: number) => {
+                  const arrivalMinutes = eta / 60;
+                  if (arrivalMinutes <= 5) return 'text-green-400';
+                  if (arrivalMinutes <= 10) return 'text-yellow-400';
+                  return 'text-red-500';
+              };
+
               if (hasDetailedWalkingSteps) {
                 return (
                   <AccordionItem value={`item-${index}`} key={index} className="border-none">
@@ -400,18 +409,23 @@ export default function RouteDetailsPanel({
                     <div className="flex-1 space-y-0.5">
                         <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
                         <p className="text-xs text-muted-foreground">{step.duration?.text} {isTransit && `(${step.transit.num_stops} paradas)`}</p>
+                        
                         {isTransit && transitStepInfo?.arrival && (
-                           <div className="flex items-center gap-1.5 text-green-400 text-xs font-medium pt-1">
+                           <div className={cn("flex items-center gap-1.5 text-xs font-medium pt-1", getArrivalColorClass(transitStepInfo.arrival.eta))}>
                               <Wifi className="h-3.5 w-3.5" />
-                              <span>Llega en {Math.round(transitStepInfo.arrival.eta / 60)} min</span>
+                              <span>
+                                {transitStepInfo.arrival.eta < 60 ? "Llegando" : `Llega en ${Math.round(transitStepInfo.arrival.eta / 60)} min`}
+                              </span>
                            </div>
                         )}
-                        {isTransit && busIsOnMap && (
-                            <div className="flex items-center gap-1.5 text-green-400/80 text-xs font-medium">
+
+                        {isTransit && busIsOnMap && !transitStepInfo?.arrival &&(
+                            <div className="flex items-center gap-1.5 text-green-400/80 text-xs font-medium pt-1">
                                 <Wifi className="h-3.5 w-3.5" />
                                 <span>Bus en mapa</span>
                             </div>
                         )}
+
                         {isTransit && !transitStepInfo?.arrival && !busIsOnMap && step.transit?.departure_time?.text && (
                            <div className="flex items-center gap-1.5 text-muted-foreground text-xs pt-1">
                               <Clock className="h-3.5 w-3.5" />

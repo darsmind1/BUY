@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { Bus, ArrowLeft, Loader2, Map, ArrowRight } from 'lucide-react';
 import React from 'react';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection, getLineRoute } from '@/lib/stm-api';
-import type { StmLineRoute, StmInfo } from '@/lib/types';
+import type { StmLineRoute, StmInfo, ArrivalInfo } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -61,43 +61,84 @@ export default function Home() {
     verifyApiConnection();
   }, [toast]);
 
+  const getSignalAge = useCallback((arrivalInfo: ArrivalInfo | null) => {
+    if (!arrivalInfo) return null;
+    const now = new Date().getTime();
+    const signalTimestamp = new Date(arrivalInfo.timestamp).getTime();
+    return (now - signalTimestamp) / 1000; // age in seconds
+  }, []);
 
+  // Effect to update bus locations and arrival times for the detailed view
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
-
-    const fetchBusLocations = async () => {
-      if (!selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0) {
+  
+    const updateRealtimeData = async () => {
+      if (!selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0 || !isGoogleMapsLoaded) {
         setBusLocations([]);
         return;
       }
-      
+  
       const linesToFetch = selectedRouteStmInfo.map(info => ({
         line: info.line,
         destination: info.lineDestination
       }));
-
+  
       try {
         const locations = await getBusLocation(linesToFetch);
         setBusLocations(locations);
+  
+        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
+            const liveBus = locations.find(l => l.line === line);
+            if (liveBus) {
+                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
+                    new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
+                    new window.google.maps.LatLng(stopLocation)
+                );
+                // Rough ETA: 30km/h average speed => 8.33 m/s
+                const eta = distance / 8.33; 
+                return { eta, timestamp: liveBus.timestamp };
+            }
+            return null;
+        }
+
+        // Update arrival times for the selected route
+        setSelectedRouteStmInfo(currentStmInfo => {
+            return currentStmInfo.map(info => {
+              const newInfo = { ...info };
+              if (newInfo.departureStopLocation) {
+                const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
+                const oldSignalAge = getSignalAge(newInfo.arrival);
+
+                if (newArrival) {
+                  newInfo.arrival = newArrival;
+                } else if (oldSignalAge === null || oldSignalAge > 90) { 
+                  newInfo.arrival = null;
+                }
+              }
+              return newInfo;
+            });
+        });
+  
       } catch (error) {
-        console.error(`Error fetching locations for route:`, error);
+        console.error(`Error fetching real-time data for details view:`, error);
         setBusLocations([]);
       }
     };
-    
+  
     if (view === 'details' && selectedRoute) {
-        fetchBusLocations(); 
-        intervalId = setInterval(fetchBusLocations, 30000); 
+      updateRealtimeData(); 
+      intervalId = setInterval(updateRealtimeData, 20000); // Update every 20 seconds
     } else {
-        setBusLocations([]);
+      setBusLocations([]);
     }
-
+  
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, selectedRouteStmInfo, apiStatus]);
+  }, [view, selectedRoute, selectedRouteStmInfo, apiStatus, isGoogleMapsLoaded, getSignalAge]);
+
 
   useEffect(() => {
     let watchId: number | null = null;
@@ -112,8 +153,6 @@ export default function Home() {
           setCurrentUserLocation(newLocation);
         },
         (error) => {
-          // This error is expected if the user denies location permissions.
-          // We don't need to show a toast, as the search form will show a warning.
           console.log(`Error watching position: ${error.message}`);
         },
         {
