@@ -103,23 +103,25 @@ export default function Home() {
     let watchId: number | null = null;
 
     if (navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            const newLocation = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-            };
-            setCurrentUserLocation(newLocation);
-          },
-          (error) => {
-            console.error("Error watching position:", error);
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          }
-        );
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const newLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setCurrentUserLocation(newLocation);
+        },
+        (error) => {
+          // This error is expected if the user denies location permissions.
+          // We don't need to show a toast, as the search form will show a warning.
+          console.log(`Error watching position: ${error.message}`);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
     }
 
     return () => {
