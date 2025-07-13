@@ -38,7 +38,7 @@ const ArrivalInfoLegend = () => {
               <span>Leyenda de arribos</span>
          </div>
         <div className="flex items-center gap-2">
-           <Wifi className="h-3.5 w-3.5 text-primary" />
+           <Wifi className="h-3.5 w-3.5 text-green-400 animate-pulse-green" />
            <span>En tiempo real (bus con GPS)</span>
         </div>
          <div className="flex items-center gap-2">
@@ -82,18 +82,6 @@ const RouteOptionItem = ({
       return `Llegando`;
     }
     return `Llega en ${arrivalMinutes} min`;
-  };
-
-  const getArrivalColorClass = () => {
-    if (!arrivalInfo) return 'text-primary';
-    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
-    if (arrivalMinutes < 5) {
-        return 'text-green-400';
-    } else if (arrivalMinutes <= 10) {
-        return 'text-yellow-400';
-    } else {
-        return 'text-red-500';
-    }
   };
 
   const getScheduledArrivalInMinutes = () => {
@@ -159,8 +147,8 @@ const RouteOptionItem = ({
             </div>
             
             {arrivalInfo && arrivalText ? (
-              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
-                  <Wifi className="h-3 w-3" />
+              <div className="flex items-center gap-2 text-xs font-medium text-green-400">
+                  <Wifi className="h-3 w-3 animate-pulse-green" />
                   <span>{arrivalText}</span>
               </div>
             ) : scheduledText ? (
