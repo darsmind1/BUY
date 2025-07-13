@@ -120,6 +120,9 @@ export default function Home() {
 
   const geocodeAddress = (address: string | google.maps.LatLngLiteral): Promise<google.maps.LatLngLiteral> => {
     return new Promise((resolve, reject) => {
+        if (!isGoogleMapsLoaded) {
+            return reject(new Error("Google Maps API not loaded."));
+        }
         if (typeof address !== 'string') {
             resolve(address); // It's already a lat/lng literal
             return;
@@ -168,9 +171,8 @@ export default function Home() {
 
         if (stmRoutes.length === 0) {
              toast({
-                variant: "destructive",
                 title: "No se encontraron rutas",
-                description: "No se encontraron líneas de ómnibus directas para el origen y destino ingresados.",
+                description: "No se encontraron líneas de ómnibus directas. Intenta con otras direcciones.",
              });
         } else {
             setRouteOptions(stmRoutes);
@@ -182,7 +184,7 @@ export default function Home() {
         toast({
             variant: "destructive",
             title: "Error al buscar ruta",
-            description: "No se pudo calcular la ruta. Verifica las direcciones e intenta de nuevo.",
+            description: "No se pudo calcular la ruta. Verifica las direcciones o intenta de nuevo más tarde.",
         });
     } finally {
         setIsLoading(false);

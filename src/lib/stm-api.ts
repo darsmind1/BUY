@@ -120,7 +120,7 @@ async function getAccessToken(): Promise<string> {
   }
 }
 
-async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3): Promise<any> {
+async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1): Promise<any> {
   try {
     const accessToken = await getAccessToken();
     const url = `${STM_API_BASE_URL}${path}`;
@@ -135,25 +135,37 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
       next: { revalidate: 0 }
     });
 
-    if (response.status === 204) {
-      if (path.includes('/buses/busstops') && retries > 0) {
-        console.warn(`Received 204 for ${path}. Retrying... (${retries - 1} left)`);
-        await delay(1000);
+    // Handle temporary server errors from STM
+    if (response.status >= 500 && response.status <= 504) {
+      console.error(`STM API Server Error for path ${path}. Status: ${response.status}. Retrying... (${retries} left)`);
+      if (retries > 0) {
+        await delay(1000); // Wait 1s before retrying
         return stmApiFetch(path, options, retries - 1);
+      } else {
+        console.error(`STM API request failed after multiple retries for path ${path}. Status: ${response.status}.`);
+        // Throw an error that can be caught by the calling function
+        throw new Error(`STM API server error: ${response.status}`);
       }
-      return [];
+    }
+
+    // Handle empty content response
+    if (response.status === 204) {
+      return []; // Return empty array for no content
     }
     
+    // Handle rate limiting
     if (response.status === 429) {
-      console.warn(`STM API rate limit exceeded for path ${path}. Returning null to avoid crash.`);
-      return null;
+      console.warn(`STM API rate limit exceeded for path ${path}. Returning empty array.`);
+      return [];
+    }
+
+    // Handle not found
+     if (response.status === 404) {
+        console.warn(`STM API request to ${path} resulted in a 404 Not Found. Returning empty array.`);
+        return [];
     }
 
     if (!response.ok) {
-        if (response.status === 404) {
-            console.warn(`STM API request to ${path} resulted in a 404 Not Found. This likely means the requested resource doesn't exist. Returning empty array.`);
-            return [];
-        }
       const errorText = await response.text();
       console.error(`STM API request to ${path} failed:`, response.status, errorText);
       throw new Error(`STM API request failed for ${path}: ${response.status} ${errorText}`);
@@ -163,6 +175,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
+    // Re-throw the error to be handled by the calling function (e.g., findDirectBusRoutes)
     throw error;
   }
 }
@@ -272,6 +285,7 @@ async function getLineShape(line: number, stopId: number): Promise<{ shape: [num
         console.warn(`No shape data returned for line ${line} at stop ${stopId}`);
         return null;
     } catch (error) {
+        // Don't rethrow, just return null so one failed shape doesn't break everything
         console.error(`Error fetching shape for line ${line} at stop ${stopId}:`, error);
         return null;
     }
@@ -329,7 +343,6 @@ export async function findDirectBusRoutes(origin: { lat: number, lng: number }, 
                     const stopIdsInShape = shapeInfo.shape.map(p => p[2]);
                     const depStopIndex = stopIdsInShape.indexOf(departureStop.busstopId);
                     
-                    // Find any of the possible arrival stops in the shape
                     let arrStopIndex = -1;
                     for(const stopId of stops.arrivalStops){
                         const index = stopIdsInShape.indexOf(stopId);
@@ -339,7 +352,7 @@ export async function findDirectBusRoutes(origin: { lat: number, lng: number }, 
                         }
                     }
 
-                    if (depStopIndex !== -1 && arrStopIndex !== -1) {
+                    if (depStopIndex !== -1 && arrStopIndex !== -1 && depStopIndex < arrStopIndex) {
                         const stopsBetween = arrStopIndex - depStopIndex;
                         routeOptions.push({
                             line,
@@ -348,7 +361,7 @@ export async function findDirectBusRoutes(origin: { lat: number, lng: number }, 
                             arrivalStop,
                             userLocation: origin,
                             stops: stopsBetween,
-                            duration: stopsBetween * 2, // Approx 2 mins per stop
+                            duration: Math.max(1, stopsBetween * 2), // Approx 2 mins per stop, min 1
                             shape: shapeInfo.shape.map(p => [p[0], p[1]]),
                         });
                     }
@@ -360,14 +373,12 @@ export async function findDirectBusRoutes(origin: { lat: number, lng: number }, 
 
     await Promise.all(shapePromises);
 
-    // Sort by walking distance to departure stop
     routeOptions.sort((a, b) => {
         const distA = haversineDistance(origin, { lat: a.departureStop.location.coordinates[1], lng: a.departureStop.location.coordinates[0] });
         const distB = haversineDistance(origin, { lat: b.departureStop.location.coordinates[1], lng: b.departureStop.location.coordinates[0] });
         return distA - distB;
     });
 
-    // Remove duplicate routes (same line and destination)
     const uniqueRoutes = new Map<string, StmRouteOption>();
     routeOptions.forEach(route => {
         const key = `${route.line}-${route.destination}`;
