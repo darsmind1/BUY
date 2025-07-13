@@ -74,7 +74,6 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
           (error) => {
             setIsGettingLocation(false);
             setOrigin(''); // Clear origin if location fails
-            console.error("Error getting location automatically:", error.message);
             
             if(error.code === error.PERMISSION_DENIED) {
                  setLocationPermissionDenied(true);
