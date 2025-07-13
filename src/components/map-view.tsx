@@ -155,7 +155,6 @@ const mapStyle = [
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: false,
-  gestureHandling: 'greedy',
   restriction: {
     latLngBounds: montevideoBounds,
     strictBounds: false,
@@ -239,17 +238,19 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: true });
   }, [directionsResponse, routeIndex, mapLoaded, isLoaded]);
 
-  // Effect to set the initial map bounds or center
+  // Effect to set the map bounds or center based on the current view
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
     
-    // When view changes to 'details', center on user location ONCE.
+    // For the small map in the details panel, center on the user's location with a fixed zoom.
     if (view === 'details' && userLocation && !initialCenterSetRef.current) {
         map.panTo(userLocation);
         map.setZoom(16.5);
-        initialCenterSetRef.current = true; // Mark as set
-    } else if (view !== 'details' && directionsResponse) {
+        initialCenterSetRef.current = true; // Mark as set to prevent re-centering on every location update
+    } 
+    // For other views (full-screen map, options list), fit the entire route.
+    else if (view !== 'details' && directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
         routeToBound.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
@@ -265,7 +266,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     
   }, [view, selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
 
-  // Effect to reset the initial centering flag when the view changes away from 'details'
+  // Effect to reset the initial centering flag when we leave the details view
   useEffect(() => {
     if (view !== 'details') {
         initialCenterSetRef.current = false;
@@ -282,9 +283,11 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   }
   
   const getCurrentMapOptions = () => {
+      // The small map in the details panel needs 'greedy' gesture handling to be interactive.
       if (view === 'details') {
           return mapOptionsForDetailsPanel;
       }
+      // The full-screen map uses 'auto' and has zoom controls.
       return mapOptionsWithZoomControl;
   }
 
