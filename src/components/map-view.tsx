@@ -235,6 +235,7 @@ const mapOptionsWithZoomControl: google.maps.MapOptions = {
 const mapOptionsForDetailsPanel: google.maps.MapOptions = {
     ...mapOptions,
     gestureHandling: 'greedy',
+    zoomControl: false,
 };
 
 
@@ -304,7 +305,10 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
   
-    if (selectedRoute) {
+    if (view === 'details' && userLocation) {
+        map.panTo(userLocation);
+        map.setZoom(16);
+    } else if (selectedRoute) {
       const bounds = new window.google.maps.LatLngBounds();
       selectedRoute.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
       if (userLocation) {
