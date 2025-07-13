@@ -229,7 +229,7 @@ export default function Home() {
   
   const getHeaderTitle = () => {
     switch(view) {
-      case 'search': return '¿A dónde vamos?';
+      case 'search': return '¿A DÓNDE VAMOS?';
       case 'options': return 'Opciones de trayecto';
       case 'details': return 'Detalles del viaje';
       default: return 'BusesUY';
@@ -258,7 +258,7 @@ export default function Home() {
                 <div className="p-2 bg-primary text-primary-foreground rounded-lg">
                   <Bus className="h-5 w-5" />
                 </div>
-                <h1 className="text-xl font-medium tracking-tight">{getHeaderTitle()}</h1>
+                <h1 className="text-sm font-semibold tracking-tight uppercase">{getHeaderTitle()}</h1>
               </div>
             )}
             {view !== 'search' && (
