@@ -490,7 +490,7 @@ export default function RouteOptionsList({
     };
 
     fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 50000); // Update every 50 seconds
+    const intervalId = setInterval(fetchAllArrivals, 20000); // Update every 20 seconds
 
     return () => clearInterval(intervalId);
   }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
@@ -537,3 +537,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
