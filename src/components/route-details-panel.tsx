@@ -4,151 +4,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2 } from 'lucide-react';
-import type { BusLocation } from '@/lib/stm-api';
-import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2, Dot } from 'lucide-react';
+import type { BusLocation, StmInfo } from '@/lib/stm-api';
 import { getFormattedAddress } from '@/lib/google-maps-api';
-import { StopMarker } from '@/components/map-view';
+import { useEffect, useState } from 'react';
 
 interface RouteDetailsPanelProps {
   route: google.maps.DirectionsRoute;
   busLocations?: BusLocation[];
   isGoogleMapsLoaded: boolean;
   userLocation: google.maps.LatLngLiteral | null;
-}
-
-const mapContainerStyle = {
-  width: '100%',
-  height: '100%',
-};
-
-const mapStyle = [
-    { elementType: "geometry", stylers: [{ color: "#F0F4F8" }] },
-    { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-    { elementType: "labels.text.fill", stylers: [{ color: "#212F3D" }] },
-    { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-    { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
-    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#bdbdbd" }] },
-    { featureType: "poi", stylers: [{ "visibility": "off" }] },
-    { featureType: "poi", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
-    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e0e8f0" }] },
-    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
-    { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-    { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e8f0" }] },
-    { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
-    { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
-    { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9dcec" }] },
-];
-
-const mapOptions: google.maps.MapOptions = {
-    styles: mapStyle,
-    disableDefaultUI: true,
-    zoomControl: false,
-    rotateControl: true,
-    gestureHandling: 'auto',
-};
-
-
-const RouteDetailMap = ({ 
-  isLoaded, 
-  userLocation, 
-  selectedRoute,
-  busLocations 
-} : {
-  isLoaded: boolean;
-  userLocation: google.maps.LatLngLiteral | null;
-  selectedRoute: google.maps.DirectionsRoute | null;
-  busLocations: BusLocation[];
-}) => {
-  const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const hasCenteredRef = useRef(false);
-
-  const onLoad = useCallback((map: google.maps.Map) => {
-    mapRef.current = map;
-    hasCenteredRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    if (isLoaded && window.google) {
-      setUserMarkerIcon({
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 7,
-        fillColor: "#4285F4",
-        fillOpacity: 1,
-        strokeWeight: 2,
-        strokeColor: "#ffffff",
-      });
-    }
-  }, [isLoaded]);
-
-  useEffect(() => {
-      const map = mapRef.current;
-      if (map && userLocation && !hasCenteredRef.current) {
-          map.panTo(userLocation);
-          map.setZoom(16.5);
-          hasCenteredRef.current = true;
-      }
-  }, [userLocation, mapRef, isLoaded]);
-
-  if (!isLoaded) {
-    return (
-      <div className="w-full h-full bg-muted flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  const transitPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5 };
-  const walkingPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 2, scale: 2, strokeColor: '#4A4A4A' }, offset: '0', repeat: '10px' }] };
-  
-  const firstTransitStep = selectedRoute?.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT');
-  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
-
-  return (
-    <GoogleMap
-      onLoad={onLoad}
-      mapContainerStyle={mapContainerStyle}
-      center={userLocation || { lat: -34.90, lng: -56.16 }}
-      zoom={16.5}
-      options={mapOptions}
-    >
-      {selectedRoute && selectedRoute.legs[0].steps.map((step, index) => (
-        <Polyline
-          key={index}
-          path={step.path}
-          options={step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions}
-        />
-      ))}
-      
-      {userLocation && userMarkerIcon && <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />}
-
-      {departureStopLocation && (
-        <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }} />
-      )}
-
-      {busLocations.map((bus) => (
-        <Marker 
-          key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
-          position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
-          zIndex={100}
-          icon={{
-              url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="24">
-                      <rect x="0" y="0" width="100%" height="100%" rx="8" ry="8" fill="#212F3D" stroke="#ffffff" stroke-width="2"/>
-                      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#ffffff">${bus.line}</text>
-                  </svg>
-              `)}`,
-              scaledSize: new window.google.maps.Size(40, 24),
-              anchor: new window.google.maps.Point(20, 12),
-          }}
-        />
-      ))}
-    </GoogleMap>
-  )
+  stmInfo: StmInfo[];
 }
 
 const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
@@ -157,16 +23,6 @@ const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
   }
   return <Bus className="h-5 w-5 text-primary" />;
 };
-
-const getBusLines = (steps: google.maps.DirectionsStep[]) => {
-  const busLines = new Set<string>();
-  steps.forEach(step => {
-    if (step.travel_mode === 'TRANSIT' && step.transit) {
-      busLines.add(step.transit.line.short_name || step.transit.line.name);
-    }
-  });
-  return Array.from(busLines);
-}
 
 const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
   let totalSeconds = 0;
@@ -189,7 +45,6 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
             } else if (fallbackAddress === 'Mi ubicación actual') {
                  setAddress('Tu ubicación actual');
             } else {
-                // If location is null but there's a fallback address from Google, use that initially
                 const parts = fallbackAddress.split(',');
                 setAddress(parts[0]);
             }
@@ -210,7 +65,8 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
     )
 }
 
-const BusFeatures = ({ bus }: { bus: BusLocation }) => {
+const BusFeatures = ({ bus }: { bus: BusLocation | null }) => {
+    if (!bus) return null;
     const hasAccessibility = bus.access === "PLATAFORMA ELEVADORA";
     const hasAC = bus.thermalConfort === "Aire Acondicionado";
 
@@ -234,47 +90,41 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
     )
 }
 
+const getUniqueBusLines = (steps: google.maps.DirectionsStep[]) => {
+  const busLines = new Set<string>();
+  steps.forEach(step => {
+    if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
+      busLines.add(step.transit.line.short_name);
+    }
+  });
+  return Array.from(busLines);
+}
+
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
   isGoogleMapsLoaded,
   userLocation,
+  stmInfo,
 }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
-  const busLines = getBusLines(leg.steps);
+  const busLines = getUniqueBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
 
-  const isBusLive = busLocations.length > 0;
-  const liveBusData = isBusLive ? busLocations[0] : null; 
-  
   if (!leg) return null;
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
-        <div className="md:hidden">
-            {isBusLive && (
-                <div className="flex items-center gap-2 p-4 pb-2 text-sm font-medium text-green-400">
-                    <Wifi className="h-4 w-4" />
-                    <span>Bus en el mapa</span>
-                </div>
-            )}
-            <div className="relative h-[200px] bg-muted">
-              <RouteDetailMap 
-                isLoaded={isGoogleMapsLoaded}
-                userLocation={userLocation}
-                selectedRoute={route}
-                busLocations={busLocations}
-              />
-            </div>
-        </div>
-
       <div className="p-4 space-y-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2">
-                  {busLines.map((bus) => (
-                    <Badge key={bus} variant="outline" className="text-sm font-mono">{bus}</Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                  {busLines.map((bus, index) => (
+                    <React.Fragment key={bus}>
+                      <Badge variant="outline" className="text-sm font-mono">{bus}</Badge>
+                      {index < busLines.length - 1 && <span className="text-muted-foreground text-xs">+</span>}
+                    </React.Fragment>
                   ))}
                   {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
                     <Badge variant="outline" className="text-sm">A pie</Badge>
@@ -291,21 +141,29 @@ export default function RouteDetailsPanel({
           <CardContent className="pt-0 space-y-1">
              <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
              <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
-            {liveBusData && <BusFeatures bus={liveBusData} />}
+            <BusFeatures bus={busLocations?.[0] ?? null} />
           </CardContent>
         </Card>
 
         <div>
           <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
-          <Accordion type="multiple" className="w-full space-y-1">
+          <Accordion type="multiple" className="w-full space-y-1" defaultValue={['item-0']}>
             {leg.steps.map((step, index) => {
-              const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
+              const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 1;
+              const isTransit = step.travel_mode === 'TRANSIT' && step.transit;
+
+              const transitStepInfo = isTransit ? stmInfo.find(info => 
+                  info.line === step.transit?.line.short_name &&
+                  info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
+              ) : null;
+
+              const liveBusForStep = transitStepInfo ? busLocations.find(bus => bus.line === transitStepInfo.line) : null;
               
               if (hasDetailedWalkingSteps) {
                 return (
                   <AccordionItem value={`item-${index}`} key={index} className="border-none">
                      <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
-                       <div className="mt-0.5">
+                       <div className="pt-1">
                           <StepIcon type={step.travel_mode} />
                        </div>
                        <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
@@ -316,9 +174,9 @@ export default function RouteDetailsPanel({
                        </AccordionTrigger>
                      </div>
                     <AccordionContent className="py-2 pl-10 pr-4 border-l ml-4">
-                        <div className="space-y-2 text-xs">
+                        <div className="space-y-2 text-xs text-muted-foreground">
                           {step.steps!.map((subStep, subIndex) => (
-                             <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
+                             <p key={subIndex} className="flex gap-2"><Dot className="shrink-0 mt-0.5" /> <span dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} /></p>
                           ))}
                         </div>
                     </AccordionContent>
@@ -328,14 +186,26 @@ export default function RouteDetailsPanel({
 
               return (
                 <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="mt-0.5">
+                    <div className="pt-1">
                         <StepIcon type={step.travel_mode} />
                     </div>
                     <div className="flex-1 space-y-0.5">
                         <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                        <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
+                        <p className="text-xs text-muted-foreground">{step.duration?.text} {isTransit && `(${step.transit.num_stops} paradas)`}</p>
+                        {isTransit && transitStepInfo?.arrival && (
+                           <div className="flex items-center gap-1.5 text-green-400 text-xs font-medium pt-1">
+                              <Wifi className="h-3.5 w-3.5" />
+                              <span>Llega en {Math.round(transitStepInfo.arrival.eta / 60)} min</span>
+                           </div>
+                        )}
+                        {isTransit && !transitStepInfo?.arrival && step.transit?.departure_time?.text && (
+                           <div className="flex items-center gap-1.5 text-muted-foreground text-xs pt-1">
+                              <Clock className="h-3.5 w-3.5" />
+                              <span>Salida programada: {step.transit.departure_time.text}</span>
+                           </div>
+                        )}
                     </div>
-                    {step.travel_mode === 'TRANSIT' && step.transit && (
+                    {isTransit && (
                       <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name || step.transit.line.name}</Badge>
                     )}
                 </div>
@@ -347,3 +217,5 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
+
+    

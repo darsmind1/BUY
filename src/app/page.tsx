@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { Bus, ArrowLeft, Loader2, Map } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map, ArrowRight } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -14,11 +14,11 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection, getLineRoute } from '@/lib/stm-api';
-import type { StmLineRoute } from '@/lib/types';
+import type { StmLineRoute, StmInfo } from '@/lib/types';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
-const LIBRARIES: ("places" | "marker")[] = ['places', 'marker'];
+const LIBRARIES: ("places" | "marker" | "geometry")[] = ['places', 'marker', 'geometry'];
 
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
@@ -26,9 +26,9 @@ export default function Home() {
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
-  const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
-  const [selectedLineDestination, setSelectedLineDestination] = useState<string | null>(null);
-  const [selectedLineRoute, setSelectedLineRoute] = useState<StmLineRoute | null>(null);
+  const [selectedRouteStmInfo, setSelectedRouteStmInfo] = useState<StmInfo[]>([]);
+  const [lineRoutes, setLineRoutes] = useState<Record<string, StmLineRoute | null>>({});
+
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
@@ -64,28 +64,21 @@ export default function Home() {
     let intervalId: NodeJS.Timeout | null = null;
 
     const fetchBusLocations = async () => {
-      if (!selectedRoute || apiStatus !== 'connected') {
+      if (!selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0) {
         setBusLocations([]);
         return;
       }
       
-      const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-      if (!firstTransitStep) {
-        setBusLocations([]);
-        return;
-      }
-      
-      const lineName = firstTransitStep.transit?.line.short_name;
-      if (!lineName) {
-         setBusLocations([]);
-         return;
-      }
-      
+      const linesToFetch = selectedRouteStmInfo.map(info => ({
+        line: info.line,
+        destination: info.lineDestination
+      }));
+
       try {
-        const locations = await getBusLocation(lineName, selectedLineDestination ?? undefined);
+        const locations = await getBusLocation(linesToFetch);
         setBusLocations(locations);
       } catch (error) {
-        console.error(`Error fetching locations for line ${lineName}:`, error);
+        console.error(`Error fetching locations for route:`, error);
         setBusLocations([]);
       }
     };
@@ -102,11 +95,9 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, selectedLineDestination, apiStatus]);
+  }, [view, selectedRoute, selectedRouteStmInfo, apiStatus]);
 
   useEffect(() => {
-    // Location watching is now handled within the search form to streamline the process
-    // but we can still watch it here if needed for other components in the future.
     let watchId: number | null = null;
 
     if (navigator.geolocation) { 
@@ -116,7 +107,6 @@ export default function Home() {
               lat: position.coords.latitude,
               lng: position.coords.longitude,
             };
-            // Set the location once for all components that might need it.
             if (!currentUserLocation) {
               setCurrentUserLocation(newLocation);
             }
@@ -137,7 +127,7 @@ export default function Home() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [currentUserLocation]); // Only run once to set initial location
+  }, [currentUserLocation]);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
@@ -158,9 +148,8 @@ export default function Home() {
     setDirectionsResponse(null);
     setSelectedRoute(null);
     setSelectedRouteIndex(0);
-    setSelectedStopId(null);
-    setSelectedLineDestination(null);
-    setSelectedLineRoute(null);
+    setSelectedRouteStmInfo([]);
+    setLineRoutes({});
     setIsLoading(true);
     const directionsService = new window.google.maps.DirectionsService();
 
@@ -198,36 +187,40 @@ export default function Home() {
     );
   };
 
-  const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => {
+  const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
-    setSelectedStopId(stopId);
-    setSelectedLineDestination(lineDestination);
+    setSelectedRouteStmInfo(stmInfo);
 
-    const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-    const lineName = firstTransitStep?.transit?.line.short_name;
-    
-    if (lineName && apiStatus === 'connected') {
-        const lineRouteData = await getLineRoute(lineName);
-        setSelectedLineRoute(lineRouteData);
+    if (apiStatus === 'connected') {
+        const lineRoutePromises = stmInfo.map(info => info.line ? getLineRoute(info.line) : Promise.resolve(null));
+        const results = await Promise.all(lineRoutePromises);
+        
+        const newLineRoutes: Record<string, StmLineRoute | null> = {};
+        stmInfo.forEach((info, i) => {
+            if (info.line) {
+                newLineRoutes[info.line] = results[i];
+            }
+        });
+        setLineRoutes(newLineRoutes);
     }
 
     setView('details');
-    setMobileView('panel');
+    setMobileView('map'); // On mobile, show map first for details view
   };
 
   const handleBack = () => {
-    if (mobileView === 'map') {
+    if (mobileView === 'map' && view === 'details') {
       setMobileView('panel');
       return;
     }
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
-      setSelectedStopId(null);
-      setSelectedLineDestination(null);
-      setSelectedLineRoute(null);
+      setSelectedRouteStmInfo([]);
       setBusLocations([]);
+      setLineRoutes({});
+      setMobileView('panel');
     } else if (view === 'options') {
       setView('search');
       setDirectionsResponse(null);
@@ -245,9 +238,11 @@ export default function Home() {
 
   const showBackButton = view !== 'search';
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
-        <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
+        <aside className={`${isMobile && mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
           <header className="p-4 flex items-center gap-4 flex-shrink-0">
             {showBackButton ? (
                 <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Volver">
@@ -259,9 +254,11 @@ export default function Home() {
                 </div>
             )}
             <h1 className="text-xl font-medium tracking-tight flex-1">{getHeaderTitle()}</h1>
-            <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                <Map className="h-5 w-5" />
-            </Button>
+            {view !== 'search' && (
+                <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
+                    <Map className="h-5 w-5" />
+                </Button>
+            )}
           </header>
           <Separator />
           
@@ -285,6 +282,7 @@ export default function Home() {
                   routes={directionsResponse.routes} 
                   onSelectRoute={handleSelectRoute}
                   isApiConnected={apiStatus === 'connected'}
+                  isGoogleMapsLoaded={isGoogleMapsLoaded}
                 />
               )}
               {view === 'details' && selectedRoute && (
@@ -293,16 +291,25 @@ export default function Home() {
                   busLocations={busLocations}
                   isGoogleMapsLoaded={isGoogleMapsLoaded}
                   userLocation={currentUserLocation}
+                  stmInfo={selectedRouteStmInfo}
                 />
               )}
           </main>
         </aside>
         
-        <div className={`${mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full relative`}>
-            {mobileView === 'map' && view !== 'search' && (
-              <Button variant="secondary" size="icon" onClick={handleBack} aria-label="Volver al panel" className="absolute top-4 left-4 z-10 shadow-lg">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
+        <div className={`${isMobile && mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full relative`}>
+            {isMobile && mobileView === 'map' && view !== 'search' && (
+              <div className="absolute top-4 left-4 right-4 z-10 shadow-lg flex justify-between">
+                <Button variant="secondary" size="icon" onClick={handleBack} aria-label="Volver al panel">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                 {view === 'details' && (
+                    <Button variant="secondary" onClick={() => setMobileView('panel')} className="bg-background hover:bg-muted">
+                        Ver detalles
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                )}
+              </div>
             )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
@@ -311,11 +318,13 @@ export default function Home() {
               userLocation={currentUserLocation}
               selectedRoute={selectedRoute}
               busLocations={busLocations}
-              lineRoute={selectedLineRoute}
+              lineRoutes={lineRoutes}
               view={view}
             />
         </div>
       </div>
   );
 }
+    
+
     

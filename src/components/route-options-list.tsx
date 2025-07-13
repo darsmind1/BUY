@@ -51,9 +51,9 @@ const RouteOptionItem = ({
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void,
   arrivalInfo: ArrivalInfo | null,
-  stmInfo: StmInfo | null,
+  stmInfo: StmInfo[],
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const leg = route.legs[0];
@@ -110,7 +110,7 @@ const RouteOptionItem = ({
   return (
     <Card 
       className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
-      onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null, stmInfo?.lineDestination ?? null)}
+      onClick={() => onSelectRoute(route, index, stmInfo)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
       <CardContent className="p-4 flex items-center justify-between">
@@ -186,17 +186,21 @@ const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
 export default function RouteOptionsList({ 
   routes, 
   onSelectRoute, 
-  isApiConnected 
+  isApiConnected,
+  isGoogleMapsLoaded,
 }: {
   routes: google.maps.DirectionsRoute[];
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void;
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
+  isGoogleMapsLoaded: boolean;
 }) {
-  const [stmInfo, setStmInfo] = useState<Record<number, StmInfo | null>>({});
+  const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
 
   useEffect(() => {
+    if (!isGoogleMapsLoaded) return;
+
     const mapStopsAndFetchArrivals = async () => {
       if (!isApiConnected) {
         setIsLoading(false);
@@ -204,91 +208,112 @@ export default function RouteOptionsList({
       }
       setIsLoading(true);
 
-      const stmInfoPromises = routes.map(async (route, index) => {
-        const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-        const googleTransitLine = firstTransitStep?.transit?.line.short_name;
-        const departureStopLocation = firstTransitStep?.transit?.departure_stop?.location;
-        const lineDestination = firstTransitStep?.transit?.headsign || firstTransitStep?.transit?.line.name?.split(' - ')[1] || null;
+      const allRoutesStmInfoPromises = routes.map(async (route, index) => {
+        const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
 
-        if (departureStopLocation && googleTransitLine) {
-          const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
-          const closestStop = await findClosestStmStop(lat, lng);
-          return {
-            index,
-            info: {
-              stopId: closestStop?.busstopId ?? null,
-              line: googleTransitLine,
-              lineDestination,
-              departureStopLocation: { lat, lng },
-            },
-          };
+        if (!transitSteps || transitSteps.length === 0) {
+          return { index, stmInfo: [] };
         }
-        return { index, info: null };
+        
+        const stmInfoForRoutePromises = transitSteps.map(async (step) => {
+           const googleTransitLine = step.transit?.line.short_name;
+           const departureStopLocation = step.transit?.departure_stop?.location;
+           const lineDestination = step.transit?.headsign || step.transit?.line.name?.split(' - ')[1] || null;
+
+           if (departureStopLocation && googleTransitLine) {
+             const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
+             const closestStop = await findClosestStmStop(lat, lng);
+             return {
+               stopId: closestStop?.busstopId ?? null,
+               line: googleTransitLine,
+               lineDestination,
+               departureStopLocation: { lat, lng },
+               arrival: null,
+             };
+           }
+           return null;
+        });
+        
+        const stmInfoForRoute = (await Promise.all(stmInfoForRoutePromises)).filter(Boolean) as StmInfo[];
+        return { index, stmInfo: stmInfoForRoute };
       });
       
-      const stmInfoResults = await Promise.all(stmInfoPromises);
-      const newStmInfo: Record<number, StmInfo | null> = {};
+      const stmInfoResults = await Promise.all(allRoutesStmInfoPromises);
+      const newStmInfo: Record<number, StmInfo[]> = {};
       stmInfoResults.forEach(result => {
-        newStmInfo[result.index] = result.info;
+        newStmInfo[result.index] = result.stmInfo;
       });
-      setStmInfo(newStmInfo);
+      
+      setStmInfoByRoute(newStmInfo);
       setIsLoading(false);
     };
 
     mapStopsAndFetchArrivals();
-  }, [routes, isApiConnected]);
+  }, [routes, isApiConnected, isGoogleMapsLoaded]);
 
 
   useEffect(() => {
-    if (!isApiConnected || Object.keys(stmInfo).length === 0) {
+    if (!isApiConnected || Object.keys(stmInfoByRoute).length === 0 || !isGoogleMapsLoaded) {
       return;
     }
 
     const fetchAllArrivals = async () => {
-      const arrivalPromises = Object.entries(stmInfo).map(async ([routeIndexStr, info]) => {
-        const routeIndex = parseInt(routeIndexStr);
-        if (info && info.line && info.departureStopLocation) {
-          try {
-            const locations = await getBusLocation(info.line, info.lineDestination ?? undefined);
-            const liveBus = locations.length > 0 ? locations[0] : null;
+      const linesToFetch = Object.values(stmInfoByRoute).flat().map(info => ({
+        line: info.line,
+        destination: info.lineDestination,
+      }));
 
-            if (liveBus) {
-              const distance = google.maps.geometry.spherical.computeDistanceBetween(
-                new google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
-                new google.maps.LatLng(info.departureStopLocation)
-              );
-              // ETA based on average speed (e.g., 30km/h = 8.33m/s)
-              const eta = distance / 8.33; 
-              return { routeIndex, arrival: { eta, timestamp: liveBus.timestamp } };
-            }
-          } catch (error) {
-            console.error(`Error fetching bus locations for route ${routeIndex}:`, error);
-          }
-        }
-        return { routeIndex, arrival: null };
-      });
+      if (linesToFetch.length === 0) return;
 
-      const results = await Promise.all(arrivalPromises);
-      const newArrivals: BusArrivalsState = {};
-      results.forEach(result => {
-        if (result) {
-          newArrivals[result.routeIndex] = result.arrival;
-        }
-      });
-      setBusArrivals(prev => ({ ...prev, ...newArrivals }));
+      try {
+        const locations = await getBusLocation(linesToFetch);
+        const newArrivals: BusArrivalsState = {};
+        const newStmInfoByRoute: Record<number, StmInfo[]> = { ...stmInfoByRoute };
+
+        Object.entries(stmInfoByRoute).forEach(([routeIndexStr, infos]) => {
+          const routeIndex = parseInt(routeIndexStr);
+          let firstArrival: ArrivalInfo | null = null;
+
+          const updatedInfos = infos.map(info => {
+              const liveBus = locations.find(l => l.line === info.line && l.direction === (info.lineDestination?.includes('Entrante') ? 1 : 2));
+              if (liveBus && info.departureStopLocation) {
+                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
+                  new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
+                  new window.google.maps.LatLng(info.departureStopLocation)
+                );
+                const eta = distance / 8.33; // ETA based on average speed (e.g., 30km/h = 8.33m/s)
+                const arrivalData = { eta, timestamp: liveBus.timestamp };
+                if (!firstArrival) {
+                  firstArrival = arrivalData;
+                }
+                return { ...info, arrival: arrivalData };
+              }
+              return info;
+          });
+          
+          newArrivals[routeIndex] = firstArrival;
+          newStmInfoByRoute[routeIndex] = updatedInfos;
+        });
+
+        setBusArrivals(prev => ({ ...prev, ...newArrivals }));
+        setStmInfoByRoute(newStmInfoByRoute);
+
+      } catch (error) {
+        console.error(`Error fetching bus locations:`, error);
+      }
     };
 
     fetchAllArrivals();
     const intervalId = setInterval(fetchAllArrivals, 30000);
 
     return () => clearInterval(intervalId);
-  }, [stmInfo, isApiConnected]);
+  }, [stmInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
 
-  if (isLoading && isApiConnected) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
         <Loader2 className="h-6 w-6 animate-spin" />
-        <p>Verificando paradas y líneas...</p>
+        <p>Calculando mejores opciones...</p>
       </div>
     );
   }
@@ -305,9 +330,11 @@ export default function RouteOptionsList({
           index={index} 
           onSelectRoute={onSelectRoute}
           arrivalInfo={busArrivals[index] ?? null}
-          stmInfo={stmInfo[index] ?? null}
+          stmInfo={stmInfoByRoute[index] ?? []}
         />
       ))}
     </div>
   );
 }
+
+    

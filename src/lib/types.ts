@@ -36,9 +36,10 @@ export interface ArrivalInfo {
 
 export interface StmInfo {
   stopId: number | null;
-  line: string | undefined;
+  line: string;
   lineDestination: string | null;
   departureStopLocation: google.maps.LatLngLiteral | null;
+  arrival: ArrivalInfo | null;
 }
 
 export interface BusArrivalsState {
@@ -56,3 +57,5 @@ export interface StmLineRoute {
         lng: number;
     }[];
 }
+
+    

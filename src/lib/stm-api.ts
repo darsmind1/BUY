@@ -111,7 +111,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
     // If authentication fails (401 or 403), our token is likely invalid.
     // Force a new token and retry once.
     if (response.status === 401 || response.status === 403) {
-        console.warn(`STM API authentication failed with status ${response.status}. Forcing new token and retrying.`);
+        console.warn(`STM API authentication failed with status ${response.status} for path ${path}. Forcing new token and retrying.`);
         await getNewAccessToken(); // This will clear the cache and rotate credentials
         response = await makeRequest();
     }
@@ -146,14 +146,20 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(line: string, destination?: string): Promise<BusLocation[]> {
-    if (!line) return [];
-    
-    let path = `/buses?lines=${line}`;
-    if (destination) {
-        path += `&destination=${encodeURIComponent(destination)}`;
-    }
+export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLines = lines.filter(l => l.line).reduce((acc, current) => {
+        if (!acc.find(item => item.line === current.line)) {
+            acc.push(current);
+        }
+        return acc;
+    }, [] as {line?: string, destination?: string | null}[]);
 
+    if (uniqueLines.length === 0) return [];
+
+    const lineParams = uniqueLines.map(l => l.line).join(',');
+    
+    let path = `/buses?lines=${lineParams}`;
+    
     try {
         const data = await stmApiFetch(path);
 
@@ -170,7 +176,7 @@ export async function getBusLocation(line: string, destination?: string): Promis
         })) as BusLocation[];
 
     } catch (error) {
-        console.error(`Error in getBusLocation for line ${line}:`, error);
+        console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
         return []; // Return empty array on failure to prevent crashes
     }
 }
@@ -219,3 +225,5 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
         return null;
     }
 }
+
+    
