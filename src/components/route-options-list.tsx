@@ -412,7 +412,7 @@ export default function RouteOptionsList({
       try {
         const locations = await getBusLocation(linesToFetch);
         
-        const findArrivalForStop = (line: string, destination: string | null, stopLocation: google.maps.LatLngLiteral) => {
+        const findArrivalForStop = (line: string, destination: string | null, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
             if (!isGoogleMapsLoaded) return null;
             const liveBus = locations.find(l => l.line === line && l.destination === destination);
             if (liveBus) {

@@ -137,7 +137,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, selectedRouteStmInfo, apiStatus, isGoogleMapsLoaded, getSignalAge]);
+  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge]);
 
 
   useEffect(() => {
