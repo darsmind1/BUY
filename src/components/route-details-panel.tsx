@@ -6,7 +6,7 @@ import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot, Loader2 } from 'lucide-react';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot, Loader2, ChevronsRight } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
@@ -319,7 +319,7 @@ export default function RouteDetailsPanel({
                   {busLines.map((bus, index) => (
                     <React.Fragment key={bus}>
                       <Badge variant="outline" className="text-sm font-mono">{bus}</Badge>
-                      {index < busLines.length - 1 && <span className="text-muted-foreground text-xs">+</span>}
+                      {index < busLines.length - 1 && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
                     </React.Fragment>
                   ))}
                   {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
@@ -393,7 +393,7 @@ export default function RouteDetailsPanel({
                               <span>Llega en {Math.round(transitStepInfo.arrival.eta / 60)} min</span>
                            </div>
                            <div className="flex items-center gap-1.5 text-green-400/80 text-xs font-medium">
-                              <Bus className="h-3.5 w-3.5" />
+                              <Wifi className="h-3.5 w-3.5" />
                               <span>Bus en mapa</span>
                             </div>
                           </>

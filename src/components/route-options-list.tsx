@@ -1,13 +1,20 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
+import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin } from 'lucide-react';
 import { getBusLocation, findClosestStmStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getFormattedAddress } from '@/lib/google-maps-api';
+
+interface TransferInfo {
+    stopName: string;
+    stopLocation: google.maps.LatLngLiteral;
+    alternativeLines: string[];
+}
 
 
 const ArrivalInfoLegend = () => {
@@ -47,13 +54,15 @@ const RouteOptionItem = ({
   index, 
   onSelectRoute,
   arrivalInfo,
-  stmInfo
+  stmInfo,
+  transferInfo
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void,
   arrivalInfo: ArrivalInfo | null,
   stmInfo: StmInfo[],
+  transferInfo: TransferInfo | null
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const leg = route.legs[0];
@@ -106,6 +115,10 @@ const RouteOptionItem = ({
     
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
   const totalDuration = getTotalDuration(route.legs);
+  
+  const mainLines = leg.steps
+    .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
+    .map(step => step.transit!.line.short_name);
 
   return (
     <Card 
@@ -113,10 +126,9 @@ const RouteOptionItem = ({
       onClick={() => onSelectRoute(route, index, stmInfo)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
-      <CardContent className="p-4 flex items-center justify-between">
-        <div className="flex flex-col gap-3 flex-1">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 flex-wrap">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between">
+            <div className="flex items-center gap-1.5 flex-wrap flex-1">
               {renderableSteps.map((step, stepIndex) => {
                   const isLastStep = stepIndex === renderableSteps.length - 1;
                   if (step.travel_mode === 'TRANSIT') {
@@ -145,7 +157,7 @@ const RouteOptionItem = ({
                 </div>
               )}
             </div>
-             <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground" style={{ fontSize: '11px' }}>
+             <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground pl-2" style={{ fontSize: '11px' }}>
                 <Clock className="h-3.5 w-3.5" />
                 <span>{totalDuration} min</span>
             </div>
@@ -164,10 +176,26 @@ const RouteOptionItem = ({
             ) : firstTransitStep ? (
               <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             ) : null}
-
           </div>
-        </div>
-        <ArrowRight className="h-5 w-5 text-muted-foreground ml-4" />
+          {transferInfo && (
+            <div className="border-t pt-3 mt-3 text-xs space-y-1.5">
+                <div className="flex items-center gap-2 text-muted-foreground font-medium">
+                    <Bus className="h-3.5 w-3.5" />
+                    <span>Transbordo</span>
+                </div>
+                <div className="flex items-center gap-2 pl-1">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="text-foreground truncate">{transferInfo.stopName}</span>
+                </div>
+                <div className="flex items-center gap-2 pl-1">
+                    <ChevronsRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="text-foreground">
+                       {mainLines.length > 1 ? mainLines[1] : ''}
+                       {transferInfo.alternativeLines.length > 0 && ` y ${transferInfo.alternativeLines.length} opciones más`}
+                    </span>
+                </div>
+            </div>
+          )}
       </CardContent>
     </Card>
   )
@@ -197,6 +225,45 @@ export default function RouteOptionsList({
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
+  const [transferInfoByRoute, setTransferInfoByRoute] = useState<Record<number, TransferInfo | null>>({});
+
+  const findAlternativeLines = useCallback(async (
+        transferStopLocation: google.maps.LatLngLiteral, 
+        destination: google.maps.LatLng | string
+    ): Promise<string[]> => {
+    
+    return new Promise((resolve) => {
+        if (!isGoogleMapsLoaded) return resolve([]);
+        const directionsService = new window.google.maps.DirectionsService();
+
+        directionsService.route({
+            origin: transferStopLocation,
+            destination: destination,
+            travelMode: google.maps.TravelMode.TRANSIT,
+            transitOptions: {
+                modes: [google.maps.TransitMode.BUS],
+            },
+            provideRouteAlternatives: true,
+            region: 'UY'
+        }, (result, status) => {
+            if (status === google.maps.DirectionsStatus.OK && result) {
+                const alternativeLines = new Set<string>();
+                result.routes.forEach(route => {
+                    route.legs.forEach(leg => {
+                        leg.steps.forEach(step => {
+                            if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
+                                alternativeLines.add(step.transit.line.short_name);
+                            }
+                        })
+                    })
+                });
+                resolve(Array.from(alternativeLines));
+            } else {
+                resolve([]);
+            }
+        });
+    });
+  }, [isGoogleMapsLoaded]);
 
   useEffect(() => {
     if (!isGoogleMapsLoaded) return;
@@ -245,11 +312,41 @@ export default function RouteOptionsList({
       });
       
       setStmInfoByRoute(newStmInfo);
+
+      // Handle transfer info
+      const transferInfoPromises = routes.map(async (route, index) => {
+        const transitSteps = route.legs[0]?.steps.filter(s => s.travel_mode === 'TRANSIT');
+        if (transitSteps.length > 1) { // This indicates a transfer
+            const transferStep = transitSteps[1];
+            const transferStopLocation = transferStep.transit?.departure_stop.location;
+            if (transferStopLocation) {
+                const stopLocationLiteral = { lat: transferStopLocation.lat(), lng: transferStopLocation.lng() };
+                const stopName = await getFormattedAddress(stopLocationLiteral.lat, stopLocationLiteral.lng);
+                
+                const mainTransferLine = transferStep.transit?.line.short_name;
+                const alternativeLines = await findAlternativeLines(stopLocationLiteral, route.legs[0].end_location);
+
+                // Filter out the main line from alternatives
+                const filteredAlternatives = alternativeLines.filter(line => line !== mainTransferLine);
+                
+                return { index, info: { stopName, stopLocation: stopLocationLiteral, alternativeLines: filteredAlternatives } };
+            }
+        }
+        return { index, info: null };
+      });
+
+      const transferResults = await Promise.all(transferInfoPromises);
+      const newTransferInfo: Record<number, TransferInfo | null> = {};
+      transferResults.forEach(result => {
+          newTransferInfo[result.index] = result.info;
+      });
+      setTransferInfoByRoute(newTransferInfo);
+
       setIsLoading(false);
     };
 
     mapStopsAndFetchArrivals();
-  }, [routes, isApiConnected, isGoogleMapsLoaded]);
+  }, [routes, isApiConnected, isGoogleMapsLoaded, findAlternativeLines]);
 
 
   useEffect(() => {
@@ -331,10 +428,9 @@ export default function RouteOptionsList({
           onSelectRoute={onSelectRoute}
           arrivalInfo={busArrivals[index] ?? null}
           stmInfo={stmInfoByRoute[index] ?? []}
+          transferInfo={transferInfoByRoute[index] ?? null}
         />
       ))}
     </div>
   );
 }
-
-    
