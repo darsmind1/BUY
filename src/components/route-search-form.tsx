@@ -115,10 +115,10 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
     <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-500">
       <fieldset disabled={isFormDisabled} className="space-y-4 group">
         <Card>
-            <CardContent className="p-4 space-y-2 relative">
+            <CardContent className="p-4 relative">
                 <div className="flex items-center gap-4">
-                     <div className="flex flex-col items-center h-full self-stretch">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground shrink-0"><circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2"></circle></svg>
+                     <div className="flex flex-col items-center self-stretch">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground shrink-0 h-5 w-5"><circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2"></circle></svg>
                         <div className="border-l-2 border-dashed border-border flex-grow my-2"></div>
                         <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
                     </div>
@@ -129,7 +129,7 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
                                 id="origin" 
                                 value={origin}
                                 onChange={(e) => setOrigin(e.target.value)}
-                                className="border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0"
+                                className="border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0 h-9"
                                 placeholder="Mi ubicación actual"
                             />
                             <Button 
@@ -150,7 +150,7 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
                                 id="destination" 
                                 value={destination}
                                 onChange={(e) => setDestination(e.target.value)}
-                                className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0"
+                                className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
                                 placeholder="Escribe una dirección o lugar"
                                 required
                             />
@@ -159,9 +159,9 @@ export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocati
                 </div>
                 <Button 
                     type="button" 
-                    variant="ghost" 
+                    variant="outline" 
                     size="icon"
-                    className="absolute top-1/2 -translate-y-1/2 right-0 h-9 w-9 bg-background rounded-full border shadow-sm group-disabled:pointer-events-none"
+                    className="absolute top-1/2 -translate-y-1/2 right-4 h-8 w-8 bg-background rounded-full border shadow-sm group-disabled:pointer-events-none"
                     onClick={handleSwapLocations}
                 >
                     <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
