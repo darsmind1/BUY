@@ -3,7 +3,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2 } from 'lucide-react';
 import type { BusLocation, StmRouteOption } from '@/lib/stm-api';
 import { GoogleMap, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
@@ -327,5 +326,3 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
-
-    

@@ -259,16 +259,17 @@ export async function getNearbyStops(coords: { lat: number, lng: number }, radiu
     return (Array.isArray(data) ? data : []) as StmBusStop[];
 }
 
-async function getLineShape(line: number, stopId: number): Promise<{ shape: [number, number][], destination: string } | null> {
+async function getLineShape(line: number, stopId: number): Promise<{ shape: [number, number, number][], destination: string } | null> {
     try {
         const path = `/buses/lines/${line}/busstops/${stopId}/shape`;
         const data = await stmApiFetch(path);
-        if (data && data.shape && data.destination) {
+        if (data && data.shape && data.shape.coordinates && data.destination) {
             return {
-                shape: data.shape.coordinates,
+                shape: data.shape.coordinates, // [lng, lat, stopId?]
                 destination: data.destination.name
             };
         }
+        console.warn(`No shape data returned for line ${line} at stop ${stopId}`);
         return null;
     } catch (error) {
         console.error(`Error fetching shape for line ${line} at stop ${stopId}:`, error);
@@ -318,16 +319,27 @@ export async function findDirectBusRoutes(origin: { lat: number, lng: number }, 
 
     for (const [line, stops] of commonLines.entries()) {
         if (stops.departureStops.length > 0 && stops.arrivalStops.length > 0) {
+            
             const departureStop = originStops.find(s => s.busstopId === stops.departureStops[0])!;
             const arrivalStop = destinationStops.find(s => s.busstopId === stops.arrivalStops[0])!;
 
             const promise = getLineShape(line, departureStop.busstopId).then(shapeInfo => {
-                if (shapeInfo) {
+                if (shapeInfo && shapeInfo.shape.length > 0) {
+                    
                     const stopIdsInShape = shapeInfo.shape.map(p => p[2]);
                     const depStopIndex = stopIdsInShape.indexOf(departureStop.busstopId);
-                    const arrStopIndex = stopIdsInShape.indexOf(arrivalStop.busstopId);
+                    
+                    // Find any of the possible arrival stops in the shape
+                    let arrStopIndex = -1;
+                    for(const stopId of stops.arrivalStops){
+                        const index = stopIdsInShape.indexOf(stopId);
+                        if(index > depStopIndex) {
+                           arrStopIndex = index;
+                           break;
+                        }
+                    }
 
-                    if (depStopIndex !== -1 && arrStopIndex !== -1 && arrStopIndex > depStopIndex) {
+                    if (depStopIndex !== -1 && arrStopIndex !== -1) {
                         const stopsBetween = arrStopIndex - depStopIndex;
                         routeOptions.push({
                             line,
@@ -355,7 +367,14 @@ export async function findDirectBusRoutes(origin: { lat: number, lng: number }, 
         return distA - distB;
     });
 
-    return routeOptions;
-}
+    // Remove duplicate routes (same line and destination)
+    const uniqueRoutes = new Map<string, StmRouteOption>();
+    routeOptions.forEach(route => {
+        const key = `${route.line}-${route.destination}`;
+        if (!uniqueRoutes.has(key)) {
+            uniqueRoutes.set(key, route);
+        }
+    });
 
-    
+    return Array.from(uniqueRoutes.values());
+}
