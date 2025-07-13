@@ -59,10 +59,6 @@ const ArrivalInfoLegend = () => {
 
 const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return null;
-    // Do not show arrival text for very old signals, let the color speak.
-    const signalAge = getSignalAge(arrivalInfo);
-    if (signalAge !== null && signalAge > 150) return "Señal antigua";
-
     if (arrivalInfo.eta < 60) return "Llegando";
     const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
     return `Llega en ${arrivalMinutes} min`;
@@ -76,12 +72,13 @@ const getSignalAge = (arrivalInfo: ArrivalInfo | null) => {
 };
 
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
-    const signalAge = getSignalAge(arrivalInfo);
-    if (signalAge === null) return 'text-primary'; // Default color
-  
-    if (signalAge < 90) return 'text-green-400'; // Fresh signal
-    if (signalAge < 180) return 'text-yellow-400'; // Slightly delayed signal
-    return 'text-red-500'; // Old signal
+    if (!arrivalInfo) return 'text-primary'; // Default color
+    
+    const arrivalMinutes = arrivalInfo.eta / 60;
+    
+    if (arrivalMinutes <= 5) return 'text-green-400';
+    if (arrivalMinutes <= 10) return 'text-yellow-400';
+    return 'text-red-500';
 };
 
 
@@ -523,5 +520,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    
