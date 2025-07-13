@@ -310,12 +310,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
       if (userLocation) {
         bounds.extend(userLocation);
       }
-      if (view === 'details' && userLocation) {
-        map.panTo(userLocation);
-        map.setZoom(16.5);
-      } else {
-        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-      }
+      map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
     } else if (directionsResponse) {
       const bounds = new window.google.maps.LatLngBounds();
       directionsResponse.routes.forEach(route => {
