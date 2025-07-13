@@ -50,7 +50,7 @@ const mapOptions: google.maps.MapOptions = {
     styles: mapStyle,
     disableDefaultUI: true,
     zoomControl: false,
-    gestureHandling: 'none', // Disable interaction for the mini-map
+    gestureHandling: 'auto',
 };
 
 
@@ -66,6 +66,13 @@ const RouteDetailMap = ({
   busLocations: BusLocation[];
 }) => {
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const hasCenteredRef = useRef(false);
+
+  const onLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    hasCenteredRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (isLoaded && window.google) {
@@ -80,7 +87,16 @@ const RouteDetailMap = ({
     }
   }, [isLoaded]);
 
-  if (!isLoaded || !userLocation) {
+  useEffect(() => {
+      const map = mapRef.current;
+      if (map && userLocation && !hasCenteredRef.current) {
+          map.panTo(userLocation);
+          map.setZoom(16.5);
+          hasCenteredRef.current = true;
+      }
+  }, [userLocation, mapRef.current]);
+
+  if (!isLoaded) {
     return (
       <div className="w-full h-full bg-muted flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -93,8 +109,9 @@ const RouteDetailMap = ({
   
   return (
     <GoogleMap
+      onLoad={onLoad}
       mapContainerStyle={mapContainerStyle}
-      center={userLocation}
+      center={userLocation || { lat: -34.90, lng: -56.16 }}
       zoom={16.5}
       options={mapOptions}
     >
@@ -110,7 +127,7 @@ const RouteDetailMap = ({
 
       {busLocations.map((bus) => (
         <Marker 
-          key={`${bus.line}-${bus.id}`}
+          key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
           position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
           zIndex={100}
           icon={{
@@ -236,7 +253,7 @@ export default function RouteDetailsPanel({
                     <span>Bus en el mapa</span>
                 </div>
             )}
-            <div className="relative h-[200px] bg-muted touch-none">
+            <div className="relative h-[200px] bg-muted">
               <RouteDetailMap 
                 isLoaded={isGoogleMapsLoaded}
                 userLocation={userLocation}

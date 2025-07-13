@@ -35,132 +35,102 @@ const montevideoBounds = {
 
 const mapStyle = [
     {
-        "featureType": "all",
-        "elementType": "labels.text.fill",
-        "stylers": [
-            { "saturation": 36 },
-            { "color": "#333333" },
-            { "lightness": 40 }
-        ]
+      "elementType": "geometry",
+      "stylers": [{ "color": "#f5f5f5" }]
     },
     {
-        "featureType": "all",
-        "elementType": "labels.text.stroke",
-        "stylers": [
-            { "visibility": "on" },
-            { "color": "#ffffff" },
-            { "lightness": 16 }
-        ]
+      "elementType": "labels.icon",
+      "stylers": [{ "visibility": "off" }]
     },
     {
-        "featureType": "all",
-        "elementType": "labels.icon",
-        "stylers": [
-            { "visibility": "off" }
-        ]
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#616161" }]
     },
     {
-        "featureType": "administrative",
-        "elementType": "geometry.fill",
-        "stylers": [
-            { "color": "#fefefe" },
-            { "lightness": 20 }
-        ]
+      "elementType": "labels.text.stroke",
+      "stylers": [{ "color": "#f5f5f5" }]
     },
     {
-        "featureType": "administrative",
-        "elementType": "geometry.stroke",
-        "stylers": [
-            { "color": "#fefefe" },
-            { "lightness": 17 },
-            { "weight": 1.2 }
-        ]
+      "featureType": "administrative.land_parcel",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#bdbdbd" }]
     },
     {
-        "featureType": "landscape",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#f5f5f5" },
-            { "lightness": 20 }
-        ]
+      "featureType": "poi",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#eeeeee" }]
     },
     {
-        "featureType": "poi",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#f5f5f5" },
-            { "lightness": 21 }
-        ]
+      "featureType": "poi",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#757575" }]
     },
     {
-        "featureType": "poi.park",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#dedede" },
-            { "lightness": 21 }
-        ]
+      "featureType": "poi.park",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#e5e5e5" }]
     },
     {
-        "featureType": "road.highway",
-        "elementType": "geometry.fill",
-        "stylers": [
-            { "color": "#ffffff" },
-            { "lightness": 17 }
-        ]
+      "featureType": "poi.park",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#9e9e9e" }]
     },
     {
-        "featureType": "road.highway",
-        "elementType": "geometry.stroke",
-        "stylers": [
-            { "color": "#ffffff" },
-            { "lightness": 29 },
-            { "weight": 0.2 }
-        ]
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#ffffff" }]
     },
     {
-        "featureType": "road.arterial",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#ffffff" },
-            { "lightness": 18 }
-        ]
+      "featureType": "road.arterial",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#757575" }]
     },
     {
-        "featureType": "road.local",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#ffffff" },
-            { "lightness": 16 }
-        ]
+      "featureType": "road.highway",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#dadada" }]
     },
     {
-        "featureType": "transit",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#f2f2f2" },
-            { "lightness": 19 }
-        ]
+      "featureType": "road.highway",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#616161" }]
     },
     {
-        "featureType": "water",
-        "elementType": "geometry",
-        "stylers": [
-            { "color": "#e9e9e9" },
-            { "lightness": 17 }
-        ]
+      "featureType": "road.local",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#9e9e9e" }]
+    },
+    {
+      "featureType": "transit.line",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#e5e5e5" }]
+    },
+    {
+      "featureType": "transit.station",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#eeeeee" }]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#c9c9c9" }]
+    },
+    {
+      "featureType": "water",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#9e9e9e" }]
     }
 ];
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
-  zoomControl: false,
+  zoomControl: true,
   restriction: {
     latLngBounds: montevideoBounds,
     strictBounds: false,
   },
   styles: mapStyle,
   gestureHandling: 'auto',
-  zoomControl: true,
 };
 
 export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations }: MapViewProps) {
@@ -169,6 +139,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const [directionsRendererOptions, setDirectionsRendererOptions] = useState<google.maps.DirectionsRendererOptions | null>(null);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
+  const hasCenteredRef = useRef(false);
 
   useEffect(() => {
     if (isLoaded && window.google) {
@@ -186,6 +157,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
     setMapLoaded(true);
+    hasCenteredRef.current = false; // Reset on new map load
   }, []);
 
   const onUnmount = useCallback(function callback(map: google.maps.Map) {
@@ -228,7 +200,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   // Effect to set the map bounds or center based on the current view
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoaded) return;
+    if (!map || !mapLoaded || hasCenteredRef.current) return;
     
     if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
@@ -239,6 +211,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
             bounds.extend(userLocation);
         }
         map.fitBounds(bounds, 50); // 50px padding
+        hasCenteredRef.current = true;
     } else {
         map.panTo(userLocation || defaultCenter);
         map.setZoom(12);
