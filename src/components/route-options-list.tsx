@@ -145,8 +145,8 @@ const RouteOptionItem = ({
                 </div>
               )}
             </div>
-             <div className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-                <Clock className="h-4 w-4" />
+             <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground" style={{ fontSize: '11px' }}>
+                <Clock className="h-3.5 w-3.5" />
                 <span>{totalDuration} min</span>
             </div>
           </div>
@@ -208,7 +208,7 @@ export default function RouteOptionsList({
         const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
         const googleTransitLine = firstTransitStep?.transit?.line.short_name;
         const departureStopLocation = firstTransitStep?.transit?.departure_stop?.location;
-        const lineDestination = firstTransitStep?.transit?.line.name?.split(' - ')[1] || null;
+        const lineDestination = firstTransitStep?.transit?.headsign || firstTransitStep?.transit?.line.name?.split(' - ')[1] || null;
 
         if (departureStopLocation && googleTransitLine) {
           const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
