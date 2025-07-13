@@ -22,8 +22,8 @@ const mapContainerStyle = {
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
-  zoomControl: false,
-  gestureHandling: 'none', // Make it non-interactive
+  zoomControl: true,
+  gestureHandling: 'auto', // Make it interactive
 };
 
 const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
@@ -99,9 +99,12 @@ const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string;
 
 const BusFeatures = ({ stmInfo, busLocations }: { stmInfo: StmInfo[], busLocations: BusLocation[] }) => {
     if (stmInfo.length === 0) return null;
-    const firstBusLine = stmInfo[0].line;
-    const relevantBus = busLocations.find(b => b.line === firstBusLine);
+    
+    // Find info for the first bus line in the trip
+    const firstBusLineStmInfo = stmInfo.find(s => s.line);
+    if (!firstBusLineStmInfo) return null;
 
+    const relevantBus = busLocations.find(b => b.line === firstBusLineStmInfo.line);
     if (!relevantBus) return null;
     
     const hasAccessibility = relevantBus.access === "PLATAFORMA ELEVADORA";
@@ -128,13 +131,13 @@ const BusFeatures = ({ stmInfo, busLocations }: { stmInfo: StmInfo[], busLocatio
 }
 
 const getUniqueBusLines = (steps: google.maps.DirectionsStep[]) => {
-  const busLines = new Set<string>();
-  steps.forEach(step => {
-    if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
-      busLines.add(step.transit.line.short_name);
-    }
-  });
-  return Array.from(busLines);
+    const busLines = new Set<string>();
+    steps.forEach(step => {
+        if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
+            busLines.add(step.transit.line.short_name);
+        }
+    });
+    return Array.from(busLines);
 }
 
 export default function RouteDetailsPanel({ 
@@ -161,7 +164,7 @@ export default function RouteDetailsPanel({
                  <CardContent className="p-2">
                     <GoogleMap
                         mapContainerStyle={mapContainerStyle}
-                        center={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }}
+                        center={userLocation || { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }}
                         zoom={16}
                         options={mapOptions}
                     >
@@ -281,5 +284,3 @@ export default function RouteDetailsPanel({
     </div>
   );
 }
-
-    
