@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { getArrivalsForStop, BusArrival, StmBusStop, getAllBusStops } from '@/lib/stm-api';
+import { getArrivalsForStop, BusArrival, StmBusStop, getAllBusStops, getLinesForBusStop } from '@/lib/stm-api';
 import { haversineDistance, cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
@@ -17,7 +17,6 @@ interface RouteOptionsListProps {
 interface StmInfo {
   stopId: number | null;
   line: string | undefined;
-  lineId: number | null;
   lineDestination: string | null;
   departureStopLocation: google.maps.LatLng | null;
 }
@@ -148,12 +147,12 @@ const RouteOptionItem = ({
             
             {arrivalInfo && arrivalText ? (
               <div className="flex items-center gap-2 text-xs font-medium text-green-400">
-                  <Wifi className="h-3 w-3 animate-pulse-green" />
+                  <Wifi className="h-3.5 w-3.5 animate-pulse-green" />
                   <span>{arrivalText}</span>
               </div>
             ) : scheduledText ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
+                  <Clock className="h-3.5 w-3.5" />
                   <span>{scheduledText}</span>
               </div>
             ) : firstTransitStep ? (
@@ -207,7 +206,12 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
         const googleTransitLine = firstTransitStep?.transit?.line.short_name;
         const departureStopLocation = firstTransitStep?.transit?.departure_stop?.location || null;
-        const lineDestination = firstTransitStep?.transit?.line.name?.split(' - ')[1] || null;
+        
+        // Extract destination from Google's transit line name (e.g., "149 (B,C,D...) - Pocitos")
+        const fullLineName = firstTransitStep?.transit?.line.name || '';
+        const lineDestinationMatch = fullLineName.match(/-\s*(.*)/);
+        const lineDestination = lineDestinationMatch ? lineDestinationMatch[1].trim() : null;
+
 
         if (departureStopLocation && googleTransitLine) {
           const departureStopGoogleLocation = {
@@ -215,40 +219,45 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             lng: departureStopLocation.lng()
           };
 
+          // Find the closest STM stop within a 50-meter radius
           let closestStmStop: StmBusStop | null = null;
-          let minDistance = Infinity;
+          let minDistance = 50; // Max distance in meters
 
-          allStops.forEach(stop => {
+          for (const stop of allStops) {
               const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
               const distance = haversineDistance(departureStopGoogleLocation, stopCoords);
               if (distance < minDistance) {
                   minDistance = distance;
                   closestStmStop = stop;
               }
-          });
+          }
           
-          let lineId : number | null = null;
-          if (closestStmStop && firstTransitStep?.transit?.line.name) {
-              // Try to parse the lineId from Google's transit line name (e.g., "149 B,C,D... - Pocitos")
-              const lineNameParts = firstTransitStep.transit.line.name.split(' ');
-              if (lineNameParts.length > 0) {
-                  const potentialId = parseInt(googleTransitLine, 10);
-                  if (!isNaN(potentialId)) {
-                      lineId = potentialId;
+          let stopIdForMapping: number | null = null;
+          
+          // Verify if the found stop actually serves the line we are looking for
+          if (closestStmStop) {
+              try {
+                  const linesAtStop = await getLinesForBusStop(closestStmStop.busstopId);
+                  const lineIsServed = linesAtStop.some(line => line.line.toString() === googleTransitLine);
+                  if (lineIsServed) {
+                      stopIdForMapping = closestStmStop.busstopId;
+                  } else {
+                     console.warn(`Closest stop ${closestStmStop.busstopId} does not serve line ${googleTransitLine}.`);
                   }
+              } catch (e) {
+                  console.error(`Error verifying lines for stop ${closestStmStop.busstopId}`, e);
               }
           }
 
-
           newMappings[index] = {
-              stopId: (closestStmStop && minDistance <= 250) ? closestStmStop.busstopId : null,
+              stopId: stopIdForMapping,
               line: googleTransitLine,
-              lineId: lineId,
               lineDestination: lineDestination,
               departureStopLocation: departureStopLocation
           };
+
         } else {
-          newMappings[index] = { stopId: null, line: undefined, lineId: null, lineDestination: null, departureStopLocation: null };
+          newMappings[index] = { stopId: null, line: undefined, lineDestination: null, departureStopLocation: null };
         }
       }
       
@@ -268,13 +277,17 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     const fetchAllArrivals = async () => {
         const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndexStr, info]) => {
             const routeIndex = parseInt(routeIndexStr, 10);
-            if (info.stopId && info.line) { // Use line name from google for matching
+            if (info.stopId && info.line && info.lineDestination) {
                 try {
                     const arrivals = await getArrivalsForStop(info.stopId);
-                    // Find the first arrival for the correct line that is not on site and has a bus
-                    const nextArrival = arrivals?.find(a => 
+                    if (!arrivals) return { routeIndex, arrival: null };
+
+                    // Find the first arrival for the correct line AND destination
+                    const nextArrival = arrivals.find(a => 
                         a.bus && 
                         a.bus.line === info.line && 
+                        a.bus.destination && 
+                        a.bus.destination.toUpperCase().includes(info.lineDestination!.toUpperCase()) &&
                         a.eta > 0
                     );
                     return { routeIndex, arrival: nextArrival || null };

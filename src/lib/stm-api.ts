@@ -20,6 +20,7 @@ export interface BusLocation {
     id: string;
     timestamp: string;
     line: string;
+    destination?: string;
     location: {
         coordinates: [number, number]; // [lng, lat]
     };
@@ -191,6 +192,7 @@ export async function getBusLocation(line: string, destination?: string): Promis
             id: bus.id?.toString(), // Ensure id is a string
             access: bus.access,
             thermalConfort: bus.thermalConfort,
+            destination: bus.destination,
         };
     }) as BusLocation[];
 }
@@ -226,7 +228,8 @@ export async function getArrivalsForStop(stopId: number, lineId?: number): Promi
         bus: arrival.bus ? {
             ...arrival.bus,
             line: arrival.bus.line?.toString(),
-            id: arrival.bus.id?.toString()
+            id: arrival.bus.id?.toString(),
+            destination: arrival.bus.destination,
         } : null,
     }));
 }

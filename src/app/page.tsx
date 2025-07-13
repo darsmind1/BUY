@@ -103,8 +103,6 @@ export default function Home() {
   }, [view, selectedRoute, selectedLineDestination, apiStatus]);
 
   useEffect(() => {
-    // Location watching is now handled within the search form to streamline the process
-    // but we can still watch it here if needed for other components in the future.
     let watchId: number | null = null;
 
     if (navigator.geolocation) { 
@@ -114,10 +112,7 @@ export default function Home() {
               lat: position.coords.latitude,
               lng: position.coords.longitude,
             };
-            // Set the location once for all components that might need it.
-            if (!currentUserLocation) {
-              setCurrentUserLocation(newLocation);
-            }
+            setCurrentUserLocation(newLocation);
           },
           (error) => {
             console.error("Error watching position:", error);
@@ -135,7 +130,7 @@ export default function Home() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [currentUserLocation]); // Only run once to set initial location
+  }, []);
 
   const handleSearch = (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
