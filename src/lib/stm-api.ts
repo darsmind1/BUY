@@ -2,9 +2,11 @@
 'use server';
 
 import config from './config';
+import type { BusLocation, StmBusStop } from './types';
+import { haversineDistance } from './utils';
 
 // Initialize with a random index to distribute load initially
-let currentCredentialIndex = Math.floor(Math.random() * config.stm.credentials.length);
+let currentCredentialIndex = Math.floor(Math.random() * (config.stm.credentials.length || 1));
 
 if (config.stm.credentials.length === 0) {
   const errorMessage = 'CRITICAL: No STM API credentials found. Please check your environment variables for STM_CLIENT_ID_1, STM_CLIENT_SECRET_1, etc.';
@@ -14,25 +16,6 @@ if (config.stm.credentials.length === 0) {
 interface StmToken {
   access_token: string;
   expires_in: number;
-}
-
-export interface BusLocation {
-    id: string;
-    timestamp: string;
-    line: string;
-    destination?: string;
-    location: {
-        type: 'Point',
-        coordinates: [number, number]; // [lng, lat]
-    };
-    access?: string;
-    thermalConfort?: string;
-}
-
-export interface BusArrival {
-    bus: BusLocation | null;
-    eta: number; // in seconds, -1 for scheduled
-    lastUpdate: number;
 }
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -49,11 +32,9 @@ async function getAccessToken(): Promise<string> {
     throw new Error("No STM credentials configured.");
   }
   
-  // Rotate to the next credential for the next call
   const credential = credentials[currentCredentialIndex];
   currentCredentialIndex = (currentCredentialIndex + 1) % credentials.length;
   
-
   const now = Date.now();
   const cached = tokenCache.get(credential.clientId);
 
@@ -96,7 +77,7 @@ async function getAccessToken(): Promise<string> {
   }
 }
 
-async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1): Promise<any> {
+async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3): Promise<any> {
   try {
     const accessToken = await getAccessToken();
     const url = `${STM_API_BASE_URL}${path}`;
@@ -110,37 +91,33 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 1)
       },
       next: { revalidate: 0 }
     });
-
-    if (!response.ok) {
-        if (response.status >= 500 && retries > 0) {
-            console.warn(`STM API server error for path ${path}. Status: ${response.status}. Retrying... (${retries - 1} left)`);
-            await delay(500);
-            return stmApiFetch(path, options, retries - 1);
-        }
-        const errorText = await response.text();
-        console.error(`STM API request to ${path} failed with status ${response.status}: ${errorText}`);
-        return [];
-    }
-
+    
+    // Handle specific status codes
     if (response.status === 204) {
-      return []; 
+       console.warn(`Received 204 No Content for ${path}. Returning empty array.`);
+       return [];
+    }
+    if (response.status === 429) {
+      console.warn(`STM API rate limit exceeded for path ${path}. Returning null to avoid crash.`);
+      return null;
+    }
+    if (response.status === 404) {
+        console.warn(`STM API request to ${path} resulted in a 404 Not Found. Returning empty array.`);
+        return [];
     }
     
-    const text = await response.text();
-    if (!text.trim()) {
-        return [];
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`STM API request to ${path} failed:`, response.status, errorText);
+      throw new Error(`STM API request failed for ${path}: ${response.status} ${errorText}`);
     }
-
-    return JSON.parse(text);
+    
+    return await response.json();
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
-    if (retries > 0) {
-      console.warn(`Retrying after exception... (${retries - 1} left)`);
-      await delay(500);
-      return stmApiFetch(path, options, retries - 1);
-    }
-    return [];
+    // Re-throw the error so the calling server action fails clearly.
+    throw error;
   }
 }
 
@@ -157,57 +134,52 @@ export async function getBusLocation(line: string, destination?: string): Promis
     if (!line) return [];
     
     let path = `/buses?lines=${line}`;
-    
+    if (destination) {
+        path += `&destination=${encodeURIComponent(destination)}`;
+    }
+
     const data = await stmApiFetch(path);
 
     if (!Array.isArray(data)) {
         if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
-            return [];
+            return []; // API returned an empty object, treat as no results.
         }
         console.warn(`STM API response for ${path} was not an array, returning empty array to avoid crash:`, data);
         return [];
     }
 
-    const allBuses = data.map((bus: any) => {
+    return data.map((bus: any) => {
         const busLine = typeof bus.line === 'object' && bus.line !== null && bus.line.value ? bus.line.value : bus.line;
         return {
             ...bus,
             line: busLine.toString(),
-            id: bus.id?.toString(),
+            id: bus.id?.toString(), // Ensure id is a string
             access: bus.access,
             thermalConfort: bus.thermalConfort,
-            destination: bus.destination,
         };
     }) as BusLocation[];
-
-    if (destination) {
-        return allBuses.filter(bus => bus.destination?.toUpperCase().includes(destination.toUpperCase()));
-    }
-
-    return allBuses;
 }
 
-export async function getArrivalsForStop(stopId: number): Promise<BusArrival[] | null> {
-    if (!stopId) return null;
-    let path = `/buses/busstops/${stopId}/arrivals`;
-    
-    const data = await stmApiFetch(path);
-    
-    if (data === null) {
+export async function findClosestStmStop(lat: number, lng: number): Promise<StmBusStop | null> {
+    const radius = 200; // Search within a 200-meter radius
+    const path = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}`;
+    const nearbyStops = await stmApiFetch(path);
+
+    if (!Array.isArray(nearbyStops) || nearbyStops.length === 0) {
         return null;
     }
-    
-    if (!Array.isArray(data)) {
-        console.warn(`STM API response for arrivals was not an array for stop ${stopId}.`, data);
-        return [];
-    }
-    return data.map(arrival => ({
-        ...arrival,
-        bus: arrival.bus ? {
-            ...arrival.bus,
-            line: arrival.bus.line?.toString(),
-            id: arrival.bus.id?.toString(),
-            destination: arrival.bus.destination,
-        } : null,
-    }));
+
+    let closestStop: StmBusStop | null = null;
+    let minDistance = Infinity;
+
+    nearbyStops.forEach(stop => {
+        const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
+        const distance = haversineDistance({ lat, lng }, stopCoords);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestStop = stop;
+        }
+    });
+
+    return closestStop;
 }

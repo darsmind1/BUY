@@ -91,10 +91,6 @@ export default {
             height: '0',
           },
         },
-        'pulse-green': {
-          '0%, 100%': { opacity: '1', filter: 'brightness(1)' },
-          '50%': { opacity: '0.7', filter: 'brightness(1.5)' },
-        },
         moveBus1: {
           '0%': { top: '25%', left: '20%' },
           '100%': { top: '60%', left: '75%' }
@@ -111,7 +107,6 @@ export default {
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-        'pulse-green': 'pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'move-bus-1': 'moveBus1 25s linear infinite alternate',
         'move-bus-2': 'moveBus2 30s linear infinite alternate',
         'move-bus-3': 'moveBus3 20s linear infinite alternate',

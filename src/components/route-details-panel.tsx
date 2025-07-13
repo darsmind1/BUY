@@ -1,20 +1,215 @@
 
 "use client";
 
-import Image from 'next/image';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Footprints, Bus, Clock, Accessibility, Snowflake, Eye } from 'lucide-react';
-import type { BusLocation } from '@/lib/stm-api';
-import type { RouteOption } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Button } from './ui/button';
+import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2 } from 'lucide-react';
+import type { BusLocation } from '@/lib/stm-api';
+import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { getFormattedAddress } from '@/lib/google-maps-api';
+import { StopMarker } from '@/components/map-view';
 
 interface RouteDetailsPanelProps {
-  route: RouteOption;
+  route: google.maps.DirectionsRoute;
   busLocations?: BusLocation[];
-  googleMapsApiKey: string;
-  onCenterOnRoute: () => void;
+  isGoogleMapsLoaded: boolean;
+  directionsResponse: google.maps.DirectionsResult | null;
+  routeIndex: number;
+  userLocation: google.maps.LatLngLiteral | null;
+}
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+};
+
+const mapStyle = [
+    { elementType: "geometry", stylers: [{ color: "#F0F4F8" }] },
+    { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#212F3D" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+    { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
+    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#bdbdbd" }] },
+    { featureType: "poi", stylers: [{ "visibility": "off" }] },
+    { featureType: "poi", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e0e8f0" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e8f0" }] },
+    { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
+    { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9dcec" }] },
+];
+
+const mapOptions: google.maps.MapOptions = {
+    styles: mapStyle,
+    disableDefaultUI: true,
+    zoomControl: false,
+    rotateControl: true,
+    gestureHandling: 'auto',
+};
+
+
+const RouteDetailMap = ({ 
+  isLoaded, 
+  userLocation, 
+  selectedRoute,
+  busLocations 
+} : {
+  isLoaded: boolean;
+  userLocation: google.maps.LatLngLiteral | null;
+  selectedRoute: google.maps.DirectionsRoute | null;
+  busLocations: BusLocation[];
+}) => {
+  const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const hasCenteredRef = useRef(false);
+
+  const onLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    hasCenteredRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded && window.google) {
+      setUserMarkerIcon({
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 7,
+        fillColor: "#4285F4",
+        fillOpacity: 1,
+        strokeWeight: 2,
+        strokeColor: "#ffffff",
+      });
+    }
+  }, [isLoaded]);
+
+  useEffect(() => {
+      const map = mapRef.current;
+      if (map && userLocation && !hasCenteredRef.current) {
+          map.panTo(userLocation);
+          map.setZoom(16.5);
+          hasCenteredRef.current = true;
+      }
+  }, [userLocation, mapRef, isLoaded]);
+
+  if (!isLoaded) {
+    return (
+      <div className="w-full h-full bg-muted flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const transitPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5 };
+  const walkingPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 2, scale: 2, strokeColor: '#4A4A4A' }, offset: '0', repeat: '10px' }] };
+  
+  const firstTransitStep = selectedRoute?.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT');
+  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
+
+  return (
+    <GoogleMap
+      onLoad={onLoad}
+      mapContainerStyle={mapContainerStyle}
+      center={userLocation || { lat: -34.90, lng: -56.16 }}
+      zoom={16.5}
+      options={mapOptions}
+    >
+      {selectedRoute && selectedRoute.legs[0].steps.map((step, index) => (
+        <Polyline
+          key={index}
+          path={step.path}
+          options={step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions}
+        />
+      ))}
+      
+      {userLocation && userMarkerIcon && <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />}
+
+      {departureStopLocation && (
+        <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }} />
+      )}
+
+      {busLocations.map((bus) => (
+        <Marker 
+          key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
+          position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
+          zIndex={100}
+          icon={{
+              url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="24">
+                      <rect x="0" y="0" width="100%" height="100%" rx="8" ry="8" fill="#212F3D" stroke="#ffffff" stroke-width="2"/>
+                      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#ffffff">${bus.line}</text>
+                  </svg>
+              `)}`,
+              scaledSize: new window.google.maps.Size(40, 24),
+              anchor: new window.google.maps.Point(20, 12),
+          }}
+        />
+      ))}
+    </GoogleMap>
+  )
+}
+
+const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
+  if (type === 'WALKING') {
+    return <Footprints className="h-5 w-5 text-primary" />;
+  }
+  return <Bus className="h-5 w-5 text-primary" />;
+};
+
+const getBusLines = (steps: google.maps.DirectionsStep[]) => {
+  const busLines = new Set<string>();
+  steps.forEach(step => {
+    if (step.travel_mode === 'TRANSIT' && step.transit) {
+      busLines.add(step.transit.line.short_name || step.transit.line.name);
+    }
+  });
+  return Array.from(busLines);
+}
+
+const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
+  let totalSeconds = 0;
+  legs.forEach(leg => {
+    if (leg.duration) {
+      totalSeconds += leg.duration.value;
+    }
+  });
+  return Math.round(totalSeconds / 60);
+}
+
+const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string; location: google.maps.LatLng | null; fallbackAddress: string }) => {
+    const [address, setAddress] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchAddress = async () => {
+            if (location) {
+                const formattedAddr = await getFormattedAddress(location.lat(), location.lng());
+                setAddress(formattedAddr);
+            } else if (fallbackAddress === 'Mi ubicación actual') {
+                 setAddress('Tu ubicación actual');
+            } else {
+                // If location is null but there's a fallback address from Google, use that initially
+                const parts = fallbackAddress.split(',');
+                setAddress(parts[0]);
+            }
+        };
+        fetchAddress();
+    }, [location, fallbackAddress]);
+    
+    if (address === null) {
+        return (
+             <p className="text-xs text-muted-foreground h-4 bg-muted/50 rounded animate-pulse w-3/4"></p>
+        );
+    }
+    
+    return (
+        <p className="text-xs text-muted-foreground">
+            {prefix}: <span className="font-semibold text-foreground">{address}</span>
+        </p>
+    )
 }
 
 const BusFeatures = ({ bus }: { bus: BusLocation }) => {
@@ -41,132 +236,114 @@ const BusFeatures = ({ bus }: { bus: BusLocation }) => {
     )
 }
 
-const StaticMapPreview = ({ route, apiKey, onCenterOnRoute }: { route: RouteOption, apiKey: string, onCenterOnRoute: () => void }) => {
-    const routeData = route.gmapsRoute.routes[route.routeIndex];
-    if (!routeData || !routeData.legs[0]) return null;
-
-    const leg = routeData.legs[0];
-    const origin = leg.start_location.toUrlValue();
-    const destination = leg.end_location.toUrlValue();
-    const busPath = routeData.overview_path.map(p => p.toUrlValue()).join('|');
-
-    const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=600x200&scale=2&maptype=roadmap&language=es&region=UY&markers=color:blue|label:A|${origin}&markers=color:red|label:B|${destination}&path=color:0xA40034|weight:4|${busPath}&key=${apiKey}`;
-
-    return (
-        <div className="relative mb-4 overflow-hidden rounded-lg aspect-[16/7] w-full bg-muted group">
-             <Image 
-                src={mapUrl}
-                alt="Mapa de la ruta" 
-                fill
-                className="object-cover"
-                unoptimized
-             />
-             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Button variant="secondary" onClick={onCenterOnRoute}>
-                  <Eye className="mr-2 h-4 w-4" />
-                  Ver en el mapa
-                </Button>
-             </div>
-        </div>
-    )
-}
-
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
-  googleMapsApiKey,
-  onCenterOnRoute
+  isGoogleMapsLoaded,
+  userLocation,
 }: RouteDetailsPanelProps) {
+  const leg = route.legs[0];
+  const busLines = getBusLines(leg.steps);
+  const duration = getTotalDuration(route.legs);
 
-  const duration = Math.round(route.duration / 60);
-  const routeData = route.gmapsRoute.routes[route.routeIndex];
-  const leg = routeData?.legs[0];
+  const isBusLive = busLocations.length > 0;
+  const liveBusData = isBusLive ? busLocations[0] : null; 
   
   if (!leg) return null;
 
-  const liveBusData = busLocations.length > 0 ? busLocations[0] : null; 
-  
-  if (!route || !route.transitDetails) return null;
-
-  const transitStep = leg.steps.find(s=>s.travel_mode === 'TRANSIT' && s.transit);
-
   return (
-    <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-500">
-        
-        <StaticMapPreview route={route} apiKey={googleMapsApiKey} onCenterOnRoute={onCenterOnRoute} />
-
-        {liveBusData && (
-            <div className="flex items-center gap-2 px-1 text-sm font-medium text-green-400">
-                <svg className="h-4 w-4 animate-pulse-green" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M4.22,4.22a7,7,0,0,0,0,9.9,7,7,0,0,0,9.9,0,1,1,0,0,1,1.42,1.42,9,9,0,0,1-12.72,0,9,9,0,0,1,0-12.72,1,1,0,0,1,1.42,1.42Z"/>
-                    <path d="M12,10a2,2,0,1,0,2,2A2,2,0,0,0,12,10Z"/>
-                    <path d="M19.78,19.78a7,7,0,0,0,0-9.9,1,1,0,1,1-1.42-1.42,9,9,0,0,1,0,12.72,9,9,0,0,1-12.72,0,1,1,0,1,1-1.42-1.42,7,7,0,0,0,9.9,0Z"/>
-                </svg>
-                <span>Bus en el mapa (tiempo real)</span>
+    <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
+        <div className="md:hidden">
+            {isBusLive && (
+                <div className="flex items-center gap-2 p-4 pb-2 text-sm font-medium text-green-400">
+                    <Wifi className="h-4 w-4" />
+                    <span>Bus en el mapa</span>
+                </div>
+            )}
+            <div className="relative h-[200px] bg-muted">
+              <RouteDetailMap 
+                isLoaded={isGoogleMapsLoaded}
+                userLocation={userLocation}
+                selectedRoute={route}
+                busLocations={busLocations}
+              />
             </div>
-        )}
+        </div>
 
-      <div className="space-y-4">
-        <Card className="overflow-hidden">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <Badge variant="secondary" className="text-base font-mono py-1 px-3">{route.transitDetails.line.name}</Badge>
-              <div className="flex items-center gap-1.5 text-sm">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span>Duración total: ~{duration} min</span>
+      <div className="p-4 space-y-3">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between text-base">
+              <div className="flex items-center gap-2">
+                  {busLines.map((bus) => (
+                    <Badge key={bus} variant="outline" className="text-sm font-mono">{bus}</Badge>
+                  ))}
+                  {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
+                    <Badge variant="outline" className="text-sm">A pie</Badge>
+                  )}
               </div>
-            </div>
-            <div className="text-sm text-muted-foreground">
-                Hacia <span className="font-bold text-foreground">{route.transitDetails.headsign}</span>
-            </div>
+              <div className="flex items-center gap-3 text-sm font-normal">
+                <div className="flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>{duration} min</span>
+                </div>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-1">
+             <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
+             <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
             {liveBusData && <BusFeatures bus={liveBusData} />}
           </CardContent>
         </Card>
 
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground px-1">Indicaciones del Viaje</h3>
-          <div className="w-full space-y-1">
-            {route.walkingSteps.length > 0 && (
-                <Card>
-                    <CardContent className="p-0">
-                         <Accordion type="single" collapsible>
-                            <AccordionItem value="item-1" className="border-b-0">
-                                <AccordionTrigger className="flex items-center gap-3 p-3 text-sm hover:no-underline">
-                                     <Footprints className="h-5 w-5 text-primary shrink-0" />
-                                     <div className="flex-1 text-left">
-                                         <p className="font-medium">Caminar a la parada {route.transitDetails.departureStop.name}</p>
-                                         <p className="text-xs text-muted-foreground">{Math.round(route.walkingDuration / 60)} min a pie</p>
-                                     </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="pb-2">
-                                    <div className="px-3 space-y-2 border-t pt-3">
-                                        {route.walkingSteps.flatMap(ws => ws.steps || []).map((step, index) => (
-                                            <div key={index} className="flex items-start gap-3 text-xs">
-                                                <Footprints className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                                <p className="flex-1" dangerouslySetInnerHTML={{ __html: step.instructions }}></p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
-                    </CardContent>
-                </Card>
-            )}
-
-            {transitStep && (
-              <Card>
-                   <CardContent className="flex items-center gap-3 p-3 text-sm">
-                       <Bus className="h-5 w-5 text-primary shrink-0" />
-                       <div className="flex-1 text-left">
-                           <p className="font-medium">Tomar el bus <strong>{route.transitDetails.line.name}</strong></p>
-                           <p className="text-xs text-muted-foreground">{route.transitDetails.numStops} paradas ({transitStep.duration?.text})</p>
-                           <p className="text-xs text-muted-foreground pt-1">Bajar en: {route.transitDetails.arrivalStop.name}</p>
+          <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
+          <Accordion type="multiple" className="w-full space-y-1">
+            {leg.steps.map((step, index) => {
+              const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
+              
+              if (hasDetailedWalkingSteps) {
+                return (
+                  <AccordionItem value={`item-${index}`} key={index} className="border-none">
+                     <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
+                       <div className="mt-0.5">
+                          <StepIcon type={step.travel_mode} />
                        </div>
-                   </CardContent>
-              </Card>
-            )}
-          </div>
+                       <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
+                          <div className="flex-1 space-y-0.5">
+                            <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                            <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
+                          </div>
+                       </AccordionTrigger>
+                     </div>
+                    <AccordionContent className="py-2 pl-10 pr-4 border-l ml-4">
+                        <div className="space-y-2 text-xs">
+                          {step.steps!.map((subStep, subIndex) => (
+                             <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
+                          ))}
+                        </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              }
+
+              return (
+                <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                    <div className="mt-0.5">
+                        <StepIcon type={step.travel_mode} />
+                    </div>
+                    <div className="flex-1 space-y-0.5">
+                        <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                        <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
+                    </div>
+                    {step.travel_mode === 'TRANSIT' && step.transit && (
+                      <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name || step.transit.line.name}</Badge>
+                    )}
+                </div>
+              )
+            })}
+          </Accordion>
         </div>
       </div>
     </div>

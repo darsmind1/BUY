@@ -2,19 +2,35 @@
 "use client";
 
 import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { cn } from '@/lib/utils';
 
+// Reusable StopMarker component
+export const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
+  <Marker
+    position={position}
+    zIndex={99} // Below bus markers but above polylines
+    icon={{
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 6,
+      fillColor: "#A40034",
+      fillOpacity: 1,
+      strokeWeight: 2,
+      strokeColor: "#ffffff",
+    }}
+  />
+);
+
 interface MapViewProps {
   isLoaded: boolean;
-  directions: google.maps.DirectionsResult | null;
-  routeIndex?: number;
+  directionsResponse: google.maps.DirectionsResult | null;
+  routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
+  selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
   view: string;
-  mapRef: React.MutableRefObject<google.maps.Map | null>;
 }
 
 const mapContainerStyle = {
@@ -37,7 +53,7 @@ const montevideoBounds = {
 const mapStyle = [
   {
     "elementType": "geometry",
-    "stylers": [{ "color": "#f5f5f5" }]
+    "stylers": [{ "color": "#F0F4F8" }]
   },
   {
     "elementType": "labels.icon",
@@ -45,15 +61,16 @@ const mapStyle = [
   },
   {
     "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#616161" }]
+    "stylers": [{ "color": "#212F3D" }]
   },
   {
     "elementType": "labels.text.stroke",
-    "stylers": [{ "color": "#f5f5f5" }]
+    "stylers": [{ "color": "#ffffff" }]
   },
   {
-    "featureType": "administrative.land_parcel",
-    "stylers": [{ "visibility": "off" }]
+    "featureType": "administrative",
+    "elementType": "geometry.stroke",
+    "stylers": [{ "color": "#c9c9c9" }]
   },
   {
     "featureType": "administrative.land_parcel",
@@ -62,8 +79,12 @@ const mapStyle = [
   },
   {
     "featureType": "poi",
+    "stylers": [{ "visibility": "off" }]
+  },
+  {
+    "featureType": "poi",
     "elementType": "geometry",
-    "stylers": [{ "color": "#eeeeee" }]
+    "stylers": [{ "color": "#e5e5e5" }]
   },
   {
     "featureType": "poi",
@@ -73,7 +94,7 @@ const mapStyle = [
   {
     "featureType": "poi.park",
     "elementType": "geometry",
-    "stylers": [{ "color": "#e5e5e5" }]
+    "stylers": [{ "color": "#e0e8f0" }]
   },
   {
     "featureType": "poi.park",
@@ -87,13 +108,18 @@ const mapStyle = [
   },
   {
     "featureType": "road.arterial",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "road.arterial",
     "elementType": "labels.text.fill",
     "stylers": [{ "color": "#757575" }]
   },
   {
     "featureType": "road.highway",
     "elementType": "geometry",
-    "stylers": [{ "color": "#dadada" }]
+    "stylers": [{ "color": "#e0e8f0" }]
   },
   {
     "featureType": "road.highway",
@@ -118,7 +144,7 @@ const mapStyle = [
   {
     "featureType": "water",
     "elementType": "geometry",
-    "stylers": [{ "color": "#c9c9c9" }]
+    "stylers": [{ "color": "#c9dcec" }]
   },
   {
     "featureType": "water",
@@ -130,10 +156,7 @@ const mapStyle = [
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: true,
-  rotateControl: false,
-  mapTypeControl: false,
-  streetViewControl: false,
-  fullscreenControl: false,
+  rotateControl: true,
   restriction: {
     latLngBounds: montevideoBounds,
     strictBounds: false,
@@ -142,9 +165,13 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, directions, routeIndex, userLocation, busLocations, view, mapRef }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
+  const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
+  const [directionsRendererOptions, setDirectionsRendererOptions] = useState<google.maps.DirectionsRendererOptions | null>(null);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
+  const hasCenteredRef = useRef(false);
 
   useEffect(() => {
     if (isLoaded && window.google) {
@@ -162,28 +189,73 @@ export default function MapView({ isLoaded, directions, routeIndex, userLocation
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
     setMapLoaded(true);
-  }, [mapRef]);
+    hasCenteredRef.current = false; // Reset on new map load
+  }, []);
 
   const onUnmount = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
     setMapLoaded(false);
-  }, [mapRef]);
+    customPolylinesRef.current.forEach(p => p.setMap(null));
+    customPolylinesRef.current = [];
+  }, []);
   
   useEffect(() => {
+    if (!isLoaded || !mapLoaded || !mapRef.current || !directionsResponse) {
+        if (mapRef.current) {
+            customPolylinesRef.current.forEach(p => p.setMap(null));
+            customPolylinesRef.current = [];
+        }
+        return;
+    }
+  
+    customPolylinesRef.current.forEach(p => p.setMap(null));
+    customPolylinesRef.current = [];
+  
+    const route = directionsResponse.routes[routeIndex];
+    if (!route) return;
+  
+    const transitPolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.8, strokeWeight: 6, zIndex: 1 };
+    const walkingPolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, zIndex: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }] };
+  
+    route.legs[0].steps.forEach((step: google.maps.DirectionsStep) => {
+      const polyline = new window.google.maps.Polyline(
+        step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions
+      );
+      polyline.setPath(step.path);
+      polyline.setMap(mapRef.current);
+      customPolylinesRef.current.push(polyline);
+    });
+  
+    setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: true });
+  }, [directionsResponse, routeIndex, mapLoaded, isLoaded]);
+
+  // Effect to set the map bounds or center based on the current view
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoaded || !isLoaded) return;
+    if (!map || !mapLoaded || hasCenteredRef.current) return;
     
-    if ((view === 'details' || view === 'options') && directions?.routes[0]) {
+    // For full map view, fit to route bounds. This runs only once.
+    if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
-        const routeToFit = (routeIndex !== undefined && directions.routes[routeIndex]) ? directions.routes[routeIndex] : directions.routes[0];
-        routeToFit.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
-        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-    } else if (view === 'search') {
+        const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
+        routeToBound.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
+
+        if (userLocation) {
+            bounds.extend(userLocation);
+        }
+        map.fitBounds(bounds, 50); // 50px padding
+        hasCenteredRef.current = true;
+    } else {
+        // For initial load without a route, center on user or default
         map.panTo(userLocation || defaultCenter);
-        map.setZoom(13);
+        map.setZoom(12);
+        hasCenteredRef.current = true;
     }
     
-  }, [directions, routeIndex, mapLoaded, userLocation, view, isLoaded, mapRef]);
+  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
+
+  const firstTransitStep = selectedRoute?.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT');
+  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
 
   if (!isLoaded) {
     return (
@@ -203,18 +275,12 @@ export default function MapView({ isLoaded, directions, routeIndex, userLocation
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {directions && routeIndex !== undefined && (
+          {directionsResponse && directionsRendererOptions && (
              <DirectionsRenderer 
-                directions={directions}
-                routeIndex={routeIndex}
+                directions={directionsResponse} 
+                routeIndex={routeIndex} 
                 options={{
-                    suppressMarkers: true,
-                    polylineOptions: {
-                        strokeColor: '#A40034',
-                        strokeOpacity: 0.8,
-                        strokeWeight: 6,
-                        zIndex: 1
-                    },
+                    ...directionsRendererOptions,
                 }} 
              />
           )}
@@ -223,9 +289,13 @@ export default function MapView({ isLoaded, directions, routeIndex, userLocation
             <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />
           )}
 
+          {departureStopLocation && (
+            <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }} />
+          )}
+
           {busLocations.map((bus) => (
              <Marker 
-                key={`${bus.line}-${bus.id}-${bus.timestamp}`}
+                key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 zIndex={100}
                 icon={{

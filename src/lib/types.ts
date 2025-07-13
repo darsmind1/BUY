@@ -1,34 +1,26 @@
 
-import type { BusArrival } from './stm-api';
+import type { BusLocation as StmBusLocation } from './stm-api';
 
 export interface RouteOption {
   id: string;
-  summary: string;
-  duration: number; // in seconds
-  walkingDuration: number; // in seconds
   gmapsRoute: google.maps.DirectionsResult;
   routeIndex: number;
-  transitDetails: {
-    line: {
-      name: string;
-      vehicle: string;
-    };
-    departureStop: {
-      name: string;
-      location: google.maps.LatLngLiteral;
-      stopId: number | null;
-    };
-    arrivalStop: {
-      name: string;
-      location: google.maps.LatLngLiteral;
-    };
-    headsign: string;
-    numStops: number;
-  };
-  walkingSteps: google.maps.DirectionsStep[];
 }
 
-export interface BusArrivalInfo {
-  arrival: BusArrival | null;
-  isLoading: boolean;
+export type BusLocation = StmBusLocation;
+
+export interface ArrivalInfo {
+  eta: number; // calculated ETA in seconds
+  timestamp: string;
+}
+
+export interface StmInfo {
+  stopId: number | null;
+  line: string | undefined;
+  lineDestination: string | null;
+  departureStopLocation: google.maps.LatLngLiteral | null;
+}
+
+export interface BusArrivalsState {
+  [routeIndex: number]: ArrivalInfo | null;
 }
