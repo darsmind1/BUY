@@ -5,18 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Loader2 } from 'lucide-react';
-import type { BusLocation } from '@/lib/stm-api';
-import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
+import type { BusLocation, StmRouteOption } from '@/lib/stm-api';
+import { GoogleMap, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { StopMarker } from '@/components/map-view';
 
 interface RouteDetailsPanelProps {
-  route: google.maps.DirectionsRoute;
+  route: StmRouteOption;
   busLocations?: BusLocation[];
   isGoogleMapsLoaded: boolean;
-  directionsResponse: google.maps.DirectionsResult | null;
-  routeIndex: number;
+  walkingDirections: google.maps.DirectionsResult | null;
   userLocation: google.maps.LatLngLiteral | null;
 }
 
@@ -57,12 +56,14 @@ const mapOptions: google.maps.MapOptions = {
 const RouteDetailMap = ({ 
   isLoaded, 
   userLocation, 
-  selectedRoute,
+  route,
+  walkingDirections,
   busLocations 
 } : {
   isLoaded: boolean;
   userLocation: google.maps.LatLngLiteral | null;
-  selectedRoute: google.maps.DirectionsRoute | null;
+  route: StmRouteOption | null;
+  walkingDirections: google.maps.DirectionsResult | null;
   busLocations: BusLocation[];
 }) => {
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
@@ -104,11 +105,9 @@ const RouteDetailMap = ({
     );
   }
 
-  const transitPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5 };
-  const walkingPolylineOptions: google.maps.PolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 2, scale: 2, strokeColor: '#4A4A4A' }, offset: '0', repeat: '10px' }] };
-  
-  const firstTransitStep = selectedRoute?.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT');
-  const departureStopLocation = firstTransitStep?.transit?.departure_stop.location;
+  const busRoutePath = route?.shape.map(p => ({ lat: p[1], lng: p[0] }));
+  const departureStopLocation = route?.departureStop.location.coordinates;
+  const arrivalStopLocation = route?.arrivalStop.location.coordinates;
 
   return (
     <GoogleMap
@@ -118,23 +117,41 @@ const RouteDetailMap = ({
       zoom={16.5}
       options={mapOptions}
     >
-      {selectedRoute && selectedRoute.legs[0].steps.map((step, index) => (
+       {walkingDirections && (
+          <DirectionsRenderer 
+              directions={walkingDirections} 
+              options={{
+                  suppressMarkers: true,
+                  polylineOptions: {
+                      strokeColor: '#4A4A4A',
+                      strokeOpacity: 0,
+                      strokeWeight: 2,
+                      zIndex: 2,
+                      icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 2, scale: 2, strokeColor: '#4A4A4A' }, offset: '0', repeat: '10px' }]
+                  }
+              }} 
+          />
+        )}
+      
+      {busRoutePath && (
         <Polyline
-          key={index}
-          path={step.path}
-          options={step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions}
+          path={busRoutePath}
+          options={{ strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5 }}
         />
-      ))}
+      )}
       
       {userLocation && userMarkerIcon && <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />}
 
       {departureStopLocation && (
-        <StopMarker position={{ lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }} />
+        <StopMarker position={{ lat: departureStopLocation[1], lng: departureStopLocation[0] }} />
+      )}
+      {arrivalStopLocation && (
+        <StopMarker position={{ lat: arrivalStopLocation[1], lng: arrivalStopLocation[0] }} />
       )}
 
       {busLocations.map((bus) => (
         <Marker 
-          key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
+          key={`${bus.line}-${bus.id}-${bus.timestamp}`}
           position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
           zIndex={100}
           icon={{
@@ -160,40 +177,19 @@ const StepIcon = ({ type }: { type: 'WALKING' | 'TRANSIT' }) => {
   return <Bus className="h-5 w-5 text-primary" />;
 };
 
-const getBusLines = (steps: google.maps.DirectionsStep[]) => {
-  const busLines = new Set<string>();
-  steps.forEach(step => {
-    if (step.travel_mode === 'TRANSIT' && step.transit) {
-      busLines.add(step.transit.line.short_name || step.transit.line.name);
-    }
-  });
-  return Array.from(busLines);
-}
 
-const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
-  let totalSeconds = 0;
-  legs.forEach(leg => {
-    if (leg.duration) {
-      totalSeconds += leg.duration.value;
-    }
-  });
-  return Math.round(totalSeconds / 60);
-}
-
-const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string; location: google.maps.LatLng | null; fallbackAddress: string }) => {
+const AddressDisplay = ({ prefix, location, fallbackAddress }: { prefix: string; location: google.maps.LatLng | google.maps.LatLngLiteral | null; fallbackAddress: string }) => {
     const [address, setAddress] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchAddress = async () => {
             if (location) {
-                const formattedAddr = await getFormattedAddress(location.lat(), location.lng());
+                const lat = 'lat' in location ? location.lat() : location.lat;
+                const lng = 'lng' in location ? location.lng() : location.lng;
+                const formattedAddr = await getFormattedAddress(lat, lng);
                 setAddress(formattedAddr);
-            } else if (fallbackAddress === 'Mi ubicación actual') {
-                 setAddress('Tu ubicación actual');
             } else {
-                // If location is null but there's a fallback address from Google, use that initially
-                const parts = fallbackAddress.split(',');
-                setAddress(parts[0]);
+                setAddress(fallbackAddress.split(',')[0]);
             }
         };
         fetchAddress();
@@ -240,16 +236,17 @@ export default function RouteDetailsPanel({
   route, 
   busLocations = [],
   isGoogleMapsLoaded,
+  walkingDirections,
   userLocation,
 }: RouteDetailsPanelProps) {
-  const leg = route.legs[0];
-  const busLines = getBusLines(leg.steps);
-  const duration = getTotalDuration(route.legs);
 
+  const walkingLeg = walkingDirections?.routes[0]?.legs[0];
+  const duration = walkingLeg?.duration?.value ? Math.round(walkingLeg.duration.value / 60) + route.duration : route.duration;
+  
   const isBusLive = busLocations.length > 0;
   const liveBusData = isBusLive ? busLocations[0] : null; 
   
-  if (!leg) return null;
+  if (!route) return null;
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
@@ -264,7 +261,8 @@ export default function RouteDetailsPanel({
               <RouteDetailMap 
                 isLoaded={isGoogleMapsLoaded}
                 userLocation={userLocation}
-                selectedRoute={route}
+                route={route}
+                walkingDirections={walkingDirections}
                 busLocations={busLocations}
               />
             </div>
@@ -275,77 +273,59 @@ export default function RouteDetailsPanel({
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center justify-between text-base">
               <div className="flex items-center gap-2">
-                  {busLines.map((bus) => (
-                    <Badge key={bus} variant="outline" className="text-sm font-mono">{bus}</Badge>
-                  ))}
-                  {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
-                    <Badge variant="outline" className="text-sm">A pie</Badge>
-                  )}
+                 <Badge variant="outline" className="text-sm font-mono">{route.line}</Badge>
               </div>
               <div className="flex items-center gap-3 text-sm font-normal">
                 <div className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{duration} min</span>
+                    <span>~{duration} min</span>
                 </div>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 space-y-1">
-             <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
-             <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
+             <AddressDisplay prefix="Desde" location={userLocation} fallbackAddress={"Tu ubicación"} />
+             <AddressDisplay prefix="Hasta" location={{ lat: route.arrivalStop.location.coordinates[1], lng: route.arrivalStop.location.coordinates[0] }} fallbackAddress={route.arrivalStop.name} />
             {liveBusData && <BusFeatures bus={liveBusData} />}
           </CardContent>
         </Card>
 
         <div>
           <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
-          <Accordion type="multiple" className="w-full space-y-1">
-            {leg.steps.map((step, index) => {
-              const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
-              
-              if (hasDetailedWalkingSteps) {
-                return (
-                  <AccordionItem value={`item-${index}`} key={index} className="border-none">
-                     <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
-                       <div className="mt-0.5">
-                          <StepIcon type={step.travel_mode} />
-                       </div>
-                       <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
-                          <div className="flex-1 space-y-0.5">
-                            <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                            <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
-                          </div>
-                       </AccordionTrigger>
-                     </div>
-                    <AccordionContent className="py-2 pl-10 pr-4 border-l ml-4">
-                        <div className="space-y-2 text-xs">
-                          {step.steps!.map((subStep, subIndex) => (
-                             <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
-                          ))}
-                        </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              }
-
-              return (
-                <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="mt-0.5">
-                        <StepIcon type={step.travel_mode} />
-                    </div>
+          <div className="w-full space-y-1">
+            {/* Walking Step */}
+            {walkingLeg ? (
+                <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                    <div className="mt-0.5"><StepIcon type="WALKING" /></div>
                     <div className="flex-1 space-y-0.5">
-                        <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                        <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
+                        <p className="font-medium text-xs leading-tight">Camina hasta la parada {route.departureStop.name} ({route.departureStop.busstopId})</p>
+                        <p className="text-xs text-muted-foreground">{walkingLeg.duration?.text}</p>
                     </div>
-                    {step.travel_mode === 'TRANSIT' && step.transit && (
-                      <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name || step.transit.line.name}</Badge>
-                    )}
                 </div>
-              )
-            })}
-          </Accordion>
+            ) : (
+                 <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                    <div className="mt-0.5"><StepIcon type="WALKING" /></div>
+                    <div className="flex-1 space-y-0.5">
+                        <p className="font-medium text-xs leading-tight">Dirígete a la parada {route.departureStop.name} ({route.departureStop.busstopId})</p>
+                    </div>
+                </div>
+            )}
+            
+            {/* Transit Step */}
+            <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                <div className="mt-0.5"><StepIcon type="TRANSIT" /></div>
+                <div className="flex-1 space-y-0.5">
+                    <p className="font-medium text-xs leading-tight">Toma el bus línea <strong>{route.line}</strong> hacia <strong>{route.destination}</strong></p>
+                    <p className="text-xs text-muted-foreground">Viaje de {route.stops} paradas (~{route.duration} min)</p>
+                    <p className="text-xs text-muted-foreground pt-1">Baja en la parada {route.arrivalStop.name} ({route.arrivalStop.busstopId})</p>
+                </div>
+                <Badge variant="default" className="font-mono text-xs">{route.line}</Badge>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+    

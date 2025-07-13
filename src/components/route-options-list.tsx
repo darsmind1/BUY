@@ -4,29 +4,18 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { getArrivalsForStop, BusArrival, StmBusStop, getAllBusStops, getLinesForBusStop } from '@/lib/stm-api';
-import { haversineDistance, cn } from '@/lib/utils';
+import { Clock, ArrowRight, Footprints, Wifi, Loader2, Info, Bus } from 'lucide-react';
+import { getArrivalsForStop, BusArrival, StmRouteOption } from '@/lib/stm-api';
+import { haversineDistance } from '@/lib/utils';
 
 interface RouteOptionsListProps {
-  routes: google.maps.DirectionsRoute[];
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void;
+  routes: StmRouteOption[];
+  onSelectRoute: (route: StmRouteOption) => void;
   isApiConnected: boolean;
 }
 
-interface StmInfo {
-  stopId: number | null;
-  line: string | undefined;
-  lineDestination: string | null;
-  departureStopLocation: google.maps.LatLng | null;
-}
-
-interface StmStopMapping {
-  [routeIndex: number]: StmInfo;
-}
-
 interface BusArrivalsState {
-    [routeIndex: number]: BusArrival | null;
+    [routeLineAndStop: string]: BusArrival | null;
 }
 
 const ArrivalInfoLegend = () => {
@@ -54,110 +43,66 @@ const RouteOptionItem = ({
   index, 
   onSelectRoute,
   arrivalInfo,
-  stmInfo
 }: { 
-  route: google.maps.DirectionsRoute, 
+  route: StmRouteOption, 
   index: number, 
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
-  isApiConnected: boolean,
+  onSelectRoute: (route: StmRouteOption) => void,
   arrivalInfo: BusArrival | null,
-  stmInfo: StmInfo | null,
 }) => {
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const leg = route.legs[0];
   
-  const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-  const scheduledDepartureTimeValue = firstTransitStep?.transit?.departure_time?.value;
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update time every minute
-    return () => clearInterval(timer);
-  }, []);
-
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
+    if (arrivalInfo.eta === -1) return "Horario programado"; // Scheduled
     const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
-    if (arrivalMinutes <= 2) {
+    if (arrivalMinutes <= 1) {
       return `Llegando`;
     }
     return `Llega en ${arrivalMinutes} min`;
   };
 
-  const getScheduledArrivalInMinutes = () => {
-      if (!scheduledDepartureTimeValue) return null;
-      const departureTime = new Date(scheduledDepartureTimeValue);
-      const diffMs = departureTime.getTime() - currentTime.getTime();
-      const diffMins = Math.round(diffMs / 60000);
-
-      if (diffMins <= 1) {
-          return "Saliendo ahora";
-      }
-      return `Sale en ${diffMins} min`;
-  };
-
   const arrivalText = getArrivalText();
-  const scheduledText = getScheduledArrivalInMinutes();
     
-  const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
+  const walkingDistance = Math.round(haversineDistance(route.userLocation, {lat: route.departureStop.location.coordinates[1], lng: route.departureStop.location.coordinates[0]}));
 
   return (
     <Card 
       className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
-      onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null, stmInfo?.lineDestination ?? null)}
+      onClick={() => onSelectRoute(route)}
       style={{ animationDelay: `${index * 100}ms`}}
     >
       <CardContent className="p-4 flex items-center justify-between">
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 flex-1">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {renderableSteps.map((step, stepIndex) => {
-                  const isLastStep = stepIndex === renderableSteps.length - 1;
-                  if (step.travel_mode === 'TRANSIT') {
-                    const lineToShow = step.transit?.line.short_name;
-                    return (
-                      <React.Fragment key={stepIndex}>
-                        <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
-                         {!isLastStep && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
-                      </React.Fragment>
-                    );
-                  }
-                  if (step.travel_mode === 'WALKING') {
-                     return (
-                      <React.Fragment key={stepIndex}>
-                        <Footprints className="h-4 w-4 text-muted-foreground" />
-                         {!isLastStep && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
-                      </React.Fragment>
-                     )
-                  }
-                  return null;
-                })}
-               {leg.steps.every(s => s.travel_mode === 'WALKING') && (
-                <div className="flex items-center gap-2">
-                  <Footprints className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Solo a pie</span>
-                </div>
-              )}
-            </div>
+             <Badge variant="secondary" className="font-mono">{route.line}</Badge>
+             <span className="text-sm text-muted-foreground truncate">hacia {route.destination}</span>
           </div>
+
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              <span>{getTotalDuration(route.legs)} min</span>
-            </div>
-            
-            {arrivalInfo && arrivalText ? (
-              <div className="flex items-center gap-2 text-xs font-medium text-green-400">
-                  <Wifi className="h-3.5 w-3.5 animate-pulse-green" />
-                  <span>{arrivalText}</span>
+              <div className="flex items-center gap-2">
+                <Footprints className="h-4 w-4" />
+                <span>{walkingDistance} m a parada {route.departureStop.busstopId}</span>
               </div>
-            ) : scheduledText ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>{scheduledText}</span>
-              </div>
-            ) : firstTransitStep ? (
-              <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
-            ) : null}
+          </div>
+          
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            {arrivalInfo ? (
+              arrivalInfo.eta > -1 ? (
+                <div className="flex items-center gap-2 text-xs font-medium text-green-400">
+                    <Wifi className="h-3.5 w-3.5 animate-pulse-green" />
+                    <span>{arrivalText}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>{arrivalText}</span>
+                </div>
+              )
+            ) : (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Bus className="h-3.5 w-3.5" />
+                    <span>~{route.duration} min de viaje</span>
+                </div>
+            )}
 
           </div>
         </div>
@@ -167,135 +112,40 @@ const RouteOptionItem = ({
   )
 }
 
-const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
-  let totalSeconds = 0;
-  legs.forEach(leg => {
-    if (leg.duration) {
-      totalSeconds += leg.duration.value;
-    }
-  });
-  return Math.round(totalSeconds / 60);
-}
-
 export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected }: RouteOptionsListProps) {
-  const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
-  const [isMappingStops, setIsMappingStops] = useState(true);
   const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const mapStops = async () => {
-        if (!isApiConnected) {
-            setIsMappingStops(false);
-            setStmStopMappings({});
-            return;
-        }
-
-      setIsMappingStops(true);
-      const allStops = await getAllBusStops();
-      if (!allStops || allStops.length === 0) {
-        console.error("Could not fetch STM bus stops for mapping.");
-        setIsMappingStops(false);
-        setStmStopMappings({});
-        return;
-      }
-      
-      const newMappings: StmStopMapping = {};
-
-      for (const [index, route] of routes.entries()) {
-        const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-        const googleTransitLine = firstTransitStep?.transit?.line.short_name;
-        const departureStopLocation = firstTransitStep?.transit?.departure_stop?.location || null;
-        
-        // Extract destination from Google's transit line name (e.g., "149 (B,C,D...) - Pocitos")
-        const fullLineName = firstTransitStep?.transit?.line.name || '';
-        const lineDestinationMatch = fullLineName.match(/-\s*(.*)/);
-        const lineDestination = lineDestinationMatch ? lineDestinationMatch[1].trim() : null;
-
-
-        if (departureStopLocation && googleTransitLine) {
-          const departureStopGoogleLocation = {
-            lat: departureStopLocation.lat(),
-            lng: departureStopLocation.lng()
-          };
-
-          // Find the closest STM stop within a 50-meter radius
-          let closestStmStop: StmBusStop | null = null;
-          let minDistance = 50; // Max distance in meters
-
-          for (const stop of allStops) {
-              const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
-              const distance = haversineDistance(departureStopGoogleLocation, stopCoords);
-              if (distance < minDistance) {
-                  minDistance = distance;
-                  closestStmStop = stop;
-              }
-          }
-          
-          let stopIdForMapping: number | null = null;
-          
-          // Verify if the found stop actually serves the line we are looking for
-          if (closestStmStop) {
-              try {
-                  const linesAtStop = await getLinesForBusStop(closestStmStop.busstopId);
-                  const lineIsServed = linesAtStop.some(line => line.line.toString() === googleTransitLine);
-                  if (lineIsServed) {
-                      stopIdForMapping = closestStmStop.busstopId;
-                  } else {
-                     console.warn(`Closest stop ${closestStmStop.busstopId} does not serve line ${googleTransitLine}.`);
-                  }
-              } catch (e) {
-                  console.error(`Error verifying lines for stop ${closestStmStop.busstopId}`, e);
-              }
-          }
-
-          newMappings[index] = {
-              stopId: stopIdForMapping,
-              line: googleTransitLine,
-              lineDestination: lineDestination,
-              departureStopLocation: departureStopLocation
-          };
-
-        } else {
-          newMappings[index] = { stopId: null, line: undefined, lineDestination: null, departureStopLocation: null };
-        }
-      }
-      
-      setStmStopMappings(newMappings);
-      setIsMappingStops(false);
-    };
-
-    mapStops();
-  }, [routes, isApiConnected]);
-
-
-  useEffect(() => {
-    if (!isApiConnected || !stmStopMappings) {
+    if (!isApiConnected || routes.length === 0) {
         return;
     }
 
     const fetchAllArrivals = async () => {
-        const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndexStr, info]) => {
-            const routeIndex = parseInt(routeIndexStr, 10);
-            if (info.stopId && info.line && info.lineDestination) {
-                try {
-                    const arrivals = await getArrivalsForStop(info.stopId);
-                    if (!arrivals) return { routeIndex, arrival: null };
+        const arrivalPromises = routes.map(async (route) => {
+            const key = `${route.line}-${route.departureStop.busstopId}`;
+            try {
+                const arrivals = await getArrivalsForStop(route.departureStop.busstopId, route.line);
+                if (!arrivals) return { key, arrival: null };
 
-                    // Find the first arrival for the correct line AND destination
-                    const nextArrival = arrivals.find(a => 
-                        a.bus && 
-                        a.bus.line === info.line && 
-                        a.bus.destination && 
-                        a.bus.destination.toUpperCase().includes(info.lineDestination!.toUpperCase()) &&
-                        a.eta > 0
-                    );
-                    return { routeIndex, arrival: nextArrival || null };
-                } catch (error) {
-                    console.error(`Error fetching bus arrivals for route ${routeIndex}:`, error);
+                const nextArrival = arrivals.find(a => 
+                    a.bus && 
+                    a.bus.destination && 
+                    a.bus.destination.toUpperCase().includes(route.destination.toUpperCase()) &&
+                    a.eta > 0
+                );
+                
+                // If no real-time arrival, check for a scheduled one as fallback
+                if (!nextArrival) {
+                    const scheduled = arrivals.find(a => a.eta === -1);
+                     return { key, arrival: scheduled || null };
                 }
+
+                return { key, arrival: nextArrival || null };
+            } catch (error) {
+                console.error(`Error fetching bus arrivals for route ${key}:`, error);
+                return { key, arrival: null };
             }
-            return { routeIndex, arrival: null };
         });
 
         const results = await Promise.all(arrivalPromises);
@@ -303,7 +153,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         
         results.forEach(result => {
             if (result) {
-                newArrivals[result.routeIndex] = result.arrival;
+                newArrivals[result.key] = result.arrival;
             }
         });
         
@@ -320,31 +170,26 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         }
     };
 
-  }, [stmStopMappings, isApiConnected]);
+  }, [routes, isApiConnected]);
 
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-      {isMappingStops && isApiConnected && (
-         <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <p>Verificando paradas y líneas...</p>
-         </div>
-      )}
-      {!isMappingStops && isApiConnected && routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT')) && (
+      {isApiConnected && routes.length > 0 && (
         <ArrivalInfoLegend />
       )}
-      {!isMappingStops && routes.map((route, index) => (
+      {routes.map((route, index) => (
         <RouteOptionItem 
-            key={index} 
+            key={`${route.line}-${route.departureStop.busstopId}`}
             route={route} 
             index={index} 
             onSelectRoute={onSelectRoute}
-            isApiConnected={isApiConnected}
-            arrivalInfo={busArrivals[index] ?? null}
-            stmInfo={stmStopMappings ? stmStopMappings[index] : null}
+            arrivalInfo={busArrivals[`${route.line}-${route.departureStop.busstopId}`] ?? null}
         />
       ))}
     </div>
   );
 }
+
+
+    

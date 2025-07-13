@@ -2,6 +2,7 @@
 'use server';
 
 import config from './config';
+import { haversineDistance } from './utils';
 
 // Initialize with a random index to distribute load initially
 let currentCredentialIndex = Math.floor(Math.random() * config.stm.credentials.length);
@@ -30,14 +31,14 @@ export interface BusLocation {
 
 export interface BusArrival {
     bus: BusLocation | null;
-    eta: number; // in seconds
+    eta: number; // in seconds, -1 for scheduled
     lastUpdate: number;
 }
 
 export interface StmBusStop {
     busstopId: number;
     location: {
-        coordinates: [number, number];
+        coordinates: [number, number]; // [lng, lat]
     };
     name: string;
 }
@@ -45,6 +46,17 @@ export interface StmBusStop {
 export interface StmLineInfo {
     line: number;
     description: string;
+}
+
+export interface StmRouteOption {
+    line: number;
+    destination: string;
+    departureStop: StmBusStop;
+    arrivalStop: StmBusStop;
+    userLocation: { lat: number, lng: number };
+    stops: number;
+    duration: number; // in minutes
+    shape: [number, number][]; // Array of [lng, lat]
 }
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -123,14 +135,13 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
       next: { revalidate: 0 }
     });
 
-    // Special retry logic for the bus stops endpoint, as it can occasionally return 204 incorrectly.
     if (response.status === 204) {
-      if (path === '/buses/busstops' && retries > 0) {
-        console.warn(`Received 204 for /buses/busstops. Retrying... (${retries - 1} left)`);
-        await delay(1000); // Wait 1 second before retrying
+      if (path.includes('/buses/busstops') && retries > 0) {
+        console.warn(`Received 204 for ${path}. Retrying... (${retries - 1} left)`);
+        await delay(1000);
         return stmApiFetch(path, options, retries - 1);
       }
-      return []; // Return empty for other 204s or after retries are exhausted.
+      return [];
     }
     
     if (response.status === 429) {
@@ -140,8 +151,8 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
 
     if (!response.ok) {
         if (response.status === 404) {
-            console.warn(`STM API request to ${path} resulted in a 404 Not Found. This likely means the requested resource (e.g., line/stop combination) doesn't exist. Returning empty array.`);
-            return []; // Gracefully handle 404s as "no data"
+            console.warn(`STM API request to ${path} resulted in a 404 Not Found. This likely means the requested resource doesn't exist. Returning empty array.`);
+            return [];
         }
       const errorText = await response.text();
       console.error(`STM API request to ${path} failed:`, response.status, errorText);
@@ -152,7 +163,6 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
-    // Re-throw the error so the calling server action fails clearly.
     throw error;
   }
 }
@@ -178,7 +188,7 @@ export async function getBusLocation(line: string, destination?: string): Promis
 
     if (!Array.isArray(data)) {
         if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
-            return []; // API returned an empty object, treat as no results.
+            return [];
         }
         console.warn(`STM API response for ${path} was not an array, returning empty array to avoid crash:`, data);
         return [];
@@ -189,7 +199,7 @@ export async function getBusLocation(line: string, destination?: string): Promis
         return {
             ...bus,
             line: busLine.toString(),
-            id: bus.id?.toString(), // Ensure id is a string
+            id: bus.id?.toString(),
             access: bus.access,
             thermalConfort: bus.thermalConfort,
             destination: bus.destination,
@@ -207,6 +217,16 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
     return (Array.isArray(data) ? data : []) as StmLineInfo[];
 }
 
+export async function getLinesForStops(stopIds: number[]): Promise<Map<number, number[]>> {
+    const promises = stopIds.map(id => getLinesForBusStop(id));
+    const results = await Promise.all(promises);
+    const stopLinesMap = new Map<number, number[]>();
+    stopIds.forEach((id, index) => {
+        stopLinesMap.set(id, results[index].map(l => l.line));
+    });
+    return stopLinesMap;
+}
+
 export async function getArrivalsForStop(stopId: number, lineId?: number): Promise<BusArrival[] | null> {
     let path = `/buses/busstops/${stopId}/arrivals`;
     if (lineId) {
@@ -215,7 +235,7 @@ export async function getArrivalsForStop(stopId: number, lineId?: number): Promi
     
     const data = await stmApiFetch(path);
     
-    if (data === null) { // Handle rate limit case
+    if (data === null) {
         return null;
     }
     
@@ -233,3 +253,109 @@ export async function getArrivalsForStop(stopId: number, lineId?: number): Promi
         } : null,
     }));
 }
+
+export async function getNearbyStops(coords: { lat: number, lng: number }, radius: number = 500): Promise<StmBusStop[]> {
+    const data = await stmApiFetch(`/buses/busstops?latitude=${coords.lat}&longitude=${coords.lng}&radius=${radius}`);
+    return (Array.isArray(data) ? data : []) as StmBusStop[];
+}
+
+async function getLineShape(line: number, stopId: number): Promise<{ shape: [number, number][], destination: string } | null> {
+    try {
+        const path = `/buses/lines/${line}/busstops/${stopId}/shape`;
+        const data = await stmApiFetch(path);
+        if (data && data.shape && data.destination) {
+            return {
+                shape: data.shape.coordinates,
+                destination: data.destination.name
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching shape for line ${line} at stop ${stopId}:`, error);
+        return null;
+    }
+}
+
+export async function findDirectBusRoutes(origin: { lat: number, lng: number }, destination: { lat: number, lng: number }): Promise<StmRouteOption[]> {
+    const [originStops, destinationStops] = await Promise.all([
+        getNearbyStops(origin),
+        getNearbyStops(destination)
+    ]);
+
+    if (originStops.length === 0 || destinationStops.length === 0) {
+        return [];
+    }
+
+    const originStopIds = originStops.map(s => s.busstopId);
+    const destinationStopIds = destinationStops.map(s => s.busstopId);
+
+    const [originLinesMap, destinationLinesMap] = await Promise.all([
+        getLinesForStops(originStopIds),
+        getLinesForStops(destinationStopIds)
+    ]);
+
+    const commonLines = new Map<number, { departureStops: number[], arrivalStops: number[] }>();
+
+    originLinesMap.forEach((lines, stopId) => {
+        lines.forEach(line => {
+            if (!commonLines.has(line)) {
+                commonLines.set(line, { departureStops: [], arrivalStops: [] });
+            }
+            commonLines.get(line)!.departureStops.push(stopId);
+        });
+    });
+
+    destinationLinesMap.forEach((lines, stopId) => {
+        lines.forEach(line => {
+            if (commonLines.has(line)) {
+                commonLines.get(line)!.arrivalStops.push(stopId);
+            }
+        });
+    });
+
+    const routeOptions: StmRouteOption[] = [];
+    const shapePromises: Promise<void>[] = [];
+
+    for (const [line, stops] of commonLines.entries()) {
+        if (stops.departureStops.length > 0 && stops.arrivalStops.length > 0) {
+            const departureStop = originStops.find(s => s.busstopId === stops.departureStops[0])!;
+            const arrivalStop = destinationStops.find(s => s.busstopId === stops.arrivalStops[0])!;
+
+            const promise = getLineShape(line, departureStop.busstopId).then(shapeInfo => {
+                if (shapeInfo) {
+                    const stopIdsInShape = shapeInfo.shape.map(p => p[2]);
+                    const depStopIndex = stopIdsInShape.indexOf(departureStop.busstopId);
+                    const arrStopIndex = stopIdsInShape.indexOf(arrivalStop.busstopId);
+
+                    if (depStopIndex !== -1 && arrStopIndex !== -1 && arrStopIndex > depStopIndex) {
+                        const stopsBetween = arrStopIndex - depStopIndex;
+                        routeOptions.push({
+                            line,
+                            destination: shapeInfo.destination,
+                            departureStop,
+                            arrivalStop,
+                            userLocation: origin,
+                            stops: stopsBetween,
+                            duration: stopsBetween * 2, // Approx 2 mins per stop
+                            shape: shapeInfo.shape.map(p => [p[0], p[1]]),
+                        });
+                    }
+                }
+            });
+            shapePromises.push(promise);
+        }
+    }
+
+    await Promise.all(shapePromises);
+
+    // Sort by walking distance to departure stop
+    routeOptions.sort((a, b) => {
+        const distA = haversineDistance(origin, { lat: a.departureStop.location.coordinates[1], lng: a.departureStop.location.coordinates[0] });
+        const distB = haversineDistance(origin, { lat: b.departureStop.location.coordinates[1], lng: b.departureStop.location.coordinates[0] });
+        return distA - distB;
+    });
+
+    return routeOptions;
+}
+
+    
