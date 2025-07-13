@@ -10,6 +10,7 @@ import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Alert } from '@/components/ui/alert';
 
 interface AlternativeLineInfo {
     line: string;
@@ -398,11 +399,9 @@ export default function RouteOptionsList({
 
       try {
         const locations = await getBusLocation(linesToFetch);
-        const newArrivals: BusArrivalsState = {};
-        const newStmInfoByRoute: Record<number, StmInfo[]> = JSON.parse(JSON.stringify(stmInfoByRoute));
-        const newTransferInfoByRoute: Record<number, TransferInfo | null> = JSON.parse(JSON.stringify(transferInfoByRoute));
-
+        
         const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral) => {
+            if (!isGoogleMapsLoaded) return null;
             const liveBus = locations.find(l => l.line === line);
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
@@ -417,33 +416,40 @@ export default function RouteOptionsList({
         }
 
         // Update primary route arrivals
-        Object.entries(newStmInfoByRoute).forEach(([routeIndexStr, infos]) => {
-          const routeIndex = parseInt(routeIndexStr);
-          let firstArrival: ArrivalInfo | null = null;
-          infos.forEach(info => {
-              if (info.departureStopLocation) {
-                  const arrivalData = findArrivalForStop(info.line, info.departureStopLocation);
-                  info.arrival = arrivalData;
-                  if (!firstArrival && arrivalData) {
-                    firstArrival = arrivalData;
-                  }
-              }
-          });
-          newArrivals[routeIndex] = firstArrival;
+        setStmInfoByRoute(currentStmInfo => {
+            const newStmInfo: Record<number, StmInfo[]> = JSON.parse(JSON.stringify(currentStmInfo));
+            Object.values(newStmInfo).forEach(infos => {
+                infos.forEach(info => {
+                    if (info.departureStopLocation) {
+                        info.arrival = findArrivalForStop(info.line, info.departureStopLocation);
+                    }
+                });
+            });
+            return newStmInfo;
+        });
+        
+        setBusArrivals(currentArrivals => {
+            const newArrivals: BusArrivalsState = {};
+            Object.entries(stmInfoByRoute).forEach(([routeIndexStr, infos]) => {
+                const routeIndex = parseInt(routeIndexStr);
+                const firstStepInfo = infos[0];
+                newArrivals[routeIndex] = firstStepInfo?.arrival ?? null;
+            });
+            return newArrivals;
         });
 
         // Update transfer alternatives arrivals
-        Object.values(newTransferInfoByRoute).forEach(info => {
-            if (info) {
-                info.alternativeLines.forEach(alt => {
-                    alt.arrival = findArrivalForStop(alt.line, info.stopLocation);
-                });
-            }
+        setTransferInfoByRoute(currentTransferInfo => {
+            const newTransferInfo: Record<number, TransferInfo | null> = JSON.parse(JSON.stringify(currentTransferInfo));
+            Object.values(newTransferInfo).forEach(info => {
+                if (info) {
+                    info.alternativeLines.forEach(alt => {
+                        alt.arrival = findArrivalForStop(alt.line, info.stopLocation);
+                    });
+                }
+            });
+            return newTransferInfo;
         });
-
-        setBusArrivals(prev => ({ ...prev, ...newArrivals }));
-        setStmInfoByRoute(newStmInfoByRoute);
-        setTransferInfoByRoute(newTransferInfoByRoute);
 
       } catch (error) {
         console.error(`Error fetching bus locations:`, error);
@@ -492,5 +498,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    
