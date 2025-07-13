@@ -145,7 +145,7 @@ const RouteOptionItem = ({
                 </div>
               )}
             </div>
-             <div className="flex items-center gap-1.5 text-sm font-normal text-muted-foreground">
+             <div className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
                 <Clock className="h-4 w-4" />
                 <span>{totalDuration} min</span>
             </div>
