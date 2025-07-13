@@ -153,7 +153,11 @@ export default function Home() {
           setCurrentUserLocation(newLocation);
         },
         (error) => {
-          console.log(`Error watching position: ${error.message}`);
+          if (error.code === error.PERMISSION_DENIED) {
+            console.log("El usuario denegó la solicitud de geolocalización.");
+          } else {
+            console.log(`Error watching position: ${error.message}`);
+          }
         },
         {
           enableHighAccuracy: true,
@@ -373,6 +377,3 @@ export default function Home() {
       </div>
   );
 }
-    
-
-    

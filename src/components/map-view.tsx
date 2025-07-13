@@ -201,6 +201,11 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     customPolylinesRef.current = [];
   }, []);
   
+  // Reset centering lock when route changes
+  useEffect(() => {
+    hasCenteredRef.current = false;
+  }, [selectedRoute, routeIndex]);
+  
   useEffect(() => {
     if (!isLoaded || !mapLoaded || !mapRef.current || !directionsResponse) {
         if (mapRef.current) {
@@ -251,7 +256,12 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     const map = mapRef.current;
     if (!map || !mapLoaded || hasCenteredRef.current) return;
     
-    // For full map view, fit to route bounds. This runs only once per route.
+    // For details view on mobile, center on user first
+    if (view === 'details' && userLocation) {
+        map.panTo(userLocation);
+        map.setZoom(15); 
+    }
+
     if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
@@ -260,16 +270,28 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
         if (userLocation) {
             bounds.extend(userLocation);
         }
-        map.fitBounds(bounds, 50); // 50px padding
+
+        // Use a small timeout to allow panning to user to finish before fitting bounds
+        setTimeout(() => {
+            if (mapRef.current) {
+               mapRef.current.fitBounds(bounds, 50); // 50px padding
+            }
+        }, 100);
+
+        hasCenteredRef.current = true;
+    } else if (userLocation) {
+        // For initial load without a route, center on user
+        map.panTo(userLocation);
+        map.setZoom(15);
         hasCenteredRef.current = true;
     } else {
-        // For initial load without a route, center on user or default
-        map.panTo(userLocation || defaultCenter);
+        // Fallback
+        map.panTo(defaultCenter);
         map.setZoom(12);
         hasCenteredRef.current = true;
     }
     
-  }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
+  }, [view, selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
 
   const transitStops = selectedRoute?.legs[0]?.steps
     .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
@@ -333,5 +355,3 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     </div>
   );
 }
-
-    
