@@ -34,97 +34,112 @@ const montevideoBounds = {
 };
 
 const mapStyle = [
-    {
-      "elementType": "geometry",
-      "stylers": [{ "color": "#f5f5f5" }]
-    },
-    {
-      "elementType": "labels.icon",
-      "stylers": [{ "visibility": "off" }]
-    },
-    {
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#616161" }]
-    },
-    {
-      "elementType": "labels.text.stroke",
-      "stylers": [{ "color": "#f5f5f5" }]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#bdbdbd" }]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#eeeeee" }]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#757575" }]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#e5e5e5" }]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#9e9e9e" }]
-    },
-    {
-      "featureType": "road",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#ffffff" }]
-    },
-    {
-      "featureType": "road.arterial",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#757575" }]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#dadada" }]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#616161" }]
-    },
-    {
-      "featureType": "road.local",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#9e9e9e" }]
-    },
-    {
-      "featureType": "transit.line",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#e5e5e5" }]
-    },
-    {
-      "featureType": "transit.station",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#eeeeee" }]
-    },
-    {
-      "featureType": "water",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#c9c9c9" }]
-    },
-    {
-      "featureType": "water",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#9e9e9e" }]
-    }
+  {
+    "elementType": "geometry",
+    "stylers": [{ "color": "#F0F4F8" }]
+  },
+  {
+    "elementType": "labels.icon",
+    "stylers": [{ "visibility": "off" }]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#212F3D" }]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "administrative",
+    "elementType": "geometry.stroke",
+    "stylers": [{ "color": "#c9c9c9" }]
+  },
+  {
+    "featureType": "administrative.land_parcel",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#bdbdbd" }]
+  },
+  {
+    "featureType": "poi",
+    "stylers": [{ "visibility": "off" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e5e5e5" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#757575" }]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e0e8f0" }]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "road.arterial",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "road.arterial",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#757575" }]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e0e8f0" }]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#616161" }]
+  },
+  {
+    "featureType": "road.local",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
+  },
+  {
+    "featureType": "transit.line",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#e5e5e5" }]
+  },
+  {
+    "featureType": "transit.station",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#eeeeee" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#c9dcec" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#9e9e9e" }]
+  }
 ];
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: true,
+  rotateControl: true,
   restriction: {
     latLngBounds: montevideoBounds,
     strictBounds: false,
@@ -202,6 +217,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     const map = mapRef.current;
     if (!map || !mapLoaded || hasCenteredRef.current) return;
     
+    // For full map view, fit to route bounds. This runs only once.
     if (directionsResponse) {
         const bounds = new window.google.maps.LatLngBounds();
         const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
@@ -213,8 +229,10 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
         map.fitBounds(bounds, 50); // 50px padding
         hasCenteredRef.current = true;
     } else {
+        // For initial load without a route, center on user or default
         map.panTo(userLocation || defaultCenter);
         map.setZoom(12);
+        hasCenteredRef.current = true;
     }
     
   }, [selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
