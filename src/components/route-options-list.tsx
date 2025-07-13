@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { getBusLocation, StmBusStop, getAllBusStops, getLinesForBusStop, BusLocation } from '@/lib/stm-api';
+import { getBusLocation, StmBusStop, getAllBusStops, getArrivalsForStop, BusArrival, BusLocation } from '@/lib/stm-api';
 import { haversineDistance, cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
@@ -17,6 +17,7 @@ interface RouteOptionsListProps {
 interface StmInfo {
   stopId: number | null;
   line: string | undefined;
+  lineId: number | null;
   lineDestination: string | null;
   departureStopLocation: google.maps.LatLng | null;
 }
@@ -25,21 +26,8 @@ interface StmStopMapping {
   [routeIndex: number]: StmInfo;
 }
 
-interface ArrivalInfo {
-    bus: BusLocation;
-    eta: number; // calculated ETA in seconds
-}
-
 interface BusArrivalsState {
-    [routeIndex: number]: ArrivalInfo | null;
-}
-
-const AVERAGE_BUS_SPEED_M_PER_S = 8.33; // Approx 30 km/h
-
-const calculateEta = (busLocation: { lat: number, lng: number }, stopLocation: { lat: number, lng: number }): number => {
-    const distance = haversineDistance(busLocation, stopLocation);
-    // This is a simple linear distance ETA, not accounting for traffic or route, but it's a good proxy.
-    return distance / AVERAGE_BUS_SPEED_M_PER_S;
+    [routeIndex: number]: BusArrival | null;
 }
 
 const ArrivalInfoLegend = () => {
@@ -47,23 +35,11 @@ const ArrivalInfoLegend = () => {
       <div className="p-3 mb-2 rounded-lg bg-muted/50 border border-dashed text-xs text-muted-foreground space-y-2">
          <div className="flex items-center gap-2 font-medium text-foreground">
               <Info className="h-4 w-4" />
-              <span>Señales Recibidas</span>
+              <span>Leyenda de arribos</span>
          </div>
         <div className="flex items-center gap-2">
            <Wifi className="h-3.5 w-3.5 text-primary" />
- <span>Tiempo real:</span>
- <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-green-400" />
- <span className="text-foreground">Confiable</span>
- </div>
-          <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-yellow-400" />
- <span className="text-foreground">Demora</span>
- </div>
-          <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-red-500" />
- <span className="text-foreground">Antigua</span>
- </div>
+           <span>En tiempo real (bus con GPS)</span>
         </div>
          <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-primary" />
@@ -85,7 +61,7 @@ const RouteOptionItem = ({
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
   isApiConnected: boolean,
-  arrivalInfo: ArrivalInfo | null,
+  arrivalInfo: BusArrival | null,
   stmInfo: StmInfo | null,
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -102,7 +78,7 @@ const RouteOptionItem = ({
   const getArrivalText = () => {
     if (!arrivalInfo) return null;
     const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
-    if (arrivalMinutes <= 1) {
+    if (arrivalMinutes <= 2) {
       return `Llegando`;
     }
     return `Llega en ${arrivalMinutes} min`;
@@ -126,7 +102,7 @@ const RouteOptionItem = ({
       const diffMs = departureTime.getTime() - currentTime.getTime();
       const diffMins = Math.round(diffMs / 60000);
 
-      if (diffMins <= 0) {
+      if (diffMins <= 1) {
           return "Saliendo ahora";
       }
       return `Sale en ${diffMins} min`;
@@ -218,6 +194,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
   const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
   const [isMappingStops, setIsMappingStops] = useState(true);
   const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const mapStops = async () => {
@@ -262,14 +239,24 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
               }
           });
           
+          let lineId : number | null = null;
+          if (closestStmStop && firstTransitStep?.transit?.line.name) {
+              const lineNameParts = firstTransitStep.transit.line.name.split(' ');
+              if (lineNameParts.length > 0) {
+                  lineId = parseInt(lineNameParts[0], 10);
+              }
+          }
+
+
           newMappings[index] = {
-              stopId: (closestStmStop && minDistance <= 200) ? closestStmStop.busstopId : null,
+              stopId: (closestStmStop && minDistance <= 250) ? closestStmStop.busstopId : null,
               line: googleTransitLine,
+              lineId: lineId,
               lineDestination: lineDestination,
               departureStopLocation: departureStopLocation
           };
         } else {
-          newMappings[index] = { stopId: null, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
+          newMappings[index] = { stopId: null, line: undefined, lineId: null, lineDestination: null, departureStopLocation: null };
         }
       }
       
@@ -287,56 +274,42 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     }
 
     const fetchAllArrivals = async () => {
-        const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndex, info]) => {
-            if (info.line && info.departureStopLocation) {
+        const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndexStr, info]) => {
+            const routeIndex = parseInt(routeIndexStr, 10);
+            if (info.stopId && info.lineId) {
                 try {
-                    const busLocations = await getBusLocation(info.line, info.lineDestination ?? undefined);
-                    if (busLocations && busLocations.length > 0) {
-                        
-                        const googleStopLocation = { lat: info.departureStopLocation.lat(), lng: info.departureStopLocation.lng() };
-                        let closestBus: BusLocation | null = null;
-                        let minDistance = Infinity;
-
-                        busLocations.forEach(bus => {
-                            const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-                            const distance = haversineDistance(busCoords, googleStopLocation);
-                            if (distance < minDistance) {
-                                minDistance = distance;
-                                closestBus = bus;
-                            }
-                        });
-
-                        if (closestBus) {
-                             const eta = calculateEta({ lat: closestBus.location.coordinates[1], lng: closestBus.location.coordinates[0] }, googleStopLocation);
-                             return { routeIndex: parseInt(routeIndex), arrival: { bus: closestBus, eta } };
-                        }
-                    }
+                    const arrivals = await getArrivalsForStop(info.stopId, info.lineId);
+                    // Find the first arrival that is not on site and has a bus
+                    const nextArrival = arrivals?.find(a => a.eta > 0 && a.bus);
+                    return { routeIndex, arrival: nextArrival || null };
                 } catch (error) {
-                    console.error(`Error fetching bus locations for route ${routeIndex}:`, error);
+                    console.error(`Error fetching bus arrivals for route ${routeIndex}:`, error);
                 }
             }
-            return { routeIndex: parseInt(routeIndex), arrival: null };
+            return { routeIndex, arrival: null };
         });
 
-        const results = await Promise.allSettled(arrivalPromises);
+        const results = await Promise.all(arrivalPromises);
         const newArrivals: BusArrivalsState = {};
         
         results.forEach(result => {
-            if (result.status === 'fulfilled' && result.value) {
-                const { routeIndex, arrival } = result.value;
-                newArrivals[routeIndex] = arrival;
-            } else if (result.status === 'rejected') {
-                console.error("A promise for fetching bus locations was rejected:", result.reason);
+            if (result) {
+                newArrivals[result.routeIndex] = result.arrival;
             }
         });
         
-        setBusArrivals(prev => ({...prev, ...newArrivals}));
+        setBusArrivals(newArrivals);
     };
 
-    fetchAllArrivals();
-    const intervalId = setInterval(fetchAllArrivals, 30000);
+    fetchAllArrivals(); // Initial fetch
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(fetchAllArrivals, 30000); // Poll every 30 seconds
 
-    return () => clearInterval(intervalId);
+    return () => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+        }
+    };
 
   }, [stmStopMappings, isApiConnected]);
 
@@ -366,5 +339,3 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
-
-    
