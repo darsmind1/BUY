@@ -76,3 +76,9 @@ export interface Place {
   address: string;
   location: google.maps.LatLngLiteral | null;
 }
+
+// This mirrors the structure of the Google Routes API response
+// to be used on the frontend after being passed through from our API
+export interface DirectionsResult {
+  routes: google.maps.DirectionsRoute[];
+}

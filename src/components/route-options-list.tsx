@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Bus, Footprints, Clock, AlertTriangle } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { cn, haversineDistance } from "@/lib/utils";
-import type { StmBusStop, UpcomingBus, StmInfo } from "@/lib/types";
+import type { StmBusStop, UpcomingBus, StmInfo, DirectionsResult } from "@/lib/types";
 import { getUpcomingBuses, findClosestStmStop } from "@/lib/stm-api";
 import { Badge } from "./ui/badge";
 
 interface RouteOptionsListProps {
-  routes: google.maps.DirectionsRoute[];
+  directionsResult: DirectionsResult;
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
   allStops: StmBusStop[];
@@ -22,7 +22,7 @@ function UpcomingBusEta({
     lineVariantId,
     allStops
 }: { 
-    departureStopLocation: google.maps.LatLng | null;
+    departureStopLocation: google.maps.LatLngLiteral | null;
     line: string | null;
     lineVariantId: number | null;
     allStops: StmBusStop[];
@@ -39,7 +39,7 @@ function UpcomingBusEta({
     setLoading(true);
 
     try {
-      const stmStop = await findClosestStmStop(departureStopLocation.lat(), departureStopLocation.lng(), allStops);
+      const stmStop = await findClosestStmStop(departureStopLocation.lat, departureStopLocation.lng, allStops);
       
       if (stmStop) {
         const upcomingBuses = await getUpcomingBuses(stmStop.busstopId, [line]);
@@ -93,6 +93,13 @@ function RouteOptionCard({ route, onSelect, isApiConnected, allStops }: { route:
     const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
     const firstTransitStep = transitSteps[0]?.transit;
 
+    // The duration from the Routes API is a string like "1845s". We need to parse it.
+    const durationInSeconds = leg.duration ? parseInt(leg.duration.text.replace('s', ''), 10) : 0;
+    const durationText = leg.duration?.text.replace('s', ' seg');
+
+    // The departure time is not directly available, but we can show the first transit stop's departure time if available.
+    const departureTimeText = firstTransitStep?.departure_time?.text;
+
     return (
         <button 
             onClick={onSelect} 
@@ -100,16 +107,16 @@ function RouteOptionCard({ route, onSelect, isApiConnected, allStops }: { route:
         >
             <div className="flex justify-between items-start">
                 <div className="flex flex-col">
-                    <span className="font-semibold text-lg">{leg.duration?.text}</span>
+                    <span className="font-semibold text-lg">{durationText}</span>
                     {isApiConnected && firstTransitStep && firstTransitStep.departure_stop.location ? (
                        <UpcomingBusEta 
-                         departureStopLocation={firstTransitStep.departure_stop.location}
+                         departureStopLocation={firstTransitStep.departure_stop.location.toJSON()}
                          line={firstTransitStep.line.short_name || null}
                          lineVariantId={null} // Simplified for list view
                          allStops={allStops}
                        />
                     ) : (
-                       <span className="text-xs text-muted-foreground mt-1">{leg.departure_time?.text}</span>
+                       <span className="text-xs text-muted-foreground mt-1">{departureTimeText || 'Hora no disponible'}</span>
                     )}
                 </div>
                 <div className="flex items-center gap-2 -mt-1">
@@ -140,7 +147,7 @@ function RouteOptionCard({ route, onSelect, isApiConnected, allStops }: { route:
     );
 }
 
-export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected, allStops }: RouteOptionsListProps) {
+export default function RouteOptionsList({ directionsResult, onSelectRoute, isApiConnected, allStops }: RouteOptionsListProps) {
 
   const handleSelect = (route: google.maps.DirectionsRoute, index: number) => {
     // Extract STM-relevant information from the selected route
@@ -166,7 +173,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      {routes.map((route, index) => (
+      {directionsResult.routes.map((route, index) => (
         <RouteOptionCard 
             key={index}
             route={route}

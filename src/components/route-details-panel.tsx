@@ -29,7 +29,7 @@ const getSignalAge = (timestamp: string | null | undefined): number | null => {
     return (now - signalTimestamp) / 1000; // age in seconds
 };
 
-function LiveBusIndicator({ line, destination, busLocations, userLocation, departureStopLocation }: { line: string | null, destination: string | null, busLocations: BusLocation[], userLocation: google.maps.LatLngLiteral | null, departureStopLocation: google.maps.LatLng | null }) {
+function LiveBusIndicator({ line, destination, busLocations, userLocation, departureStopLocation }: { line: string | null, destination: string | null, busLocations: BusLocation[], userLocation: google.maps.LatLngLiteral | null, departureStopLocation: google.maps.LatLngLiteral | null }) {
     const [eta, setEta] = useState<number | null>(null);
     const [signalAge, setSignalAge] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
@@ -48,8 +48,7 @@ function LiveBusIndicator({ line, destination, busLocations, userLocation, depar
 
             relevantBuses.forEach(bus => {
                 const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-                const stopCoords = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
-                const distance = haversineDistance(busCoords, stopCoords);
+                const distance = haversineDistance(busCoords, departureStopLocation);
 
                 // Basic check to see if bus is heading towards the stop (requires more advanced logic for prod)
                 // For now, we assume any bus on the line is a candidate
@@ -66,7 +65,7 @@ function LiveBusIndicator({ line, destination, busLocations, userLocation, depar
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             busLocation: { lat: closestBus.location.coordinates[1], lng: closestBus.location.coordinates[0] },
-                            stopLocation: { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() }
+                            stopLocation: { lat: departureStopLocation.lat, lng: departureStopLocation.lng }
                         })
                     });
                     if (response.ok) {
@@ -118,13 +117,16 @@ export default function RouteDetailsPanel({ route, stmInfo, busLocations, userLo
             [index]: !prev[index]
         }));
     };
+    
+    const durationText = leg.duration?.text.replace('s', ' seg') || 'N/A';
+    const distanceText = leg.distance?.text || 'N/A';
 
     return (
         <div className="pointer-events-auto bg-card text-card-foreground h-full flex flex-col">
             <header className="p-4 flex-shrink-0 min-w-0">
                 <p className="font-semibold text-base text-primary truncate">{leg.end_address}</p>
                 <p className="font-body text-sm text-muted-foreground">
-                    <span className="font-semibold">{leg.duration?.text}</span> &middot; {leg.distance?.text}
+                    <span className="font-semibold">{durationText}</span> &middot; {distanceText}
                 </p>
             </header>
             <Separator />
@@ -146,6 +148,10 @@ export default function RouteDetailsPanel({ route, stmInfo, busLocations, userLo
                         
                         const stepStmInfo = stmInfo.find(info => info.stepIndex === index);
 
+                        const stepInstructions = step.instructions || '';
+                        const stepDistance = step.distance?.text || '';
+                        const stepDuration = step.duration?.text.replace('s', ' seg') || '';
+
                         return (
                             <li key={index} className="pl-6 md:pl-8">
                                 <span className="absolute -left-[11px] mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary ring-4 ring-background">
@@ -162,14 +168,14 @@ export default function RouteDetailsPanel({ route, stmInfo, busLocations, userLo
                                             className="flex items-start justify-between w-full text-left gap-2 cursor-pointer"
                                             aria-expanded={isExpanded}
                                         >
-                                            <div className="font-body text-sm text-card-foreground font-normal break-words -mt-1" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                                            <div className="font-body text-sm text-card-foreground font-normal break-words -mt-1" dangerouslySetInnerHTML={{ __html: stepInstructions }} />
                                             <ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform duration-200 text-muted-foreground mt-0.5", isExpanded && "rotate-180")} />
                                         </button>
                                     ) : (
-                                        <div className="font-body text-sm text-card-foreground font-normal break-words -mt-1" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                                        <div className="font-body text-sm text-card-foreground font-normal break-words -mt-1" dangerouslySetInnerHTML={{ __html: stepInstructions }} />
                                     )}
 
-                                    <div className="font-body text-xs text-muted-foreground mt-1">{step.distance?.text} &middot; {step.duration?.text}</div>
+                                    <div className="font-body text-xs text-muted-foreground mt-1">{stepDistance} &middot; {stepDuration}</div>
 
                                     {hasSubSteps && isExpanded && (
                                         <ol className="relative border-l border-dashed border-muted/50 mt-3 ml-3 space-y-3">
@@ -209,7 +215,7 @@ export default function RouteDetailsPanel({ route, stmInfo, busLocations, userLo
                                                     destination={stepStmInfo?.lineDestination || null}
                                                     busLocations={busLocations}
                                                     userLocation={userLocation}
-                                                    departureStopLocation={step.transit.departure_stop.location}
+                                                    departureStopLocation={step.transit.departure_stop.location.toJSON()}
                                                 />
                                             )}
                                         </div>

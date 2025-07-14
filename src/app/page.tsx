@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection, getLineRoute, getAllBusStops, StmBusStop } from '@/lib/stm-api';
-import type { StmLineRoute, StmInfo, Place } from '@/lib/types';
+import type { StmLineRoute, StmInfo, Place, DirectionsResult } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -23,7 +23,7 @@ const LIBRARIES: ("places" | "marker" | "geometry")[] = ['places', 'marker', 'ge
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
-  const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
+  const [directionsResponse, setDirectionsResponse] = useState<DirectionsResult | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [selectedRouteStmInfo, setSelectedRouteStmInfo] = useState<StmInfo[]>([]);
@@ -294,7 +294,7 @@ export default function Home() {
               )}
               {view === 'options' && directionsResponse && (
                 <RouteOptionsList 
-                  routes={directionsResponse.routes} 
+                  directionsResult={directionsResponse} 
                   onSelectRoute={handleSelectRoute}
                   isApiConnected={apiStatus === 'connected'}
                   allStops={allStops}
