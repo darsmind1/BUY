@@ -192,12 +192,12 @@ export default function RouteOptionsList({
   // Initialize stmInfoByRoute when routes are first received
   useEffect(() => {
     let isMounted = true;
-    if (routes.length > 0) {
+    if (routes.length > 0 && isApiConnected) {
       setIsLoading(true);
 
       const fetchAllArrivals = async () => {
         const allStmInfoPromises = routes.map(async (route, index) => {
-          let routeStmInfo: StmInfo[] = route.legs[0]?.steps
+          let routeStmInfo: StmInfo[] = (route.legs[0]?.steps || [])
             .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
             .map(step => ({
               stopId: null,
@@ -214,26 +214,24 @@ export default function RouteOptionsList({
           if (!routeStmInfo || routeStmInfo.length === 0) {
             return { index, stmInfo: [] };
           }
-
-          // Let's focus on the first bus the user has to take
+          
           const firstBusStepInfo = routeStmInfo[0];
           
-          // 1. Get the bus stop ID from coordinates
           const stopLocation = firstBusStepInfo.departureStopLocation;
+          if (!stopLocation) return { index, stmInfo: routeStmInfo };
+
           const closestStop = await findClosestStmStop(stopLocation.lat, stopLocation.lng);
           
           if (closestStop) {
             firstBusStepInfo.stopId = closestStop.busstopId;
 
-            // 2. Get lineVariantId by looking at active buses for that line/destination
             const activeBuses = await getBusLocation([{ line: firstBusStepInfo.line, destination: firstBusStepInfo.lineDestination }]);
             const activeBusForRoute = activeBuses.find(b => b.lineVariantId);
             
             if (activeBusForRoute) {
                 firstBusStepInfo.lineVariantId = activeBusForRoute.lineVariantId ?? null;
             }
-            
-            // 3. Get upcoming buses with the precise info we gathered
+
             const upcomingBus = await getUpcomingBuses(
               firstBusStepInfo.stopId,
               firstBusStepInfo.line,
@@ -264,10 +262,12 @@ export default function RouteOptionsList({
       };
 
       fetchAllArrivals();
+    } else {
+        setIsLoading(false);
     }
     
     return () => { isMounted = false };
-  }, [routes]);
+  }, [routes, isApiConnected]);
   
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
 

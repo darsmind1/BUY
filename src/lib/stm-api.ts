@@ -239,17 +239,18 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
-export async function getUpcomingBuses(busstopId: number, line: string | null, lineVariantId: number | null): Promise<UpcomingBus | null> {
+export async function getUpcomingBuses(busstopId: number, line: string, lineVariantId: number | null): Promise<UpcomingBus | null> {
     let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
     
     const params = new URLSearchParams();
-    // Prioritize the more specific lineVariantId if available
+    
     if (lineVariantId) {
         params.append('lineVariantIds', lineVariantId.toString());
-    } else if (line) {
+    } else {
+        // As per the requirement, 'lines' is mandatory.
         params.append('lines', line);
     }
-    // Always ask for just one result per line to be efficient
+    
     params.append('amountperline', '1');
     
     path += params.toString();
