@@ -197,7 +197,7 @@ export async function findClosestStmStop(lat: number, lng: number): Promise<StmB
     const path = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}`;
     
     try {
-        const nearbyStops = await stmApiFetch(path);
+        const nearbyStops: StmBusStop[] = await stmApiFetch(path);
 
         if (!Array.isArray(nearbyStops) || nearbyStops.length === 0) {
             return null;
