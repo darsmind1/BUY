@@ -5,142 +5,191 @@ import { useState, type FormEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Search, MapPin, LocateFixed, ArrowRight } from 'lucide-react';
-import { Autocomplete } from '@react-google-maps/api';
-import type { Place } from '@/lib/types';
-import { getFormattedAddress } from '@/lib/google-maps-api';
+import { Search, MapPin, Loader2, AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface RouteSearchFormProps {
-  onSearch: (origin: Place, destination: Place) => void;
   isGoogleMapsLoaded: boolean;
-  currentUserLocation: google.maps.LatLngLiteral | null;
+  onSearch: (origin: string, destination: string) => void;
+  onLocationObtained: (location: google.maps.LatLngLiteral) => void;
+  isApiChecking: boolean;
+  isApiError: boolean;
 }
 
-const autocompleteOptions = {
-    componentRestrictions: { country: "uy" },
-    fields: ["formatted_address", "geometry", "name"],
-    strictBounds: false,
-};
+export default function RouteSearchForm({ isGoogleMapsLoaded, onSearch, onLocationObtained, isApiChecking, isApiError }: RouteSearchFormProps) {
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState('');
+  const [isGettingLocation, setIsGettingLocation] = useState(true);
+  const { toast } = useToast();
 
-export default function RouteSearchForm({ onSearch, isGoogleMapsLoaded, currentUserLocation }: RouteSearchFormProps) {
-  const [origin, setOrigin] = useState<Place>({ address: '', location: null });
-  const [destination, setDestination] = useState<Place>({ address: '', location: null });
+  const originInputRef = useRef<HTMLInputElement>(null);
+  const destinationInputRef = useRef<HTMLInputElement>(null);
+  const originAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const destinationAutocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
+  useEffect(() => {
+    if (isGoogleMapsLoaded) {
+      if (originInputRef.current && !originAutocompleteRef.current) {
+          originAutocompleteRef.current = new window.google.maps.places.Autocomplete(originInputRef.current, {
+              componentRestrictions: { country: "uy" },
+              fields: ["formatted_address"],
+          });
+          originAutocompleteRef.current.addListener('place_changed', () => {
+              const place = originAutocompleteRef.current?.getPlace();
+              if (place?.formatted_address) {
+                  setOrigin(place.formatted_address);
+              }
+          });
+      }
+
+      if (destinationInputRef.current && !destinationAutocompleteRef.current) {
+          destinationAutocompleteRef.current = new window.google.maps.places.Autocomplete(destinationInputRef.current, {
+              componentRestrictions: { country: "uy" },
+              fields: ["formatted_address"],
+          });
+          destinationAutocompleteRef.current.addListener('place_changed', () => {
+              const place = destinationAutocompleteRef.current?.getPlace();
+              if (place?.formatted_address) {
+                  setDestination(place.formatted_address);
+              }
+          });
+      }
+
+      // Automatically get location on component mount
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setOrigin('Mi ubicación actual');
+            const coords = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            onLocationObtained(coords);
+            setIsGettingLocation(false);
+          },
+          (error) => {
+            setIsGettingLocation(false);
+            setOrigin(''); // Clear origin if location fails
+            console.error("Error getting location automatically:", error.message);
+            // Optionally notify user that location access is needed for auto-origin
+            if(error.code === error.PERMISSION_DENIED) {
+                 toast({
+                    title: "Ubicación desactivada",
+                    description: "Habilita la ubicación para usarla como punto de partida.",
+                });
+            }
+          }
+        );
+      } else {
+        setIsGettingLocation(false);
+        // Geolocation not supported
+      }
+    }
+  }, [isGoogleMapsLoaded, onLocationObtained, toast]);
   
-  const originRef = useRef<HTMLInputElement>(null);
-  const destinationRef = useRef<HTMLInputElement>(null);
-  const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [destinationAutocomplete, setDestinationAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const handleSwapLocations = () => {
+    if (origin === 'Mi ubicación actual' && !destination) return;
+    if (!destination && !origin) return;
+
+    const tempOrigin = origin;
+    setOrigin(destination);
+    setDestination(tempOrigin);
+  };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (origin.location && destination.location) {
-        onSearch(origin, destination);
-    }
-  };
-
-  const handleUseCurrentLocation = async () => {
-    if (currentUserLocation) {
-        const formattedAddress = await getFormattedAddress(currentUserLocation.lat, currentUserLocation.lng);
-        setOrigin({
-            address: formattedAddress || `(${currentUserLocation.lat.toFixed(5)}, ${currentUserLocation.lng.toFixed(5)})`,
-            location: currentUserLocation
-        });
+    if (destination) {
+        onSearch(origin || "Mi ubicación actual", destination);
     }
   };
   
-  const onOriginLoad = (autocomplete: google.maps.places.Autocomplete) => {
-    setOriginAutocomplete(autocomplete);
-  };
-  
-  const onDestinationLoad = (autocomplete: google.maps.places.Autocomplete) => {
-    setDestinationAutocomplete(autocomplete);
-  };
-  
-  const onOriginPlaceChanged = () => {
-    if (originAutocomplete !== null) {
-      const place = originAutocomplete.getPlace();
-      setOrigin({
-        address: place.formatted_address || '',
-        location: place.geometry?.location?.toJSON() || null
-      });
-    } else {
-      console.log('Origin Autocomplete is not loaded yet!');
-    }
-  };
-
-  const onDestinationPlaceChanged = () => {
-    if (destinationAutocomplete !== null) {
-      const place = destinationAutocomplete.getPlace();
-      setDestination({
-        address: place.formatted_address || '',
-        location: place.geometry?.location?.toJSON() || null
-      });
-    } else {
-      console.log('Destination Autocomplete is not loaded yet!');
-    }
-  };
-
   if (!isGoogleMapsLoaded) {
-    return <p>Cargando mapa...</p>;
+    return (
+        <div className="flex flex-col items-center justify-center space-y-4 h-full">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm">Cargando buscador...</p>
+        </div>
+    )
   }
+  
+  const isFormDisabled = isApiChecking || isApiError;
+  const isOriginDisabled = isGettingLocation || (origin === 'Mi ubicación actual');
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-500">
+      <fieldset disabled={isFormDisabled} className="space-y-4 group">
         <Card>
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                    <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <div className="flex-1">
-                        <Autocomplete
-                          onLoad={onOriginLoad}
-                          onPlaceChanged={onOriginPlaceChanged}
-                          options={autocompleteOptions}
-                        >
-                            <Input 
-                                ref={originRef}
-                                value={origin.address}
-                                onChange={(e) => setOrigin({ address: e.target.value, location: null })}
-                                className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
-                                placeholder="Punto de partida"
-                                required
-                            />
-                        </Autocomplete>
+                     <div className="flex flex-col items-center self-stretch justify-between">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground shrink-0 h-5 w-5"><circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2"></circle></svg>
+                        <div className="border-l-2 border-dashed border-border flex-grow my-2"></div>
+                        <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
                     </div>
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleUseCurrentLocation}>
-                        <LocateFixed className="h-5 w-5 text-muted-foreground" />
-                    </Button>
-                </div>
-                 <div className="pl-5">
-                   <div className="h-px bg-border ml-3" />
-                 </div>
-                <div className="flex items-center gap-3">
-                     <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                     <div className="flex-1">
-                        <Autocomplete
-                          onLoad={onDestinationLoad}
-                          onPlaceChanged={onDestinationPlaceChanged}
-                          options={autocompleteOptions}
-                        >
+                    <div className="flex-1 space-y-2 relative">
+                        <div className="relative">
                             <Input 
-                                ref={destinationRef}
-                                value={destination.address}
-                                onChange={(e) => setDestination({ address: e.target.value, location: null })}
+                                ref={originInputRef}
+                                id="origin" 
+                                value={origin}
+                                onChange={(e) => setOrigin(e.target.value)}
+                                className={cn(
+                                    "border-0 bg-transparent shadow-none pl-2 pr-10 focus-visible:ring-0 h-9",
+                                    isOriginDisabled && "bg-muted/50"
+                                )}
+                                placeholder="Obteniendo ubicación..."
+                                disabled={isOriginDisabled}
+                            />
+                             {isGettingLocation && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                        </div>
+                        <div className="relative border-t border-border">
+                          <Button 
+                              type="button" 
+                              variant="outline" 
+                              size="icon"
+                              className="absolute top-0 right-1 -translate-y-1/2 h-7 w-7 bg-background rounded-full border shadow-sm group-disabled:pointer-events-none"
+                              onClick={handleSwapLocations}
+                              aria-label="Invertir origen y destino"
+                          >
+                              <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </div>
+                        <div className="relative">
+                            <Input 
+                                ref={destinationInputRef}
+                                id="destination" 
+                                value={destination}
+                                onChange={(e) => setDestination(e.target.value)}
                                 className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
-                                placeholder="Destino"
+                                placeholder="Escribe una dirección o lugar"
                                 required
                             />
-                        </Autocomplete>
-                     </div>
+                        </div>
+                    </div>
                 </div>
             </CardContent>
         </Card>
         
-        <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold">
-          <Search className="mr-2 h-5 w-5" />
-          Buscar Viaje
+        <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold group-disabled:bg-accent/50">
+            {isApiChecking ? (
+                <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Conectando...</span>
+                </>
+            ) : isApiError ? (
+                 <>
+                    <AlertTriangle className="mr-2 h-4 w-4" />
+                    <span>Servicio no disponible</span>
+                </>
+            ) : (
+                <>
+                    <Search className="mr-2 h-5 w-5" />
+                    <span>Buscar ruta</span>
+                </>
+            )}
         </Button>
-      </form>
-    </div>
+      </fieldset>
+    </form>
   );
 }

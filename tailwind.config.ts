@@ -68,12 +68,6 @@ export default {
         'green-400': '#4ade80',
         'yellow-400': '#facc15',
         'red-500': '#ef4444',
-        'amber-100': '#fef3c7',
-        'amber-800': '#92400e',
-        'amber-950': '#451a03',
-        'amber-200': '#fde68a',
-        'amber-600': '#d97706',
-        'amber-300': '#fcd34d',
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -121,5 +115,3 @@ export default {
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
-
-    

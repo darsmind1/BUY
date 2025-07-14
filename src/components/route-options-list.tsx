@@ -1,187 +1,370 @@
+
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { ArrowRight, Bus, Footprints, Clock, AlertTriangle } from "lucide-react";
-import { Skeleton } from "./ui/skeleton";
-import { cn, haversineDistance } from "@/lib/utils";
-import type { StmBusStop, UpcomingBus, StmInfo, DirectionsResult } from "@/lib/types";
-import { getUpcomingBuses, findClosestStmStop } from "@/lib/stm-api";
-import { Badge } from "./ui/badge";
+import React, { useEffect, useState, useRef } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
+import { getBusLocation, StmBusStop, getAllBusStops, getLinesForBusStop, BusLocation } from '@/lib/stm-api';
+import { haversineDistance, cn } from '@/lib/utils';
 
 interface RouteOptionsListProps {
-  directionsResult: DirectionsResult;
-  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
+  routes: google.maps.DirectionsRoute[];
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void;
   isApiConnected: boolean;
-  allStops: StmBusStop[];
 }
 
-function UpcomingBusEta({ 
-    departureStopLocation, 
-    line, 
-    lineVariantId,
-    allStops
-}: { 
-    departureStopLocation: google.maps.LatLngLiteral | null;
-    line: string | null;
-    lineVariantId: number | null;
-    allStops: StmBusStop[];
-}) {
-  const [eta, setEta] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+interface StmInfo {
+  stopId: number | null;
+  line: string | undefined;
+  lineDestination: string | null;
+  departureStopLocation: google.maps.LatLng | null;
+}
 
-  const fetchEta = useCallback(async () => {
-    if (!departureStopLocation || !line || allStops.length === 0) {
-      setLoading(false);
-      return;
-    }
+interface StmStopMapping {
+  [routeIndex: number]: StmInfo;
+}
+
+interface ArrivalInfo {
+    bus: BusLocation;
+    eta: number; // calculated ETA in seconds
+}
+
+interface BusArrivalsState {
+    [routeIndex: number]: ArrivalInfo | null;
+}
+
+const AVERAGE_BUS_SPEED_M_PER_S = 8.33; // Approx 30 km/h
+
+const calculateEta = (busLocation: { lat: number, lng: number }, stopLocation: { lat: number, lng: number }): number => {
+    const distance = haversineDistance(busLocation, stopLocation);
+    // This is a simple linear distance ETA, not accounting for traffic or route, but it's a good proxy.
+    return distance / AVERAGE_BUS_SPEED_M_PER_S;
+}
+
+const ArrivalInfoLegend = () => {
+  return (
+      <div className="p-3 mb-2 rounded-lg bg-muted/50 border border-dashed text-xs text-muted-foreground space-y-2">
+         <div className="flex items-center gap-2 font-medium text-foreground">
+              <Info className="h-4 w-4" />
+              <span>Señales Recibidas</span>
+         </div>
+        <div className="flex items-center gap-2">
+           <Wifi className="h-3.5 w-3.5 text-primary" />
+ <span>Tiempo real:</span>
+ <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full bg-green-400" />
+ <span className="text-foreground">Confiable</span>
+ </div>
+          <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full bg-yellow-400" />
+ <span className="text-foreground">Demora</span>
+ </div>
+          <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full bg-red-500" />
+ <span className="text-foreground">Antigua</span>
+ </div>
+        </div>
+         <div className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 text-primary" />
+              <span>Horario programado para la línea</span>
+         </div>
+      </div>
     
-    setLoading(true);
+  )
+}
 
-    try {
-      const stmStop = await findClosestStmStop(departureStopLocation.lat, departureStopLocation.lng, allStops);
-      
-      if (stmStop) {
-        const upcomingBuses = await getUpcomingBuses(stmStop.busstopId, [line]);
-        if (upcomingBuses.length > 0) {
-          // Try to find the exact variant first, otherwise take any bus on the line
-          const nextBus = upcomingBuses.find(b => b.lineVariantId === lineVariantId) || upcomingBuses.find(b => b.line === line);
-          setEta(nextBus ? nextBus.arrival.minutes : null);
-        } else {
-          setEta(null);
-        }
-      } else {
-        setEta(null);
-      }
-    } catch (error) {
-      console.error("Failed to fetch ETA for route option", error);
-      setEta(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [departureStopLocation, line, lineVariantId, allStops]);
+const RouteOptionItem = ({ 
+  route, 
+  index, 
+  onSelectRoute,
+  arrivalInfo,
+  stmInfo
+}: { 
+  route: google.maps.DirectionsRoute, 
+  index: number, 
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
+  isApiConnected: boolean,
+  arrivalInfo: ArrivalInfo | null,
+  stmInfo: StmInfo | null,
+}) => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const leg = route.legs[0];
+  
+  const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+  const scheduledDepartureTimeValue = firstTransitStep?.transit?.departure_time?.value;
 
   useEffect(() => {
-    fetchEta();
-    const intervalId = setInterval(fetchEta, 30000); // Refresh every 30 seconds
-    return () => clearInterval(intervalId);
-  }, [fetchEta]);
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update time every minute
+    return () => clearInterval(timer);
+  }, []);
 
-  if (loading) {
-    return <Skeleton className="h-5 w-24" />;
-  }
-
-  if (eta !== null) {
-    return (
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mt-1 md:text-sm">
-        <Clock size={14} className="flex-shrink-0" />
-        <span className="truncate">{eta <= 1 ? "Llegando" : `Próximo en ${eta} min`}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1 md:text-sm">
-        <Clock size={14} className="flex-shrink-0"/>
-        <span className="truncate">Sin arribo en vivo</span>
-    </div>
-  );
-}
-
-function RouteOptionCard({ route, onSelect, isApiConnected, allStops }: { route: google.maps.DirectionsRoute, onSelect: () => void, isApiConnected: boolean, allStops: StmBusStop[] }) {
-    const leg = route.legs[0];
-    const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
-    const firstTransitStep = transitSteps[0]?.transit;
-
-    // The duration from the Routes API is a string like "1845s". We need to parse it.
-    const durationInSeconds = leg.duration ? parseInt(leg.duration.text.replace('s', ''), 10) : 0;
-    const durationText = leg.duration?.text.replace('s', ' seg');
-
-    // The departure time is not directly available, but we can show the first transit stop's departure time if available.
-    const departureTimeText = firstTransitStep?.departure_time?.text;
-
-    return (
-        <button 
-            onClick={onSelect} 
-            className="w-full text-left bg-card p-4 rounded-lg border hover:border-primary hover:shadow-md transition-all duration-200 space-y-3"
-        >
-            <div className="flex justify-between items-start">
-                <div className="flex flex-col">
-                    <span className="font-semibold text-lg">{durationText}</span>
-                    {isApiConnected && firstTransitStep && firstTransitStep.departure_stop.location ? (
-                       <UpcomingBusEta 
-                         departureStopLocation={firstTransitStep.departure_stop.location.toJSON()}
-                         line={firstTransitStep.line.short_name || null}
-                         lineVariantId={null} // Simplified for list view
-                         allStops={allStops}
-                       />
-                    ) : (
-                       <span className="text-xs text-muted-foreground mt-1">{departureTimeText || 'Hora no disponible'}</span>
-                    )}
-                </div>
-                <div className="flex items-center gap-2 -mt-1">
-                  {leg.steps.map((step, index) => {
-                      if (step.travel_mode === 'WALKING') {
-                          return <Footprints key={index} className="h-5 w-5 text-muted-foreground" />
-                      }
-                      if (step.travel_mode === 'TRANSIT' && step.transit) {
-                          return (
-                              <Badge key={index} variant="secondary" className="font-bold">
-                                  <Bus size={12} className="mr-1"/>
-                                  {step.transit.line.short_name}
-                              </Badge>
-                          )
-                      }
-                      return null;
-                  }).reduce((prev, curr, index) => {
-                      if (index === 0) return [curr];
-                      return [...prev, <span key={`sep-${index}`} className="text-muted-foreground/50 text-sm">&gt;</span>, curr]
-                  }, [] as React.ReactNode[])}
-                </div>
-            </div>
-            
-            <div className="text-xs text-muted-foreground">
-                {leg.distance?.text} &middot; {route.summary || 'Ruta estándar'}
-            </div>
-        </button>
-    );
-}
-
-export default function RouteOptionsList({ directionsResult, onSelectRoute, isApiConnected, allStops }: RouteOptionsListProps) {
-
-  const handleSelect = (route: google.maps.DirectionsRoute, index: number) => {
-    // Extract STM-relevant information from the selected route
-    const stmInfo: StmInfo[] = route.legs[0].steps.map((step, stepIndex) => {
-        if (step.travel_mode === 'TRANSIT' && step.transit) {
-            // The location object from the backend is not a LatLng object, so we convert it.
-            const depLoc = step.transit.departure_stop.location;
-            const depLatLng = depLoc ? new google.maps.LatLng(depLoc.lat(), depLoc.lng()) : null;
-
-            return {
-                stepIndex,
-                line: step.transit.line.short_name || null,
-                lineDestination: step.transit.headsign || null,
-                departureStopLocation: depLatLng ? depLatLng.toJSON() : null,
-                arrival: null, // This will be populated in the details view
-            };
-        }
-        return { stepIndex, line: null, lineDestination: null, departureStopLocation: null, arrival: null };
-    });
-
-    onSelectRoute(route, index, stmInfo);
+  const getArrivalText = () => {
+    if (!arrivalInfo) return null;
+    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
+    if (arrivalMinutes <= 1) {
+      return `Llegando`;
+    }
+    return `Llega en ${arrivalMinutes} min`;
   };
 
+  const getArrivalColorClass = () => {
+    if (!arrivalInfo) return 'text-primary';
+    const arrivalMinutes = Math.round(arrivalInfo.eta / 60);
+    if (arrivalMinutes < 5) {
+        return 'text-green-400';
+    } else if (arrivalMinutes <= 10) {
+        return 'text-yellow-400';
+    } else {
+        return 'text-red-500';
+    }
+  };
+
+  const getScheduledArrivalInMinutes = () => {
+      if (!scheduledDepartureTimeValue) return null;
+      const departureTime = new Date(scheduledDepartureTimeValue);
+      const diffMs = departureTime.getTime() - currentTime.getTime();
+      const diffMins = Math.round(diffMs / 60000);
+
+      if (diffMins <= 0) {
+          return "Saliendo ahora";
+      }
+      return `Sale en ${diffMins} min`;
+  };
+
+  const arrivalText = getArrivalText();
+  const scheduledText = getScheduledArrivalInMinutes();
+    
+  const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
+
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      {directionsResult.routes.map((route, index) => (
-        <RouteOptionCard 
-            key={index}
-            route={route}
-            onSelect={() => handleSelect(route, index)}
+    <Card 
+      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
+      onClick={() => onSelectRoute(route, index, stmInfo?.stopId ?? null, stmInfo?.lineDestination ?? null)}
+      style={{ animationDelay: `${index * 100}ms`}}
+    >
+      <CardContent className="p-4 flex items-center justify-between">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {renderableSteps.map((step, stepIndex) => {
+                  const isLastStep = stepIndex === renderableSteps.length - 1;
+                  if (step.travel_mode === 'TRANSIT') {
+                    const lineToShow = step.transit?.line.short_name;
+                    return (
+                      <React.Fragment key={stepIndex}>
+                        <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
+                         {!isLastStep && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
+                      </React.Fragment>
+                    );
+                  }
+                  if (step.travel_mode === 'WALKING') {
+                     return (
+                      <React.Fragment key={stepIndex}>
+                        <Footprints className="h-4 w-4 text-muted-foreground" />
+                         {!isLastStep && <ChevronsRight className="h-4 w-4 text-muted-foreground" />}
+                      </React.Fragment>
+                     )
+                  }
+                  return null;
+                })}
+               {leg.steps.every(s => s.travel_mode === 'WALKING') && (
+                <div className="flex items-center gap-2">
+                  <Footprints className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Solo a pie</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span>{getTotalDuration(route.legs)} min</span>
+            </div>
+            
+            {arrivalInfo && arrivalText ? (
+              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
+                  <Wifi className="h-3 w-3" />
+                  <span>{arrivalText}</span>
+              </div>
+            ) : scheduledText ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>{scheduledText}</span>
+              </div>
+            ) : firstTransitStep ? (
+              <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
+            ) : null}
+
+          </div>
+        </div>
+        <ArrowRight className="h-5 w-5 text-muted-foreground" />
+      </CardContent>
+    </Card>
+  )
+}
+
+const getTotalDuration = (legs: google.maps.DirectionsLeg[]) => {
+  let totalSeconds = 0;
+  legs.forEach(leg => {
+    if (leg.duration) {
+      totalSeconds += leg.duration.value;
+    }
+  });
+  return Math.round(totalSeconds / 60);
+}
+
+export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected }: RouteOptionsListProps) {
+  const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
+  const [isMappingStops, setIsMappingStops] = useState(true);
+  const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
+
+  useEffect(() => {
+    const mapStops = async () => {
+        if (!isApiConnected) {
+            setIsMappingStops(false);
+            setStmStopMappings({});
+            return;
+        }
+
+      setIsMappingStops(true);
+      const allStops = await getAllBusStops();
+      if (!allStops || allStops.length === 0) {
+        console.error("Could not fetch STM bus stops for mapping.");
+        setIsMappingStops(false);
+        setStmStopMappings({});
+        return;
+      }
+      
+      const newMappings: StmStopMapping = {};
+
+      for (const [index, route] of routes.entries()) {
+        const firstTransitStep = route.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+        const googleTransitLine = firstTransitStep?.transit?.line.short_name;
+        const departureStopLocation = firstTransitStep?.transit?.departure_stop?.location || null;
+        const lineDestination = firstTransitStep?.transit?.line.name?.split(' - ')[1] || null;
+
+        if (departureStopLocation && googleTransitLine) {
+          const departureStopGoogleLocation = {
+            lat: departureStopLocation.lat(),
+            lng: departureStopLocation.lng()
+          };
+
+          let closestStmStop: StmBusStop | null = null;
+          let minDistance = Infinity;
+
+          allStops.forEach(stop => {
+              const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
+              const distance = haversineDistance(departureStopGoogleLocation, stopCoords);
+              if (distance < minDistance) {
+                  minDistance = distance;
+                  closestStmStop = stop;
+              }
+          });
+          
+          newMappings[index] = {
+              stopId: (closestStmStop && minDistance <= 200) ? closestStmStop.busstopId : null,
+              line: googleTransitLine,
+              lineDestination: lineDestination,
+              departureStopLocation: departureStopLocation
+          };
+        } else {
+          newMappings[index] = { stopId: null, line: googleTransitLine, lineDestination: lineDestination, departureStopLocation: null };
+        }
+      }
+      
+      setStmStopMappings(newMappings);
+      setIsMappingStops(false);
+    };
+
+    mapStops();
+  }, [routes, isApiConnected]);
+
+
+  useEffect(() => {
+    if (!isApiConnected || !stmStopMappings) {
+        return;
+    }
+
+    const fetchAllArrivals = async () => {
+        const arrivalPromises = Object.entries(stmStopMappings).map(async ([routeIndex, info]) => {
+            if (info.line && info.departureStopLocation) {
+                try {
+                    const busLocations = await getBusLocation(info.line, info.lineDestination ?? undefined);
+                    if (busLocations && busLocations.length > 0) {
+                        
+                        const googleStopLocation = { lat: info.departureStopLocation.lat(), lng: info.departureStopLocation.lng() };
+                        let closestBus: BusLocation | null = null;
+                        let minDistance = Infinity;
+
+                        busLocations.forEach(bus => {
+                            const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+                            const distance = haversineDistance(busCoords, googleStopLocation);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestBus = bus;
+                            }
+                        });
+
+                        if (closestBus) {
+                             const eta = calculateEta({ lat: closestBus.location.coordinates[1], lng: closestBus.location.coordinates[0] }, googleStopLocation);
+                             return { routeIndex: parseInt(routeIndex), arrival: { bus: closestBus, eta } };
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error fetching bus locations for route ${routeIndex}:`, error);
+                }
+            }
+            return { routeIndex: parseInt(routeIndex), arrival: null };
+        });
+
+        const results = await Promise.allSettled(arrivalPromises);
+        const newArrivals: BusArrivalsState = {};
+        
+        results.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+                const { routeIndex, arrival } = result.value;
+                newArrivals[routeIndex] = arrival;
+            } else if (result.status === 'rejected') {
+                console.error("A promise for fetching bus locations was rejected:", result.reason);
+            }
+        });
+        
+        setBusArrivals(prev => ({...prev, ...newArrivals}));
+    };
+
+    fetchAllArrivals();
+    const intervalId = setInterval(fetchAllArrivals, 30000);
+
+    return () => clearInterval(intervalId);
+
+  }, [stmStopMappings, isApiConnected]);
+
+
+  return (
+    <div className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
+      {isMappingStops && isApiConnected && (
+         <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p>Verificando paradas y líneas...</p>
+         </div>
+      )}
+      {!isMappingStops && isApiConnected && routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT')) && (
+        <ArrivalInfoLegend />
+      )}
+      {!isMappingStops && routes.map((route, index) => (
+        <RouteOptionItem 
+            key={index} 
+            route={route} 
+            index={index} 
+            onSelectRoute={onSelectRoute}
             isApiConnected={isApiConnected}
-            allStops={allStops}
+            arrivalInfo={busArrivals[index] ?? null}
+            stmInfo={stmStopMappings ? stmStopMappings[index] : null}
         />
       ))}
     </div>
   );
 }
+
+    
