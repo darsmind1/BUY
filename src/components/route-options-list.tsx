@@ -190,6 +190,9 @@ export default function RouteOptionsList({
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAllArrivals = useCallback(async () => {
+    console.log("----------------------------------------");
+    console.log(`[TEST] Iniciando fetchAllArrivals para ${routes.length} rutas...`);
+    
     if (!isApiConnected || routes.length === 0) {
       setIsLoading(false);
       return;
@@ -216,16 +219,22 @@ export default function RouteOptionsList({
 
     const allPromises = routes.map(async (route, index) => {
       const firstBusStepInfo = enrichedStmInfo[index]?.[0];
+      console.log(`[TEST] Ruta ${index}: Procesando primer tramo de bus.`, firstBusStepInfo);
+
       if (!firstBusStepInfo || !firstBusStepInfo.line || !firstBusStepInfo.departureStopLocation) {
+        console.log(`[TEST] Ruta ${index}: No hay información de bus o parada. Saltando.`);
         return; 
       }
         
       try {
         const closestStop = await findClosestStmStop(firstBusStepInfo.departureStopLocation.lat, firstBusStepInfo.departureStopLocation.lng);
+        console.log(`[TEST] Ruta ${index}: Resultado de findClosestStmStop:`, closestStop);
         
         if (closestStop) {
           firstBusStepInfo.stopId = closestStop.busstopId;
+          console.log(`[TEST] Ruta ${index}: Llamando a getUpcomingBuses con stopId=${closestStop.busstopId}, line=${firstBusStepInfo.line}`);
           const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStepInfo.line, null);
+          console.log(`[TEST] Ruta ${index}: Resultado de getUpcomingBuses:`, upcomingBus);
           
           if (upcomingBus?.arrival) {
             firstBusStepInfo.arrival = {
@@ -235,11 +244,12 @@ export default function RouteOptionsList({
           }
         }
       } catch (error) {
-        console.error(`Error processing arrivals for route ${index}, line ${firstBusStepInfo.line}`, error);
+        console.error(`[TEST] Ruta ${index}: Error procesando arribos para linea ${firstBusStepInfo.line}`, error);
       }
     });
 
     await Promise.all(allPromises);
+    console.log("[TEST] Proceso finalizado. Actualizando estado con:", enrichedStmInfo);
     setStmInfoByRoute(enrichedStmInfo);
     setIsLoading(false);
 
@@ -306,5 +316,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    
