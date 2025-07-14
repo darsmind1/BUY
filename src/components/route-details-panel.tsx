@@ -299,7 +299,7 @@ export default function RouteDetailsPanel({
             info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
         );
 
-        if (transitStepInfo?.arrival) return false; // Has arrival info, so we don't show "Bus on map"
+        if (transitStepInfo?.arrival) return false;
 
         const busForStep = busLocations.find(b => b.line === step.transit?.line.short_name);
         const busCoords = busForStep ? { lat: busForStep.location.coordinates[1], lng: busForStep.location.coordinates[0] } : null;
@@ -307,7 +307,7 @@ export default function RouteDetailsPanel({
         
         if (busCoords && stopCoords) {
             const distance = haversineDistance(busCoords, stopCoords);
-            if (distance < 2000) return true; // Bus is on map and has no arrival info
+            if (distance < 2000) return true;
         }
         return false;
     });
@@ -406,7 +406,7 @@ export default function RouteDetailsPanel({
               let busIsOnMap = false;
               if (busCoords && stopCoords) {
                   const distance = haversineDistance(busCoords, stopCoords);
-                  if (distance < 2000) { // 2km
+                  if (distance < 2000) { 
                       busIsOnMap = true;
                   }
               }
@@ -452,6 +452,10 @@ export default function RouteDetailsPanel({
                                 {transitStepInfo.arrival.eta < 60 ? "Llegando" : `Llega en ${Math.round(transitStepInfo.arrival.eta / 60)} min`}
                               </span>
                            </div>
+                        )}
+
+                        {isTransit && !transitStepInfo?.arrival && busIsOnMap && (
+                          <BusOnMapIndicator />
                         )}
 
                         {isTransit && !transitStepInfo?.arrival && !busIsOnMap && step.transit?.departure_time?.text && (
