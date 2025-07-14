@@ -7,13 +7,14 @@ import { Bus, ArrowLeft, Loader2, Map as MapIcon, ArrowRight, List } from 'lucid
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
-import RouteStopsList from '@/components/route-stops-list'; // NEW
+import RouteOptionsList from '@/components/route-options-list';
+import RouteDetailsPanel from '@/components/route-details-panel';
 import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection, getLineRoute } from '@/lib/stm-api';
-import type { StmLineRoute } from '@/lib/types';
+import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
+import type { StmInfo } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -21,9 +22,10 @@ const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
 const LIBRARIES: ("places" | "marker" | "geometry")[] = ['places', 'marker', 'geometry'];
 
 export default function Home() {
-  const [view, setView] = useState<'search' | 'details'>('search');
+  const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
-  const [lineRoute, setLineRoute] = useState<StmLineRoute | null>(null);
+  const [routes, setRoutes] = useState<google.maps.DirectionsResult[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
@@ -55,38 +57,58 @@ export default function Home() {
     verifyApiConnection();
   }, [toast]);
 
-  // Effect to update bus locations when a line route is selected
+  // Effect to update bus locations when routes are available
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
-  
+
     const updateRealtimeData = async () => {
-      if (view !== 'details' || apiStatus !== 'connected' || !lineRoute) {
+      if (view === 'search' || routes.length === 0 || apiStatus !== 'connected') {
         setBusLocations([]);
         return;
       }
       
-      try {
-        const locations = await getBusLocation([{ line: lineRoute.line, destination: lineRoute.description }]);
-        setBusLocations(locations);
-      } catch (error) {
-        console.error(`Error fetching real-time data:`, error);
+      // Extract all unique bus lines from all route options
+      const linesToTrack: { line: string; destination: string | null }[] = [];
+      routes.forEach(route => {
+        route.routes[0]?.legs.forEach(leg => {
+          leg.steps.forEach(step => {
+            if (step.travel_mode === 'TRANSIT' && step.transit?.line.vehicle.type === 'BUS') {
+              const line = step.transit.line.short_name;
+              const destination = step.transit.line.headsign;
+              if (line && !linesToTrack.some(l => l.line === line && l.destination === destination)) {
+                linesToTrack.push({ line, destination });
+              }
+            }
+          });
+        });
+      });
+
+      if (linesToTrack.length > 0) {
+        try {
+          const locations = await getBusLocation(linesToTrack);
+          setBusLocations(locations);
+        } catch (error) {
+          console.error(`Error fetching real-time data:`, error);
+          setBusLocations([]);
+        }
+      } else {
         setBusLocations([]);
       }
     };
-  
-    if (view === 'details' && lineRoute) {
-      updateRealtimeData(); 
-      intervalId = setInterval(updateRealtimeData, 20000); 
+
+    if (view !== 'search' && routes.length > 0) {
+      updateRealtimeData(); // Initial fetch
+      intervalId = setInterval(updateRealtimeData, 20000); // Refresh every 20 seconds
     } else {
       setBusLocations([]);
     }
-  
+
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
     };
-  }, [view, apiStatus, lineRoute]);
+  }, [view, routes, apiStatus]);
 
 
   useEffect(() => {
@@ -119,43 +141,71 @@ export default function Home() {
     };
   }, []);
 
-  const handleSearch = async (line: string) => {
-    if (!line) return;
+  const handleSearch = (origin: string, destination: string) => {
+    if (!origin || !destination) return;
     
-    setLineRoute(null);
+    setRoutes([]);
+    setSelectedRoute(null);
     setBusLocations([]);
     setIsLoading(true);
 
-    const routeData = await getLineRoute(line);
-
-    setIsLoading(false);
-    if (routeData) {
-      setLineRoute(routeData);
-      setView('details');
-      setMobileView('panel');
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Línea no encontrada",
-        description: `No se pudo encontrar el recorrido para la línea ${line}. Por favor, verifica el número e intenta de nuevo.`,
-      });
-    }
+    const directionsService = new window.google.maps.DirectionsService();
+    directionsService.route(
+      {
+        origin: origin,
+        destination: destination,
+        travelMode: google.maps.TravelMode.TRANSIT,
+        transitOptions: {
+          modes: [google.maps.TransitMode.BUS],
+        },
+        provideRouteAlternatives: true,
+        region: 'UY',
+      },
+      (result, status) => {
+        setIsLoading(false);
+        if (status === google.maps.DirectionsStatus.OK && result) {
+            setRoutes(result.routes.map(route => ({...result, routes: [route]})));
+            setView('options');
+            setMobileView('panel');
+        } else {
+          setRoutes([]);
+          toast({
+            variant: "destructive",
+            title: "Ruta no encontrada",
+            description: "No se pudieron encontrar rutas de autobús para el origen y destino seleccionados. Intenta con otras direcciones.",
+          });
+        }
+      }
+    );
+  };
+  
+  const handleRouteSelect = (route: google.maps.DirectionsResult) => {
+    setSelectedRoute(route);
+    setView('details');
+    setMobileView('panel');
   };
 
   const handleBack = () => {
-    if (mobileView === 'map' && view === 'details') {
+    if (mobileView === 'map' && (view === 'options' || view === 'details')) {
       setMobileView('panel');
       return;
     }
-    setView('search');
-    setLineRoute(null);
-    setBusLocations([]);
+    
+    if (view === 'details') {
+      setView('options');
+      setSelectedRoute(null);
+    } else if (view === 'options') {
+      setView('search');
+      setRoutes([]);
+      setBusLocations([]);
+    }
   };
   
   const getHeaderTitle = () => {
     switch(view) {
-      case 'search': return 'BUSCAR LÍNEA';
-      case 'details': return `LÍNEA ${lineRoute?.line || ''}`;
+      case 'search': return 'BUSCAR VIAJE';
+      case 'options': return 'OPCIONES DE TRAYECTO';
+      case 'details': return `DETALLES DE LA RUTA`;
       default: return 'BusesUY';
     }
   }
@@ -200,16 +250,25 @@ export default function Home() {
                 </div>
               )}
               {view === 'search' && (
-                <RouteSearchForm
-                    onSearch={handleSearch} 
-                    isApiChecking={apiStatus === 'checking'}
-                    isApiError={apiStatus === 'error'}
+                <RouteSearchForm 
+                  onSearch={handleSearch} 
+                  isGoogleMapsLoaded={isGoogleMapsLoaded}
+                  currentUserLocation={currentUserLocation}
                 />
               )}
-              {view === 'details' && lineRoute && (
-                <RouteStopsList 
-                  lineRoute={lineRoute}
+              {view === 'options' && (
+                  <RouteOptionsList
+                    routes={routes}
+                    onRouteSelect={handleRouteSelect}
+                    isApiConnected={apiStatus === 'connected'}
+                    busLocations={busLocations}
+                  />
+              )}
+              {view === 'details' && selectedRoute && (
+                <RouteDetailsPanel
+                  route={selectedRoute}
                   isApiConnected={apiStatus === 'connected'}
+                  busLocations={busLocations}
                 />
               )}
           </main>
@@ -221,14 +280,18 @@ export default function Home() {
                 <Button variant="secondary" size="icon" onClick={() => setMobileView('panel')} aria-label="Volver al panel">
                   <List className="h-5 w-5" />
                 </Button>
+                <Button variant="secondary" onClick={handleBack} aria-label="Volver a la búsqueda">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    <span>{view === 'details' ? 'Ver Opciones' : 'Nueva Búsqueda'}</span>
+                </Button>
               </div>
             )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
+              directions={selectedRoute || routes[0]}
               userLocation={currentUserLocation}
               busLocations={busLocations}
-              lineRoute={lineRoute}
-              view={view}
+              selectedRoute={selectedRoute}
             />
         </div>
       </div>

@@ -173,14 +173,17 @@ export async function getBusLocation(lines: {line: string, destination?: string 
             return allBuses;
         }
 
+        // Filter by line and destination for more precision
         return allBuses.filter(bus => {
             return lines.some(requestedLine => {
                 if (bus.line !== requestedLine.line) {
                     return false;
                 }
+                // If the request doesn't specify a destination, a line match is enough
                 if (!requestedLine.destination || !bus.destination) {
                     return true;
                 }
+                // If both exist, check if the bus destination includes the requested one
                 return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
             });
         });

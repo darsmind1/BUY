@@ -1,36 +1,19 @@
 
 "use client";
 
-import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
+import { GoogleMap, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
 import { cn } from '@/lib/utils';
-import type { StmLineRoute } from '@/lib/types';
 
-// Reusable StopMarker component
-export const StopMarker = ({ position, name }: { position: google.maps.LatLngLiteral, name: string }) => (
-  <Marker
-    position={position}
-    zIndex={99} // Below bus markers but above polylines
-    title={name}
-    icon={{
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: 5,
-      fillColor: "#A40034",
-      fillOpacity: 0.8,
-      strokeWeight: 2,
-      strokeColor: "#ffffff",
-    }}
-  />
-);
 
 interface MapViewProps {
   isLoaded: boolean;
+  directions: google.maps.DirectionsResult | null;
   userLocation: google.maps.LatLngLiteral | null;
   busLocations: BusLocation[];
-  lineRoute: StmLineRoute | null;
-  view: string;
+  selectedRoute: google.maps.DirectionsResult | null;
 }
 
 const mapContainerStyle = {
@@ -153,6 +136,7 @@ const mapStyle = [
   }
 ];
 
+
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
   zoomControl: true,
@@ -165,11 +149,20 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, userLocation, busLocations, lineRoute, view }: MapViewProps) {
+const directionsRendererOptions = {
+  suppressMarkers: true,
+  polylineOptions: {
+    strokeColor: '#A40034',
+    strokeOpacity: 0.7,
+    strokeWeight: 5,
+  }
+};
+
+
+export default function MapView({ isLoaded, directions, userLocation, busLocations, selectedRoute }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
-  const hasCenteredRef = useRef(false);
 
   useEffect(() => {
     if (isLoaded && window.google) {
@@ -187,7 +180,6 @@ export default function MapView({ isLoaded, userLocation, busLocations, lineRout
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
     setMapLoaded(true);
-    hasCenteredRef.current = false;
   }, []);
 
   const onUnmount = useCallback(function callback(map: google.maps.Map) {
@@ -195,42 +187,17 @@ export default function MapView({ isLoaded, userLocation, busLocations, lineRout
     setMapLoaded(false);
   }, []);
   
-  // Reset centering lock when route changes
   useEffect(() => {
-    hasCenteredRef.current = false;
-  }, [lineRoute]);
-  
-
-  // Effect to set the map bounds or center based on the current view
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded || hasCenteredRef.current) return;
-    
-    if (lineRoute && lineRoute.route.length > 0) {
-        const bounds = new window.google.maps.LatLngBounds();
-        lineRoute.route.forEach(point => bounds.extend({ lat: point.lat, lng: point.lng }));
-        
-        if (userLocation) {
-            bounds.extend(userLocation);
-        }
-        
-        map.fitBounds(bounds, 50); // 50px padding
-        hasCenteredRef.current = true;
-    } else if (userLocation) {
-        // For initial load without a route, center on user
-        map.panTo(userLocation);
-        map.setZoom(15);
-        hasCenteredRef.current = true;
-    } else {
-        // Fallback
-        map.panTo(defaultCenter);
-        map.setZoom(12);
-        hasCenteredRef.current = true;
+    if (mapRef.current && directions) {
+      const bounds = directions.routes[0].bounds;
+      if (bounds) {
+        mapRef.current.fitBounds(bounds);
+      }
+    } else if (mapRef.current && userLocation) {
+        mapRef.current.panTo(userLocation);
+        mapRef.current.setZoom(15);
     }
-    
-  }, [view, lineRoute, mapLoaded, userLocation]);
-
-  const linePath = lineRoute?.route.map(p => ({ lat: p.lat, lng: p.lng })) || [];
+  }, [directions, userLocation, mapLoaded]);
 
   if (!isLoaded) {
     return (
@@ -250,20 +217,15 @@ export default function MapView({ isLoaded, userLocation, busLocations, lineRout
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {userLocation && userMarkerIcon && (
-            <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />
+          {directions && (
+            <DirectionsRenderer 
+              directions={directions} 
+              options={{...directionsRendererOptions, polylineOptions: {...directionsRendererOptions.polylineOptions, strokeColor: selectedRoute ? '#A40034' : '#888888', strokeOpacity: selectedRoute ? 0.8 : 0.5}}}
+            />
           )}
 
-          {lineRoute && (
-            <>
-              <Polyline 
-                path={linePath}
-                options={{ strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5, zIndex: 1 }}
-              />
-              {lineRoute.route.map(stop => (
-                <StopMarker key={stop.stopId} position={{ lat: stop.lat, lng: stop.lng }} name={stop.name} />
-              ))}
-            </>
+          {userLocation && userMarkerIcon && (
+            <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />
           )}
 
           {busLocations.map((bus) => (
@@ -273,7 +235,7 @@ export default function MapView({ isLoaded, userLocation, busLocations, lineRout
                 zIndex={100}
                 icon={{
                     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="24">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="24" viewBox="0 0 40 24">
                             <rect x="0" y="0" width="100%" height="100%" rx="8" ry="8" fill="#212F3D" stroke="#ffffff" stroke-width="2"/>
                             <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#ffffff">${bus.line}</text>
                         </svg>

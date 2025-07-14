@@ -31,6 +31,14 @@ export interface StmBusStop {
     };
 }
 
+// Minimal info needed for STM API calls from a Google Maps route step
+export interface StmInfo {
+    stopId: number | null;
+    line: string | null;
+    lineVariantId: number | null;
+    arrival: UpcomingBus | null;
+}
+
 export interface StmLineRouteStop {
     type: number;
     stopId: number;
