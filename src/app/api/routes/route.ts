@@ -107,7 +107,7 @@ export async function POST(request: Request) {
 
     if (!response.ok || data.error) {
        console.error('Routes API Error:', data.error || `Status: ${response.status}`);
-       return NextResponse.json({ error: 'Failed to get routes from Google', details: data.error?.message || 'Unknown error' }, { status: 500 });
+       return NextResponse.json({ error: 'Failed to get routes from Google', details: data.error?.message || 'Unknown error' }, { status: response.status });
     }
     
     // Convert the response to be as compatible as possible with DirectionsResult
