@@ -179,10 +179,12 @@ export default function RouteOptionsList({
   routes, 
   onSelectRoute, 
   isApiConnected,
+  busLocations
 }: {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
+  busLocations: any[];
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
