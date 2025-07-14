@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
-import type { StmInfo } from '@/lib/types';
+import type { StmInfo, Place } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -141,8 +141,8 @@ export default function Home() {
     };
   }, []);
 
-  const handleSearch = (origin: string, destination: string) => {
-    if (!origin || !destination) return;
+  const handleSearch = (origin: Place, destination: Place) => {
+    if (!origin.location || !destination.location) return;
     
     setRoutes([]);
     setSelectedRoute(null);
@@ -152,8 +152,8 @@ export default function Home() {
     const directionsService = new window.google.maps.DirectionsService();
     directionsService.route(
       {
-        origin: origin,
-        destination: destination,
+        origin: origin.location,
+        destination: destination.location,
         travelMode: google.maps.TravelMode.TRANSIT,
         transitOptions: {
           modes: [google.maps.TransitMode.BUS],
@@ -168,6 +168,7 @@ export default function Home() {
             setView('options');
             setMobileView('panel');
         } else {
+          console.error(`Directions request failed due to ${status}`);
           setRoutes([]);
           toast({
             variant: "destructive",

@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Search, MapPin, LocateFixed, ArrowRight } from 'lucide-react';
 import { Autocomplete } from '@react-google-maps/api';
+import type { Place } from '@/lib/types';
+import { getFormattedAddress } from '@/lib/google-maps-api';
 
 interface RouteSearchFormProps {
-  onSearch: (origin: string, destination: string) => void;
+  onSearch: (origin: Place, destination: Place) => void;
   isGoogleMapsLoaded: boolean;
   currentUserLocation: google.maps.LatLngLiteral | null;
 }
@@ -21,8 +23,9 @@ const autocompleteOptions = {
 };
 
 export default function RouteSearchForm({ onSearch, isGoogleMapsLoaded, currentUserLocation }: RouteSearchFormProps) {
-  const [origin, setOrigin] = useState('');
-  const [destination, setDestination] = useState('');
+  const [origin, setOrigin] = useState<Place>({ address: '', location: null });
+  const [destination, setDestination] = useState<Place>({ address: '', location: null });
+  
   const originRef = useRef<HTMLInputElement>(null);
   const destinationRef = useRef<HTMLInputElement>(null);
   const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
@@ -30,14 +33,18 @@ export default function RouteSearchForm({ onSearch, isGoogleMapsLoaded, currentU
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (origin && destination) {
+    if (origin.location && destination.location) {
         onSearch(origin, destination);
     }
   };
 
-  const handleUseCurrentLocation = () => {
+  const handleUseCurrentLocation = async () => {
     if (currentUserLocation) {
-        setOrigin(`(${currentUserLocation.lat.toFixed(5)}, ${currentUserLocation.lng.toFixed(5)})`);
+        const formattedAddress = await getFormattedAddress(currentUserLocation.lat, currentUserLocation.lng);
+        setOrigin({
+            address: formattedAddress || `(${currentUserLocation.lat.toFixed(5)}, ${currentUserLocation.lng.toFixed(5)})`,
+            location: currentUserLocation
+        });
     }
   };
   
@@ -52,18 +59,24 @@ export default function RouteSearchForm({ onSearch, isGoogleMapsLoaded, currentU
   const onOriginPlaceChanged = () => {
     if (originAutocomplete !== null) {
       const place = originAutocomplete.getPlace();
-      setOrigin(place.formatted_address || '');
+      setOrigin({
+        address: place.formatted_address || '',
+        location: place.geometry?.location?.toJSON() || null
+      });
     } else {
-      console.log('Autocomplete is not loaded yet!');
+      console.log('Origin Autocomplete is not loaded yet!');
     }
   };
 
   const onDestinationPlaceChanged = () => {
     if (destinationAutocomplete !== null) {
       const place = destinationAutocomplete.getPlace();
-      setDestination(place.formatted_address || '');
+      setDestination({
+        address: place.formatted_address || '',
+        location: place.geometry?.location?.toJSON() || null
+      });
     } else {
-      console.log('Autocomplete is not loaded yet!');
+      console.log('Destination Autocomplete is not loaded yet!');
     }
   };
 
@@ -86,8 +99,8 @@ export default function RouteSearchForm({ onSearch, isGoogleMapsLoaded, currentU
                         >
                             <Input 
                                 ref={originRef}
-                                value={origin}
-                                onChange={(e) => setOrigin(e.target.value)}
+                                value={origin.address}
+                                onChange={(e) => setOrigin({ address: e.target.value, location: null })}
                                 className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
                                 placeholder="Punto de partida"
                                 required
@@ -111,8 +124,8 @@ export default function RouteSearchForm({ onSearch, isGoogleMapsLoaded, currentU
                         >
                             <Input 
                                 ref={destinationRef}
-                                value={destination}
-                                onChange={(e) => setDestination(e.target.value)}
+                                value={destination.address}
+                                onChange={(e) => setDestination({ address: e.target.value, location: null })}
                                 className="border-0 bg-transparent shadow-none pl-2 focus-visible:ring-0 h-9"
                                 placeholder="Destino"
                                 required

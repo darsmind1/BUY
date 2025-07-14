@@ -1,4 +1,5 @@
 
+
 export interface BusLocation {
     timestamp: string;
     line: string;
@@ -62,4 +63,9 @@ export interface UpcomingBus {
         busId: string;
     };
     lineVariantId: number;
+}
+
+export interface Place {
+  address: string;
+  location: google.maps.LatLngLiteral | null;
 }
