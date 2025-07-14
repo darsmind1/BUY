@@ -244,12 +244,12 @@ export async function getUpcomingBuses(busstopId: number, line: string, lineVari
     
     const params = new URLSearchParams();
     
+    // Prioritize lineVariantId for more specific queries, but always include lines as a fallback/requirement.
     if (lineVariantId) {
         params.append('lineVariantIds', lineVariantId.toString());
-    } else {
-        // As per the requirement, 'lines' is mandatory.
-        params.append('lines', line);
-    }
+    } 
+    // The "lines" parameter is mandatory.
+    params.append('lines', line);
     
     params.append('amountperline', '1');
     
