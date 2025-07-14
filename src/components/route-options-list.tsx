@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
@@ -167,7 +167,7 @@ const RouteOptionItem = ({
                   <span>{arrivalText}</span>
               </div>
             ) : scheduledText ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className={cn("flex items-center gap-2 text-xs", arrivalInfo ? "text-green-400 font-medium" : "text-muted-foreground")}>
                   <Clock className="h-3 w-3" />
                   <span>{scheduledText}</span>
               </div>
@@ -252,7 +252,6 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       const allStops = await getAllBusStops();
 
       if (!allStops || allStops.length === 0) {
-        console.error("Could not fetch STM bus stops for mapping.");
         setIsMappingStops(false);
         setStmStopMappings({});
         return;
@@ -266,59 +265,59 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
 
   useEffect(() => {
-      const fetchAllArrivals = async () => {
-        if (!isApiConnected || !stmStopMappings) {
-          return;
-        }
-
-        // Group routes by bus stop ID to make fewer API calls
-        const stopsToQuery: { [stopId: number]: string[] } = {};
-        const routeIndicesByStop: { [stopId: number]: number[] } = {};
-
-        Object.entries(stmStopMappings).forEach(([routeIndex, info]) => {
-            if (info.stopId && info.line) {
-                if (!stopsToQuery[info.stopId]) {
-                    stopsToQuery[info.stopId] = [];
-                    routeIndicesByStop[info.stopId] = [];
-                }
-                if (!stopsToQuery[info.stopId].includes(info.line)) {
-                    stopsToQuery[info.stopId].push(info.line);
-                }
-                routeIndicesByStop[info.stopId].push(parseInt(routeIndex));
-            }
-        });
-        
-        const newArrivals: BusArrivalsState = {};
-        const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
-            const stopIdNum = parseInt(stopId);
-            try {
-                const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
-                
-                if (upcomingBuses && upcomingBuses.length > 0) {
-                    routeIndicesByStop[stopIdNum].forEach(routeIndex => {
-                        const routeLine = stmStopMappings[routeIndex]?.line;
-                        const bestUpcomingBus = upcomingBuses.find(bus => bus.line === routeLine);
-                        if (bestUpcomingBus) {
-                            newArrivals[routeIndex] = { bus: bestUpcomingBus };
-                        } else {
-                             newArrivals[routeIndex] = null;
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error(`Error fetching upcoming buses for stop ${stopId}:`, error);
-            }
-        });
-
-        await Promise.allSettled(arrivalPromises);
-        setBusArrivals(prev => ({ ...prev, ...newArrivals }));
-      };
-
-      if (stmStopMappings) {
-          fetchAllArrivals(); // Initial fetch
-          const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
-          return () => clearInterval(intervalId); // Cleanup on unmount or when dependencies change
+    const fetchAllArrivals = async () => {
+      if (!isApiConnected || !stmStopMappings) {
+        return;
       }
+
+      // Group routes by bus stop ID to make fewer API calls
+      const stopsToQuery: { [stopId: number]: string[] } = {};
+      const routeIndicesByStop: { [stopId: number]: number[] } = {};
+
+      Object.entries(stmStopMappings).forEach(([routeIndex, info]) => {
+          if (info.stopId && info.line) {
+              if (!stopsToQuery[info.stopId]) {
+                  stopsToQuery[info.stopId] = [];
+                  routeIndicesByStop[info.stopId] = [];
+              }
+              if (!stopsToQuery[info.stopId].includes(info.line)) {
+                  stopsToQuery[info.stopId].push(info.line);
+              }
+              routeIndicesByStop[info.stopId].push(parseInt(routeIndex));
+          }
+      });
+      
+      const newArrivals: BusArrivalsState = {};
+      const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
+          const stopIdNum = parseInt(stopId);
+          try {
+              const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
+              
+              if (upcomingBuses && upcomingBuses.length > 0) {
+                  routeIndicesByStop[stopIdNum].forEach(routeIndex => {
+                      const routeLine = stmStopMappings[routeIndex]?.line;
+                      const bestUpcomingBus = upcomingBuses.find(bus => bus.line === routeLine);
+                      if (bestUpcomingBus) {
+                          newArrivals[routeIndex] = { bus: bestUpcomingBus };
+                      } else {
+                           newArrivals[routeIndex] = null;
+                      }
+                  });
+              }
+          } catch (error) {
+              console.error(`Error fetching upcoming buses for stop ${stopId}:`, error);
+          }
+      });
+
+      await Promise.allSettled(arrivalPromises);
+      setBusArrivals(prev => ({ ...prev, ...newArrivals }));
+    };
+
+    if (stmStopMappings) {
+        const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
+        fetchAllArrivals(); // Initial fetch
+        return () => clearInterval(intervalId); // Cleanup on unmount or when dependencies change
+    }
   }, [stmStopMappings, isApiConnected]);
 
 
@@ -346,3 +345,5 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
+
+    
