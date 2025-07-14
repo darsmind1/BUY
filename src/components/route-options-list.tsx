@@ -5,11 +5,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { findClosestStmStop, getUpcomingBuses, type BusLocation } from '@/lib/stm-api';
+import type { BusLocation } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { haversineDistance } from '@/lib/utils';
 
 const ArrivalInfoLegend = () => {
   return (
@@ -189,78 +190,127 @@ export default function RouteOptionsList({
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize stmInfoByRoute when routes are first received
+  // Initialize stmInfo when routes first load to have a baseline
   useEffect(() => {
-    let isMounted = true;
-    if (routes.length > 0 && isApiConnected) {
-      setIsLoading(true);
-
-      const fetchAllArrivals = async () => {
-        const allStmInfoPromises = routes.map(async (route, index) => {
-          let routeStmInfo: StmInfo[] = (route.legs[0]?.steps || [])
+    const initialStmInfo: Record<number, StmInfo[]> = {};
+    routes.forEach((route, index) => {
+        initialStmInfo[index] = (route.legs[0]?.steps || [])
             .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
             .map(step => ({
-              stopId: null,
-              line: step.transit!.line.short_name!,
-              lineVariantId: null,
-              lineDestination: step.transit!.headsign || null,
-              departureStopLocation: {
-                lat: step.transit!.departure_stop.location!.lat(),
-                lng: step.transit!.departure_stop.location!.lng()
-              },
-              arrival: null,
+                stopId: null,
+                line: step.transit!.line.short_name!,
+                lineVariantId: null,
+                lineDestination: step.transit!.headsign || null,
+                departureStopLocation: {
+                    lat: step.transit!.departure_stop.location!.lat(),
+                    lng: step.transit!.departure_stop.location!.lng()
+                },
+                arrival: null,
             }));
+    });
+    setStmInfoByRoute(initialStmInfo);
+    setIsLoading(false);
+  }, [routes]);
 
-          if (!routeStmInfo || routeStmInfo.length === 0) {
-            return { index, stmInfo: [] };
-          }
-          
-          const firstBusStepInfo = routeStmInfo[0];
-          const stopLocation = firstBusStepInfo.departureStopLocation;
-          if (!stopLocation) return { index, stmInfo: routeStmInfo };
 
-          // Use the robust function to get the correct STM stop ID
-          const closestStop = await findClosestStmStop(stopLocation.lat, stopLocation.lng, firstBusStepInfo.line);
-          
-          if (closestStop) {
-            firstBusStepInfo.stopId = closestStop.busstopId;
+  // Effect to calculate ETA based on live bus locations
+  useEffect(() => {
+    let isMounted = true;
+    if (routes.length === 0 || !isApiConnected || busLocations.length === 0) {
+      return;
+    }
 
-            // Now, get the upcoming bus for that specific stop and line
-            const upcomingBus = await getUpcomingBuses(
-              firstBusStepInfo.stopId,
-              firstBusStepInfo.line
+    const fetchAllEtas = async () => {
+        const etaPromises = routes.map(async (route, index) => {
+            const firstTransitStep = route.legs[0]?.steps.find(
+                (step) => step.travel_mode === 'TRANSIT' && step.transit
             );
-            
-            if (upcomingBus && upcomingBus.arrival) {
-              firstBusStepInfo.arrival = {
-                eta: upcomingBus.arrival.minutes,
-                timestamp: upcomingBus.arrival.lastUpdate,
-              };
+
+            if (!firstTransitStep) {
+                return { index, arrival: null };
             }
-          }
-          
-          return { index, stmInfo: routeStmInfo };
+
+            const line = firstTransitStep.transit!.line.short_name!;
+            const destination = firstTransitStep.transit!.headsign;
+            const stopLocation = {
+                lat: firstTransitStep.transit!.departure_stop.location!.lat(),
+                lng: firstTransitStep.transit!.departure_stop.location!.lng(),
+            };
+
+            const relevantBuses = busLocations.filter(b => 
+                b.line === line &&
+                (!destination || b.destination?.toLowerCase().includes(destination.toLowerCase()))
+            );
+
+            if (relevantBuses.length === 0) {
+                return { index, arrival: null };
+            }
+            
+            // Find the closest bus to the stop from the relevant buses
+            let closestBus: BusLocation | null = null;
+            let minDistance = Infinity;
+
+            relevantBuses.forEach(bus => {
+                const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
+                const distance = haversineDistance(busCoords, stopLocation);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestBus = bus;
+                }
+            });
+
+
+            if (closestBus) {
+                try {
+                    const res = await fetch('/api/eta', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            busLocation: { lat: closestBus.location.coordinates[1], lng: closestBus.location.coordinates[0] },
+                            stopLocation: stopLocation
+                        })
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.eta !== null) {
+                            const etaMinutes = Math.round(data.eta / 60);
+                            return { 
+                                index,
+                                arrival: {
+                                    eta: etaMinutes,
+                                    timestamp: new Date().toISOString()
+                                }
+                            };
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error fetching ETA for line", line, error);
+                }
+            }
+
+            return { index, arrival: null };
         });
 
-        const allStmInfoResults = await Promise.all(allStmInfoPromises);
+        const allEtaResults = await Promise.all(etaPromises);
         
         if (isMounted) {
-          const newStmInfo: Record<number, StmInfo[]> = {};
-          allStmInfoResults.forEach(result => {
-            newStmInfo[result.index] = result.stmInfo;
-          });
-          setStmInfoByRoute(newStmInfo);
-          setIsLoading(false);
+            setStmInfoByRoute(prevStmInfo => {
+                const newStmInfo = { ...prevStmInfo };
+                allEtaResults.forEach(result => {
+                    if (newStmInfo[result.index] && newStmInfo[result.index][0]) {
+                        newStmInfo[result.index][0].arrival = result.arrival;
+                    }
+                });
+                return newStmInfo;
+            });
         }
-      };
-
-      fetchAllArrivals();
-    } else {
-        setIsLoading(false);
-    }
+    };
     
+    fetchAllEtas();
+
     return () => { isMounted = false };
-  }, [routes, isApiConnected]);
+  }, [routes, isApiConnected, busLocations]);
   
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
 
@@ -301,4 +351,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
