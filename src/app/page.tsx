@@ -87,8 +87,20 @@ export default function Home() {
         const locations = await getBusLocation(linesToFetch);
         setBusLocations(locations);
   
-        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
-            const liveBus = locations.find(l => l.line === line); // No destination filter for now
+        const findArrivalForStop = (line: string, lineDestination: string | null, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
+            if (!isGoogleMapsLoaded) return null;
+
+            // Normalize destination for robust comparison
+            const normalize = (str: string | null) => str ? str.toUpperCase().replace(/\s/g, '') : null;
+            const normalizedLineDest = normalize(lineDestination);
+            
+            const liveBus = locations.find(l => {
+                const normalizedBusDest = normalize(l.destination);
+                const lineMatch = l.line === line;
+                const destMatch = !normalizedLineDest || (normalizedBusDest && normalizedBusDest.includes(normalizedLineDest));
+                return lineMatch && destMatch;
+            });
+            
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
                     new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
@@ -106,7 +118,7 @@ export default function Home() {
             return currentStmInfo.map(info => {
               const newInfo = { ...info };
               if (newInfo.departureStopLocation) {
-                const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
+                const newArrival = findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
                 const oldSignalAge = getSignalAge(newInfo.arrival);
 
                 if (newArrival) {
@@ -174,7 +186,7 @@ export default function Home() {
     };
   }, []);
 
-  const handleSearch = (origin: string, destination: string) => {
+  const handleSearch = async (origin: string, destination: string) => {
     let originParam: string | google.maps.LatLngLiteral = origin;
     if (origin === 'Mi ubicación actual') {
       if (!currentUserLocation) {
@@ -196,40 +208,44 @@ export default function Home() {
     setSelectedRouteStmInfo([]);
     setLineRoutes({});
     setIsLoading(true);
-    const directionsService = new window.google.maps.DirectionsService();
 
-    directionsService.route(
-      {
-        origin: originParam,
-        destination: destination,
-        travelMode: window.google.maps.TravelMode.TRANSIT,
-        transitOptions: {
-          modes: [window.google.maps.TransitMode.BUS],
-        },
-        provideRouteAlternatives: true,
-        region: 'UY',
-        language: 'es'
-      },
-      (result, status) => {
+    try {
+        const response = await fetch('/api/directions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ origin: originParam, destination }),
+        });
+
         setIsLoading(false);
-        if (status === window.google.maps.DirectionsStatus.OK && result) {
-          setDirectionsResponse(result);
-          setView('options');
-          setMobileView('panel');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        }
+
+        const result: google.maps.DirectionsResult = await response.json();
+        
+        if (result && result.routes.length > 0) {
+            setDirectionsResponse(result);
+            setView('options');
+            setMobileView('panel');
         } else {
-          console.error(`Error fetching directions, status: ${status}`);
-          let description = "No se pudo calcular la ruta. Intenta con otras direcciones.";
-          if (status === 'NOT_FOUND' || status === 'ZERO_RESULTS') {
-            description = "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.";
-          }
-          toast({
+             toast({
+                variant: "destructive",
+                title: "Error al buscar ruta",
+                description: "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.",
+             });
+        }
+    } catch(error: any) {
+        setIsLoading(false);
+        console.error(`Error fetching directions from API route:`, error);
+        toast({
             variant: "destructive",
             title: "Error al buscar ruta",
-            description: description,
-          });
-        }
-      }
-    );
+            description: error.message || "No se pudo calcular la ruta. Intenta con otras direcciones.",
+        });
+    }
   };
 
   const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => {

@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
-import { getBusLocation, findClosestStmStop } from '@/lib/stm-api';
+import { getBusLocation, findClosestStmStop, getLinesForStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
@@ -142,7 +142,10 @@ const RouteOptionItem = ({
               {renderableSteps.map((step, stepIndex) => {
                   const isLastStep = stepIndex === renderableSteps.length - 1;
                   if (step.travel_mode === 'TRANSIT') {
-                    const lineToShow = step.transit?.line.short_name;
+                    const lineInfo = stmInfo.find(info => 
+                        info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
+                    );
+                    const lineToShow = lineInfo?.line || step.transit?.line.short_name;
                     return (
                       <React.Fragment key={stepIndex}>
                         <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
@@ -325,13 +328,20 @@ export default function RouteOptionsList({
            if (departureStopLocation && googleTransitLine) {
              const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
              const closestStop = await findClosestStmStop(lat, lng);
-             return {
-               stopId: closestStop?.busstopId ?? null,
-               line: googleTransitLine,
-               lineDestination,
-               departureStopLocation: { lat, lng },
-               arrival: null,
-             };
+             
+             if (closestStop) {
+                const stmLinesForStop = await getLinesForStop(closestStop.busstopId);
+                // Verify that the Google-suggested line is actually served by this stop according to STM
+                if (stmLinesForStop.some(l => l.line === googleTransitLine)) {
+                     return {
+                       stopId: closestStop.busstopId,
+                       line: googleTransitLine,
+                       lineDestination,
+                       departureStopLocation: { lat, lng },
+                       arrival: null,
+                     };
+                }
+             }
            }
            return null;
         });
@@ -500,7 +510,7 @@ export default function RouteOptionsList({
     };
 
     fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 20000); // Update every 20 seconds
+    const intervalId = setInterval(fetchAllArrivals, 50000); // Update every 50 seconds
 
     return () => clearInterval(intervalId);
   }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
