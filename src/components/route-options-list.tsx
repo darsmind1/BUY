@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop, getBusLocation } from '@/lib/stm-api';
+import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
@@ -190,7 +190,7 @@ export default function RouteOptionsList({
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAllArrivals = useCallback(async () => {
-    if (!isApiConnected) {
+    if (!isApiConnected || routes.length === 0) {
       setIsLoading(false);
       return;
     }
@@ -214,31 +214,19 @@ export default function RouteOptionsList({
 
     const enrichedStmInfo = { ...initialStmInfo };
     const allPromises = routes.map(async (route, index) => {
-      for (const stepInfo of enrichedStmInfo[index]) {
-        if (!stepInfo.line || !stepInfo.departureStopLocation) continue;
-
-        // Step 1: Find the lineVariantId by looking for a live bus with matching destination
-        const liveBuses = await getBusLocation([{ line: stepInfo.line, destination: stepInfo.lineDestination }]);
-        const matchingBus = liveBuses[0]; // Assume the first one is correct for simplicity
-        if (matchingBus?.lineVariantId) {
-          stepInfo.lineVariantId = matchingBus.lineVariantId;
-        }
-
-        // Step 2: Find the closest STM stop ID
-        const closestStop = await findClosestStmStop(stepInfo.departureStopLocation.lat, stepInfo.departureStopLocation.lng);
-        if (closestStop) {
-          stepInfo.stopId = closestStop.busstopId;
-        }
+      // We only care about the first bus for the options list
+      const firstBusStep = enrichedStmInfo[index]?.[0];
+      if (!firstBusStep || !firstBusStep.line || !firstBusStep.departureStopLocation) return;
         
-        // Step 3: Get upcoming bus if we have both IDs
-        if (stepInfo.stopId && (stepInfo.lineVariantId || stepInfo.line)) {
-            const upcomingBus = await getUpcomingBuses(stepInfo.stopId, stepInfo.line, stepInfo.lineVariantId);
-            if (upcomingBus?.arrival) {
-                stepInfo.arrival = {
-                    eta: upcomingBus.arrival.minutes,
-                    timestamp: upcomingBus.arrival.lastUpdate,
-                };
-            }
+      const closestStop = await findClosestStmStop(firstBusStep.departureStopLocation.lat, firstBusStep.departureStopLocation.lng);
+      if (closestStop) {
+        firstBusStep.stopId = closestStop.busstopId;
+        const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStep.line, null);
+        if (upcomingBus?.arrival) {
+          firstBusStep.arrival = {
+              eta: upcomingBus.arrival.minutes,
+              timestamp: upcomingBus.arrival.lastUpdate,
+          };
         }
       }
     });
@@ -251,7 +239,7 @@ export default function RouteOptionsList({
 
 
   useEffect(() => {
-    if (isGoogleMapsLoaded && routes.length > 0) {
+    if (routes.length > 0) {
       setIsLoading(true);
       fetchAllArrivals();
       
@@ -261,7 +249,7 @@ export default function RouteOptionsList({
         setIsLoading(false);
     }
 
-  }, [routes, isGoogleMapsLoaded, fetchAllArrivals]);
+  }, [routes, fetchAllArrivals]);
   
 
   if (isLoading) {
@@ -311,3 +299,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
