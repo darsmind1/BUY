@@ -72,22 +72,26 @@ export default function Home() {
         return;
       }
       
-      // Collect all unique lines from all route options
+      // Collect all unique lines from all route options, including their destination headsign
       const linesToFetch = directionsResponse.routes.flatMap(route => 
           route.legs[0].steps
               .filter(step => step.travel_mode === 'TRANSIT' && step.transit?.line.short_name)
-              .map(step => ({ line: step.transit!.line.short_name!, destination: step.transit!.headsign }))
+              .map(step => ({ 
+                  line: step.transit!.line.short_name!, 
+                  destination: step.transit!.headsign || null
+              }))
       );
       
-      const uniqueLines = Array.from(new Map(linesToFetch.map(item => [item.line, item])).values());
+      const uniqueLinesWithDest = Array.from(new Map(linesToFetch.map(item => [`${item.line}-${item.destination}`, item])).values());
 
-      if (uniqueLines.length === 0) {
+      if (uniqueLinesWithDest.length === 0) {
         setBusLocations([]);
         return;
       }
   
       try {
-        const locations = await getBusLocation(uniqueLines);
+        // Now passing the destination to the API call
+        const locations = await getBusLocation(uniqueLinesWithDest);
         setBusLocations(locations);
       } catch (error) {
         console.error(`Error fetching real-time data:`, error);

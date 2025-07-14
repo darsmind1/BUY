@@ -192,6 +192,7 @@ export default function RouteOptionsList({
 
   // Initialize stmInfo when routes first load to have a baseline
   useEffect(() => {
+    setIsLoading(true);
     const initialStmInfo: Record<number, StmInfo[]> = {};
     routes.forEach((route, index) => {
         initialStmInfo[index] = (route.legs[0]?.steps || [])
@@ -217,6 +218,17 @@ export default function RouteOptionsList({
   useEffect(() => {
     let isMounted = true;
     if (routes.length === 0 || !isApiConnected || busLocations.length === 0) {
+      // Clear arrivals if no buses are on map
+       setStmInfoByRoute(prev => {
+         const clearedInfo = { ...prev };
+         Object.keys(clearedInfo).forEach(key => {
+            const index = Number(key);
+            if (clearedInfo[index]) {
+                clearedInfo[index] = clearedInfo[index].map(info => ({...info, arrival: null}));
+            }
+         });
+         return clearedInfo;
+       });
       return;
     }
 
@@ -226,20 +238,21 @@ export default function RouteOptionsList({
                 (step) => step.travel_mode === 'TRANSIT' && step.transit
             );
 
-            if (!firstTransitStep) {
+            if (!firstTransitStep || !firstTransitStep.transit) {
                 return { index, arrival: null };
             }
 
-            const line = firstTransitStep.transit!.line.short_name!;
-            const destination = firstTransitStep.transit!.headsign;
+            const line = firstTransitStep.transit.line.short_name!;
+            const destination = firstTransitStep.transit.headsign;
             const stopLocation = {
-                lat: firstTransitStep.transit!.departure_stop.location!.lat(),
-                lng: firstTransitStep.transit!.departure_stop.location!.lng(),
+                lat: firstTransitStep.transit.departure_stop.location!.lat(),
+                lng: firstTransitStep.transit.departure_stop.location!.lng(),
             };
 
+            // Filter busLocations to find buses that match the line and destination.
             const relevantBuses = busLocations.filter(b => 
                 b.line === line &&
-                (!destination || b.destination?.toLowerCase().includes(destination.toLowerCase()))
+                (b.destination && destination && b.destination.toLowerCase().includes(destination.toLowerCase()))
             );
 
             if (relevantBuses.length === 0) {
@@ -298,8 +311,10 @@ export default function RouteOptionsList({
             setStmInfoByRoute(prevStmInfo => {
                 const newStmInfo = { ...prevStmInfo };
                 allEtaResults.forEach(result => {
-                    if (newStmInfo[result.index] && newStmInfo[result.index][0]) {
-                        newStmInfo[result.index][0].arrival = result.arrival;
+                    // Find the first transit info for the route index and update its arrival
+                    const transitInfoIndex = (newStmInfo[result.index] || []).findIndex(info => info.line);
+                    if (transitInfoIndex !== -1) {
+                         newStmInfo[result.index][transitInfoIndex].arrival = result.arrival;
                     }
                 });
                 return newStmInfo;
@@ -315,7 +330,7 @@ export default function RouteOptionsList({
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
 
   const getFirstArrival = (stmInfo: StmInfo[]): ArrivalInfo | null => {
-      const firstStepInfo = stmInfo[0];
+      const firstStepInfo = stmInfo.find(s => s.line);
       return firstStepInfo?.arrival ?? null;
   }
 

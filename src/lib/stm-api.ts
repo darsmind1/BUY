@@ -170,22 +170,29 @@ export async function getBusLocation(lines: {line: string, destination?: string 
             destination: bus.destination
         }));
         
-        // Filter by destination if provided for any of the lines
+        // If no specific destinations are provided, return all buses for the lines
         const linesWithDestinations = lines.filter(l => l.destination);
-        if (linesWithDestinations.length > 0) {
-            return allBuses.filter(bus => {
-                const requestedLine = lines.find(l => l.line === bus.line);
-                if (requestedLine && bus.destination && requestedLine.destination) {
-                    // Check if the bus destination string includes the destination from Google.
-                    // This is more flexible than an exact match. e.g. "Pza. España" includes "España"
-                    return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
-                }
-                // If the bus line wasn't one with a specific destination, include it if it matches any line number
-                return uniqueLineNumbers.includes(bus.line);
-            });
+        if (linesWithDestinations.length === 0) {
+            return allBuses;
         }
 
-        return allBuses;
+        // Filter buses by matching their destination with the requested destinations
+        return allBuses.filter(bus => {
+            // A bus is relevant if it matches any of the line-destination pairs requested
+            return lines.some(requestedLine => {
+                if (bus.line !== requestedLine.line) {
+                    return false;
+                }
+                // If the requested line has no destination, we can't filter by it, so we assume it's not a match for this specific filter
+                // (it will be caught by another entry if there's a line-only request)
+                if (!requestedLine.destination || !bus.destination) {
+                    return false; 
+                }
+                 // Check if the bus destination string includes the destination from Google.
+                 // This is more flexible than an exact match. e.g. "Pza. España" includes "España"
+                return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
+            });
+        });
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
@@ -282,4 +289,3 @@ export async function getUpcomingBuses(busstopId: number, line: string, lineVari
         return null;
     }
 }
-
