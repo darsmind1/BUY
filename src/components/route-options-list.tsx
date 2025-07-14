@@ -10,7 +10,7 @@ import type { ArrivalInfo, StmInfo, UpcomingBus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { findClosestStmStop, getUpcomingBuses, getBusLocation } from '@/lib/stm-api';
+import { findClosestStmStop, getUpcomingBuses } from '@/lib/stm-api';
 
 
 const ArrivalInfoLegend = () => {
@@ -224,37 +224,28 @@ export default function RouteOptionsList({
         const arrivalPromises = routes.map(async (route, index) => {
             const firstTransitStep = route.legs[0]?.steps.find(s => s.travel_mode === 'TRANSIT' && s.transit);
             if (!firstTransitStep || !firstTransitStep.transit) {
-                return { index, arrivalInfo: null };
+                return { index, arrivalInfo: null, stopId: null };
             }
 
             const line = firstTransitStep.transit.line.short_name!;
-            const lineDestination = firstTransitStep.transit.headsign;
-            const departureStopLocation = {
-                lat: firstTransitStep.transit.departure_stop.location!.lat(),
-                lng: firstTransitStep.transit.departure_stop.location!.lng(),
-            };
+            const departureStopLocation = firstTransitStep.transit.departure_stop.location!;
 
-            // Step 1: Get lineVariantId from active buses
-            const activeBuses = await getBusLocation([{ line, destination: lineDestination }]);
-            const lineVariantId = activeBuses.length > 0 ? activeBuses[0].lineVariantId : null;
+            const closestStop = await findClosestStmStop(departureStopLocation.lat(), departureStopLocation.lng());
+            
+            if (closestStop) {
+                const upcomingBuses = await getUpcomingBuses(closestStop.busstopId, [line]);
+                const upcomingBus = upcomingBuses[0]; // Get the first one for the line
 
-            // Step 2: Get stopId from coordinates
-            const closestStop = await findClosestStmStop(departureStopLocation.lat, departureStopLocation.lng, line);
-            const stopId = closestStop?.busstopId ?? null;
-
-            // Step 3: If we have the necessary IDs, get upcoming bus
-            if (stopId) {
-                const upcomingBus: UpcomingBus | null = await getUpcomingBuses(stopId, line, lineVariantId);
                 if (upcomingBus && upcomingBus.arrival) {
                     const arrivalInfo: ArrivalInfo = {
                         eta: upcomingBus.arrival.minutes,
                         timestamp: upcomingBus.arrival.lastUpdate,
                     };
-                    return { index, arrivalInfo };
+                    return { index, arrivalInfo, stopId: closestStop.busstopId };
                 }
             }
             
-            return { index, arrivalInfo: null };
+            return { index, arrivalInfo: null, stopId: closestStop?.busstopId || null };
         });
 
         const allArrivalResults = await Promise.all(arrivalPromises);
@@ -268,6 +259,7 @@ export default function RouteOptionsList({
                         const firstTransitInfo = routeInfo.find(info => info.line);
                         if (firstTransitInfo) {
                            firstTransitInfo.arrival = result.arrivalInfo;
+                           firstTransitInfo.stopId = result.stopId;
                         }
                     }
                 });
@@ -278,6 +270,7 @@ export default function RouteOptionsList({
     
     fetchAllArrivals();
 
+    // No need to clear interval, this runs once when routes change
     return () => { isMounted = false };
   }, [routes, isApiConnected]); // Rerun when routes or API status change
   
@@ -320,5 +313,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    
