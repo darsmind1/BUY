@@ -5,8 +5,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
-import { getBusLocation, findClosestStmStop, getUpcomingBuses } from '@/lib/stm-api';
-import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
+import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
+import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -67,13 +67,6 @@ const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
     return `Llega en ${arrivalMinutes} min`;
 };
   
-const getSignalAge = (arrivalInfo: ArrivalInfo | null) => {
-    if (!arrivalInfo) return null;
-    const now = new Date().getTime();
-    const signalTimestamp = new Date(arrivalInfo.timestamp).getTime();
-    return (now - signalTimestamp) / 1000; // age in seconds
-};
-
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return 'text-primary';
     
@@ -439,5 +432,7 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
 
     
