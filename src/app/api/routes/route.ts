@@ -28,16 +28,17 @@ function toDirectionsResult(routesApiResponse: any): any {
         lng: () => leg.endLocation?.latLng?.longitude,
         toJSON: () => ({ lat: leg.endLocation?.latLng?.latitude, lng: leg.endLocation?.latLng?.longitude })
       },
-      duration: leg.duration ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) } : undefined,
+      duration: leg.duration && typeof leg.duration === 'string' ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) } : undefined,
       distance: leg.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
       steps: leg.steps?.map((step: any) => {
         const transitDetails = step.transitDetails;
+        const navInstructions = step.navigationInstruction || step.instruction;
         return {
           ...step,
           travel_mode: step.travelMode || 'TRANSIT',
-          duration: step.duration ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
+          duration: step.duration && typeof step.duration === 'string' ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
           distance: step.distanceMeters ? { text: `${step.distanceMeters} m`, value: step.distanceMeters } : undefined,
-          instructions: step.navigationInstruction?.instructions || step.instruction,
+          instructions: navInstructions?.instructions || step.instructions,
           polyline: { points: step.polyline?.encodedPolyline },
           transit: transitDetails ? {
             ...transitDetails,
