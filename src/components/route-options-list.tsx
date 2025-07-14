@@ -291,6 +291,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         const stopIdNum = parseInt(stopId);
         try {
             const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
+            console.log('Datos de arribo recibidos de la API:', upcomingBuses); // LOG PARA VERIFICACIÓN
             if (upcomingBuses && upcomingBuses.length > 0) {
                 // Find the best upcoming bus for each route associated with this stop
                 routeIndicesByStop[stopIdNum].forEach(routeIndex => {
@@ -309,6 +310,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     });
 
     await Promise.allSettled(arrivalPromises);
+    console.log('Estado de arribos actualizado:', newArrivals); // LOG PARA VERIFICACIÓN
     setBusArrivals(prev => ({ ...prev, ...newArrivals }));
 
   }, [stmStopMappings, isApiConnected]);
@@ -348,3 +350,5 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
+
+    
