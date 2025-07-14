@@ -19,7 +19,7 @@ export interface BusLocation {
     tripId: string;
     thermalConfort: string;
     destination: string | null;
-    lineVariantId?: number; // Added this property
+    lineVariantId: number; // This is often the key
 }
 
 export interface StmBusStop {
@@ -72,3 +72,5 @@ export interface UpcomingBus {
     };
     lineVariantId: number;
 }
+
+    

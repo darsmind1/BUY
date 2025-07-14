@@ -6,11 +6,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
-import type { ArrivalInfo, StmInfo } from '@/lib/types';
+import type { ArrivalInfo, StmInfo, UpcomingBus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { haversineDistance } from '@/lib/utils';
+import { findClosestStmStop, getUpcomingBuses, getBusLocation } from '@/lib/stm-api';
+
 
 const ArrivalInfoLegend = () => {
   return (
@@ -217,104 +218,57 @@ export default function RouteOptionsList({
   // Effect to calculate ETA based on live bus locations
   useEffect(() => {
     let isMounted = true;
-    if (routes.length === 0 || !isApiConnected || busLocations.length === 0) {
-      // Clear arrivals if no buses are on map
-       setStmInfoByRoute(prev => {
-         const clearedInfo = { ...prev };
-         Object.keys(clearedInfo).forEach(key => {
-            const index = Number(key);
-            if (clearedInfo[index]) {
-                clearedInfo[index] = clearedInfo[index].map(info => ({...info, arrival: null}));
-            }
-         });
-         return clearedInfo;
-       });
-      return;
-    }
+    if (routes.length === 0 || !isApiConnected) return;
 
-    const fetchAllEtas = async () => {
-        const etaPromises = routes.map(async (route, index) => {
-            const firstTransitStep = route.legs[0]?.steps.find(
-                (step) => step.travel_mode === 'TRANSIT' && step.transit
-            );
-
+    const fetchAllArrivals = async () => {
+        const arrivalPromises = routes.map(async (route, index) => {
+            const firstTransitStep = route.legs[0]?.steps.find(s => s.travel_mode === 'TRANSIT' && s.transit);
             if (!firstTransitStep || !firstTransitStep.transit) {
-                return { index, arrival: null };
+                return { index, arrivalInfo: null };
             }
 
             const line = firstTransitStep.transit.line.short_name!;
-            const destination = firstTransitStep.transit.headsign;
-            const stopLocation = {
+            const lineDestination = firstTransitStep.transit.headsign;
+            const departureStopLocation = {
                 lat: firstTransitStep.transit.departure_stop.location!.lat(),
                 lng: firstTransitStep.transit.departure_stop.location!.lng(),
             };
 
-            // Filter busLocations to find buses that match the line and destination.
-            const relevantBuses = busLocations.filter(b => 
-                b.line === line &&
-                (b.destination && destination && b.destination.toLowerCase().includes(destination.toLowerCase()))
-            );
+            // Step 1: Get lineVariantId from active buses
+            const activeBuses = await getBusLocation([{ line, destination: lineDestination }]);
+            const lineVariantId = activeBuses.length > 0 ? activeBuses[0].lineVariantId : null;
 
-            if (relevantBuses.length === 0) {
-                return { index, arrival: null };
+            // Step 2: Get stopId from coordinates
+            const closestStop = await findClosestStmStop(departureStopLocation.lat, departureStopLocation.lng, line);
+            const stopId = closestStop?.busstopId ?? null;
+
+            // Step 3: If we have the necessary IDs, get upcoming bus
+            if (stopId) {
+                const upcomingBus: UpcomingBus | null = await getUpcomingBuses(stopId, line, lineVariantId);
+                if (upcomingBus && upcomingBus.arrival) {
+                    const arrivalInfo: ArrivalInfo = {
+                        eta: upcomingBus.arrival.minutes,
+                        timestamp: upcomingBus.arrival.lastUpdate,
+                    };
+                    return { index, arrivalInfo };
+                }
             }
             
-            // Find the closest bus to the stop from the relevant buses
-            let closestBus: BusLocation | null = null;
-            let minDistance = Infinity;
-
-            relevantBuses.forEach(bus => {
-                const busCoords = { lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] };
-                const distance = haversineDistance(busCoords, stopLocation);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestBus = bus;
-                }
-            });
-
-
-            if (closestBus) {
-                try {
-                    const res = await fetch('/api/eta', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            busLocation: { lat: closestBus.location.coordinates[1], lng: closestBus.location.coordinates[0] },
-                            stopLocation: stopLocation
-                        })
-                    });
-                    
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.eta !== null) {
-                            const etaMinutes = Math.round(data.eta / 60);
-                            return { 
-                                index,
-                                arrival: {
-                                    eta: etaMinutes,
-                                    timestamp: new Date().toISOString()
-                                }
-                            };
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error fetching ETA for line", line, error);
-                }
-            }
-
-            return { index, arrival: null };
+            return { index, arrivalInfo: null };
         });
 
-        const allEtaResults = await Promise.all(etaPromises);
+        const allArrivalResults = await Promise.all(arrivalPromises);
         
         if (isMounted) {
             setStmInfoByRoute(prevStmInfo => {
                 const newStmInfo = { ...prevStmInfo };
-                allEtaResults.forEach(result => {
-                    // Find the first transit info for the route index and update its arrival
-                    const transitInfoIndex = (newStmInfo[result.index] || []).findIndex(info => info.line);
-                    if (transitInfoIndex !== -1) {
-                         newStmInfo[result.index][transitInfoIndex].arrival = result.arrival;
+                allArrivalResults.forEach(result => {
+                    const routeInfo = newStmInfo[result.index];
+                    if (routeInfo && routeInfo.length > 0) {
+                        const firstTransitInfo = routeInfo.find(info => info.line);
+                        if (firstTransitInfo) {
+                           firstTransitInfo.arrival = result.arrivalInfo;
+                        }
                     }
                 });
                 return newStmInfo;
@@ -322,10 +276,10 @@ export default function RouteOptionsList({
         }
     };
     
-    fetchAllEtas();
+    fetchAllArrivals();
 
     return () => { isMounted = false };
-  }, [routes, isApiConnected, busLocations]);
+  }, [routes, isApiConnected]); // Rerun when routes or API status change
   
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
 
@@ -366,3 +320,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
