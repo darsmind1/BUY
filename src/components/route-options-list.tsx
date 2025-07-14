@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
-import { getBusLocation, findClosestStmStop, getLinesForStop } from '@/lib/stm-api';
+import { getBusLocation, findClosestStmStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
@@ -142,11 +142,7 @@ const RouteOptionItem = ({
               {renderableSteps.map((step, stepIndex) => {
                   const isLastStep = stepIndex === renderableSteps.length - 1;
                   if (step.travel_mode === 'TRANSIT') {
-                    // Use the line from stmInfo which is validated against STM API
-                    const transitInfo = stmInfo.find(info => 
-                        info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
-                    );
-                    const lineToShow = transitInfo?.line || step.transit?.line.short_name;
+                    const lineToShow = step.transit?.line.short_name;
                     return (
                       <React.Fragment key={stepIndex}>
                         <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
@@ -324,25 +320,18 @@ export default function RouteOptionsList({
         const stmInfoForRoutePromises = transitSteps.map(async (step) => {
            const googleTransitLine = step.transit?.line.short_name;
            const departureStopLocation = step.transit?.departure_stop?.location;
-           const googleLineDestination = step.transit?.headsign || null;
+           const lineDestination = step.transit?.headsign || null;
 
            if (departureStopLocation && googleTransitLine) {
              const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
              const closestStop = await findClosestStmStop(lat, lng);
-             if (closestStop) {
-                const stmLinesAtStop = await getLinesForStop(closestStop.busstopId);
-                const stmLine = stmLinesAtStop.find(l => l.line === googleTransitLine);
-                
-                return {
-                   stopId: closestStop.busstopId,
-                   // Use the STM line identifier if found, otherwise fallback to Google's
-                   line: stmLine?.line ?? googleTransitLine,
-                   // Use STM destination if line is found, otherwise fallback to Google's
-                   lineDestination: stmLine?.destination ?? googleLineDestination,
-                   departureStopLocation: { lat, lng },
-                   arrival: null,
-                };
-             }
+             return {
+               stopId: closestStop?.busstopId ?? null,
+               line: googleTransitLine,
+               lineDestination,
+               departureStopLocation: { lat, lng },
+               arrival: null,
+             };
            }
            return null;
         });
@@ -423,10 +412,25 @@ export default function RouteOptionsList({
       try {
         const locations = await getBusLocation(linesToFetch);
         
-        const findArrivalForStop = (line: string, destination: string | null, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
+        const findArrivalForStop = (
+            line: string, 
+            lineDestination: string | null,
+            stopLocation: google.maps.LatLngLiteral
+        ): ArrivalInfo | null => {
             if (!isGoogleMapsLoaded) return null;
-            
-            const liveBus = locations.find(l => l.line === line);
+
+            // Normalize destination for robust comparison
+            const normalize = (str: string | null) => str ? str.toUpperCase().replace(/\s/g, '') : null;
+            const normalizedLineDest = normalize(lineDestination);
+
+            const liveBus = locations.find(l => {
+                const normalizedBusDest = normalize(l.destination);
+                const lineMatch = l.line === line;
+                // If the required destination is null, any bus on the line is a match.
+                // Otherwise, require a destination match.
+                const destMatch = !normalizedLineDest || (normalizedBusDest && normalizedBusDest.includes(normalizedLineDest));
+                return lineMatch && destMatch;
+            });
             
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
@@ -496,7 +500,7 @@ export default function RouteOptionsList({
     };
 
     fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 50000); // Update every 50 seconds
+    const intervalId = setInterval(fetchAllArrivals, 20000); // Update every 20 seconds
 
     return () => clearInterval(intervalId);
   }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
