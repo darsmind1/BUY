@@ -18,8 +18,16 @@ function toDirectionsResult(routesApiResponse: any): any {
       ...leg,
       start_address: leg.startAddress,
       end_address: leg.endAddress,
-      start_location: { lat: () => leg.startLocation?.latLng?.latitude, lng: () => leg.startLocation?.latLng?.longitude },
-      end_location: { lat: () => leg.endLocation?.latLng?.latitude, lng: () => leg.endLocation?.latLng?.longitude },
+      start_location: { 
+        lat: () => leg.startLocation?.latLng?.latitude, 
+        lng: () => leg.startLocation?.latLng?.longitude,
+        toJSON: () => ({ lat: leg.startLocation?.latLng?.latitude, lng: leg.startLocation?.latLng?.longitude })
+      },
+      end_location: { 
+        lat: () => leg.endLocation?.latLng?.latitude, 
+        lng: () => leg.endLocation?.latLng?.longitude,
+        toJSON: () => ({ lat: leg.endLocation?.latLng?.latitude, lng: leg.endLocation?.latLng?.longitude })
+      },
       duration: leg.duration ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) } : undefined,
       distance: leg.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
       steps: leg.steps?.map((step: any) => ({
@@ -28,6 +36,7 @@ function toDirectionsResult(routesApiResponse: any): any {
         duration: step.duration ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
         distance: step.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
         instructions: step.navigationInstruction?.instructions || step.instruction,
+        polyline: { points: step.polyline?.encodedPolyline },
         transit: step.transitDetails ? {
           ...step.transitDetails,
           line: {
@@ -56,9 +65,8 @@ function toDirectionsResult(routesApiResponse: any): any {
           },
           num_stops: step.transitDetails.stopCount,
           headsign: step.transitDetails.headsign,
-          departure_time: { text: step.transitDetails.departureTime ? new Date(step.transitDetails.departureTime).toLocaleTimeString('es-UY') : 'N/A' },
+          departure_time: { text: step.transitDetails.departureTime ? new Date(step.transitDetails.departureTime).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit'}) : 'N/A' },
         } : undefined,
-        polyline: { points: step.polyline?.encodedPolyline }
       })) || [] // Use empty array as fallback if steps are missing
     })) || [], // Use empty array as fallback if legs are missing
     bounds: route.viewport ? {
@@ -102,7 +110,6 @@ export async function POST(request: Request) {
         headers: {
             'Content-Type': 'application/json',
             'X-Goog-Api-Key': googleMapsApiKey,
-            // This is a comprehensive FieldMask that asks for all the necessary details.
             'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.legs,routes.polyline.encodedPolyline,routes.description,routes.warnings,routes.viewport'
         },
         body: JSON.stringify(body)
@@ -122,7 +129,7 @@ export async function POST(request: Request) {
     return NextResponse.json(compatibleResult, { status: 200 });
 
   } catch (error) {
-    console.error('Error in routes endpoint:', error);
+    console.error('Fatal error in routes endpoint:', error);
     return NextResponse.json({ error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

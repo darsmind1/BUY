@@ -2,9 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, memo } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Clock, User, Bus, Wifi, Loader2 } from 'lucide-react';
 import { getUpcomingBuses, findClosestStmStop, BusLocation } from '@/lib/stm-api';
 import type { UpcomingBus } from '@/lib/types';
@@ -15,20 +13,20 @@ interface RouteOptionsListProps {
   routes: google.maps.DirectionsResult[];
   onRouteSelect: (route: google.maps.DirectionsResult) => void;
   isApiConnected: boolean;
-  busLocations: BusLocation[]; // We might not need this here if getUpcomingBuses is reliable
+  busLocations: BusLocation[];
 }
 
 
 const RouteOptionCard = memo(({ route, onRouteSelect, isApiConnected, index }: { route: google.maps.DirectionsResult, onRouteSelect: (route: google.maps.DirectionsResult) => void, isApiConnected: boolean, index: number }) => {
     const leg = route.routes[0].legs[0];
-    const firstBusStep = leg.steps.find(step => step.travel_mode === 'TRANSIT');
+    const firstBusStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
     const [arrival, setArrival] = useState<UpcomingBus | null | 'loading'>('loading');
 
     useEffect(() => {
         let isMounted = true;
         
         const fetchArrival = async () => {
-            if (!isApiConnected || !firstBusStep || !firstBusStep.transit) {
+            if (!isApiConnected || !firstBusStep || !firstBusStep.transit?.departure_stop?.location) {
                 setArrival(null);
                 return;
             }
@@ -39,11 +37,9 @@ const RouteOptionCard = memo(({ route, onRouteSelect, isApiConnected, index }: {
                 const departureStopCoords = firstBusStep.transit.departure_stop.location.toJSON();
                 const line = firstBusStep.transit.line.short_name;
                 
-                // 1. Find the closest STM stop ID
                 const stmStop = await findClosestStmStop(departureStopCoords.lat, departureStopCoords.lng);
                 
                 if (stmStop && line) {
-                    // 2. Get upcoming buses for that stop and line
                     const arrivals = await getUpcomingBuses(stmStop.busstopId, [line]);
                     if (isMounted) {
                         setArrival(arrivals.length > 0 ? arrivals[0] : null);
@@ -61,8 +57,6 @@ const RouteOptionCard = memo(({ route, onRouteSelect, isApiConnected, index }: {
         };
 
         fetchArrival();
-
-        // Refresh arrivals every 30 seconds
         const intervalId = setInterval(fetchArrival, 30000);
 
         return () => {
