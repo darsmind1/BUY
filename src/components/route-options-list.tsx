@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
@@ -197,28 +197,8 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
   const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
   const [isMappingStops, setIsMappingStops] = useState(true);
   const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
-  const allStopsRef = useRef<StmBusStop[] | null>(null);
 
-  const mapStops = useCallback(async () => {
-      if (!isApiConnected) {
-          setIsMappingStops(false);
-          setStmStopMappings({});
-          return;
-      }
-
-      setIsMappingStops(true);
-      if (!allStopsRef.current) {
-        allStopsRef.current = await getAllBusStops();
-      }
-      
-      const allStops = allStopsRef.current;
-      if (!allStops || allStops.length === 0) {
-        console.error("Could not fetch STM bus stops for mapping.");
-        setIsMappingStops(false);
-        setStmStopMappings({});
-        return;
-      }
-      
+  const mapStops = useCallback(async (allStops: StmBusStop[]) => {
       const newMappings: StmStopMapping = {};
 
       for (const [index, route] of routes.entries()) {
@@ -258,11 +238,31 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
       
       setStmStopMappings(newMappings);
       setIsMappingStops(false);
-  }, [isApiConnected, routes]);
-
+  }, [routes]);
+  
   useEffect(() => {
-    mapStops();
-  }, [mapStops]);
+    const processStops = async () => {
+      if (!isApiConnected) {
+          setIsMappingStops(false);
+          setStmStopMappings({});
+          return;
+      }
+      
+      setIsMappingStops(true);
+      const allStops = await getAllBusStops();
+
+      if (!allStops || allStops.length === 0) {
+        console.error("Could not fetch STM bus stops for mapping.");
+        setIsMappingStops(false);
+        setStmStopMappings({});
+        return;
+      }
+
+      await mapStops(allStops);
+    }
+
+    processStops();
+  }, [isApiConnected, routes, mapStops]);
 
 
   const fetchAllArrivals = useCallback(async () => {
