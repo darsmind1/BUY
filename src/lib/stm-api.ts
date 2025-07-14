@@ -201,12 +201,21 @@ export async function getBusLocation(line: string, destination?: string): Promis
     }) as BusLocation[];
 }
 
-export async function getUpcomingBuses(busstopId: number, lines: string[]): Promise<UpcomingBus[]> {
+export async function getUpcomingBuses(busstopId: number, lines?: string[], amountPerLine?: number): Promise<UpcomingBus[]> {
     if (!busstopId) return [];
     
-    let path = `/buses/busstops/${busstopId}/upcomingbuses?amountperline=2`;
+    const params = new URLSearchParams();
     if (lines && lines.length > 0) {
-        path += `&lines=${lines.join(',')}`;
+        params.append('lines', lines.join(','));
+    }
+    if (amountPerLine) {
+        params.append('amountperline', amountPerLine.toString());
+    }
+
+    const queryString = params.toString();
+    let path = `/buses/busstops/${busstopId}/upcomingbuses`;
+    if (queryString) {
+        path += `?${queryString}`;
     }
 
     const data = await stmApiFetch(path);

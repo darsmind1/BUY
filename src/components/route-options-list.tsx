@@ -290,7 +290,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
         const stopIdNum = parseInt(stopId);
         try {
-            const upcomingBuses = await getUpcomingBuses(stopIdNum, lines);
+            const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
             if (upcomingBuses && upcomingBuses.length > 0) {
                 // Find the best upcoming bus for each route associated with this stop
                 routeIndicesByStop[stopIdNum].forEach(routeIndex => {
