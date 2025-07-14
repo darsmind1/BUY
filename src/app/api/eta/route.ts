@@ -20,7 +20,6 @@ export async function POST(request: Request) {
     const origin = `${busLocation.lat},${busLocation.lng}`;
     const destination = `${stopLocation.lat},${stopLocation.lng}`;
     
-    // Use departure_time: 'now' and traffic_model: 'best_guess' for real-time traffic
     const url = `${DISTANCE_MATRIX_URL}?origins=${origin}&destinations=${destination}&key=${googleMapsApiKey}&departure_time=now&traffic_model=best_guess&language=es`;
 
     const response = await fetch(url);
@@ -34,11 +33,9 @@ export async function POST(request: Request) {
     const element = data.rows[0].elements[0];
 
     if (element.status !== 'OK') {
-        // This can happen if a route is not found between the points (e.g., bus is moving away)
         return NextResponse.json({ eta: null }, { status: 200 });
     }
     
-    // 'duration_in_traffic' is the most accurate value, fallback to 'duration'
     const durationInSeconds = element.duration_in_traffic?.value ?? element.duration.value;
 
     return NextResponse.json({ eta: durationInSeconds }, { status: 200 });

@@ -19,7 +19,7 @@ export interface BusLocation {
     tripId: string;
     thermalConfort: string;
     destination: string | null;
-    lineVariantId: number; // This is often the key
+    lineVariantId: number;
 }
 
 export interface StmBusStop {
@@ -31,30 +31,17 @@ export interface StmBusStop {
     };
 }
 
-export interface ArrivalInfo {
-  eta: number; // in minutes
-  timestamp: string;
+export interface StmLineRouteStop {
+    type: number;
+    stopId: number;
+    name: string;
+    lat: number;
+    lng: number;
 }
-
-export interface StmInfo {
-  stopId: number | null;
-  line: string;
-  lineVariantId: number | null;
-  lineDestination: string | null;
-  departureStopLocation: google.maps.LatLngLiteral | null;
-  arrival: ArrivalInfo | null;
-}
-
 export interface StmLineRoute {
     line: string;
     description: string;
-    route: {
-        type: number;
-        stopId: number;
-        name: string;
-        lat: number;
-        lng: number;
-    }[];
+    route: StmLineRouteStop[];
 }
 
 export interface UpcomingBus {

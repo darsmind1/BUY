@@ -1,7 +1,7 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, Marker, Polyline } from '@react-google-maps/api';
+import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
@@ -9,15 +9,16 @@ import { cn } from '@/lib/utils';
 import type { StmLineRoute } from '@/lib/types';
 
 // Reusable StopMarker component
-export const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }) => (
+export const StopMarker = ({ position, name }: { position: google.maps.LatLngLiteral, name: string }) => (
   <Marker
     position={position}
     zIndex={99} // Below bus markers but above polylines
+    title={name}
     icon={{
       path: google.maps.SymbolPath.CIRCLE,
-      scale: 6,
+      scale: 5,
       fillColor: "#A40034",
-      fillOpacity: 1,
+      fillOpacity: 0.8,
       strokeWeight: 2,
       strokeColor: "#ffffff",
     }}
@@ -26,12 +27,9 @@ export const StopMarker = ({ position }: { position: google.maps.LatLngLiteral }
 
 interface MapViewProps {
   isLoaded: boolean;
-  directionsResponse: google.maps.DirectionsResult | null;
-  routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
-  selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
-  lineRoutes: Record<string, StmLineRoute | null>;
+  lineRoute: StmLineRoute | null;
   view: string;
 }
 
@@ -167,11 +165,9 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, lineRoutes, view }: MapViewProps) {
+export default function MapView({ isLoaded, userLocation, busLocations, lineRoute, view }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
-  const [directionsRendererOptions, setDirectionsRendererOptions] = useState<google.maps.DirectionsRendererOptions | null>(null);
   const [userMarkerIcon, setUserMarkerIcon] = useState<google.maps.Symbol | null>(null);
   const hasCenteredRef = useRef(false);
 
@@ -191,93 +187,34 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
   const onLoad = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = map;
     setMapLoaded(true);
-    hasCenteredRef.current = false; // Reset on new map load
+    hasCenteredRef.current = false;
   }, []);
 
   const onUnmount = useCallback(function callback(map: google.maps.Map) {
     mapRef.current = null;
     setMapLoaded(false);
-    customPolylinesRef.current.forEach(p => p.setMap(null));
-    customPolylinesRef.current = [];
   }, []);
   
   // Reset centering lock when route changes
   useEffect(() => {
     hasCenteredRef.current = false;
-  }, [selectedRoute, routeIndex]);
+  }, [lineRoute]);
   
-  useEffect(() => {
-    if (!isLoaded || !mapLoaded || !mapRef.current || !directionsResponse) {
-        if (mapRef.current) {
-            customPolylinesRef.current.forEach(p => p.setMap(null));
-            customPolylinesRef.current = [];
-        }
-        return;
-    }
-  
-    customPolylinesRef.current.forEach(p => p.setMap(null));
-    customPolylinesRef.current = [];
-  
-    const route = directionsResponse.routes[routeIndex];
-    if (!route) return;
-  
-    const transitPolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.8, strokeWeight: 6, zIndex: 3 };
-    const walkingPolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, zIndex: 4, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }] };
-  
-    route.legs[0].steps.forEach((step: google.maps.DirectionsStep) => {
-      const polyline = new window.google.maps.Polyline(
-        step.travel_mode === 'WALKING' ? walkingPolylineOptions : transitPolylineOptions
-      );
-      polyline.setPath(step.path);
-      polyline.setMap(mapRef.current);
-      customPolylinesRef.current.push(polyline);
-    });
-
-    Object.values(lineRoutes).forEach(lineRoute => {
-        if (lineRoute) {
-            const fullLinePath = lineRoute.route.map(p => ({ lat: p.lat, lng: p.lng }));
-            const linePolyline = new window.google.maps.Polyline({
-                path: fullLinePath,
-                strokeColor: '#B0B0B0', // A lighter grey for the background route
-                strokeOpacity: 0.7,
-                strokeWeight: 4,
-                zIndex: 1 // Lower zIndex to be behind the main route
-            });
-            linePolyline.setMap(mapRef.current);
-            customPolylinesRef.current.push(linePolyline);
-        }
-    });
-
-    setDirectionsRendererOptions({ suppressPolylines: true, suppressMarkers: true });
-  }, [directionsResponse, routeIndex, lineRoutes, mapLoaded, isLoaded]);
 
   // Effect to set the map bounds or center based on the current view
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || hasCenteredRef.current) return;
     
-    // For details view on mobile, center on user first
-    if (view === 'details' && userLocation) {
-        map.panTo(userLocation);
-        map.setZoom(15); 
-    }
-
-    if (directionsResponse) {
+    if (lineRoute && lineRoute.route.length > 0) {
         const bounds = new window.google.maps.LatLngBounds();
-        const routeToBound = selectedRoute || directionsResponse.routes[routeIndex];
-        routeToBound.legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(point => bounds.extend(point))));
-
+        lineRoute.route.forEach(point => bounds.extend({ lat: point.lat, lng: point.lng }));
+        
         if (userLocation) {
             bounds.extend(userLocation);
         }
-
-        // Use a small timeout to allow panning to user to finish before fitting bounds
-        setTimeout(() => {
-            if (mapRef.current) {
-               mapRef.current.fitBounds(bounds, 50); // 50px padding
-            }
-        }, 100);
-
+        
+        map.fitBounds(bounds, 50); // 50px padding
         hasCenteredRef.current = true;
     } else if (userLocation) {
         // For initial load without a route, center on user
@@ -291,11 +228,9 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
         hasCenteredRef.current = true;
     }
     
-  }, [view, selectedRoute, directionsResponse, routeIndex, mapLoaded, userLocation]);
+  }, [view, lineRoute, mapLoaded, userLocation]);
 
-  const transitStops = selectedRoute?.legs[0]?.steps
-    .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
-    .map(step => step.transit!.departure_stop.location);
+  const linePath = lineRoute?.route.map(p => ({ lat: p.lat, lng: p.lng })) || [];
 
   if (!isLoaded) {
     return (
@@ -315,27 +250,25 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {directionsResponse && directionsRendererOptions && (
-             <DirectionsRenderer 
-                directions={directionsResponse} 
-                routeIndex={routeIndex} 
-                options={{
-                    ...directionsRendererOptions,
-                }} 
-             />
-          )}
-
           {userLocation && userMarkerIcon && (
             <Marker position={userLocation} icon={userMarkerIcon} zIndex={101} />
           )}
 
-          {transitStops?.map((stop, index) => (
-            stop && <StopMarker key={index} position={{ lat: stop.lat(), lng: stop.lng() }} />
-          ))}
+          {lineRoute && (
+            <>
+              <Polyline 
+                path={linePath}
+                options={{ strokeColor: '#A40034', strokeOpacity: 0.7, strokeWeight: 5, zIndex: 1 }}
+              />
+              {lineRoute.route.map(stop => (
+                <StopMarker key={stop.stopId} position={{ lat: stop.lat, lng: stop.lng }} name={stop.name} />
+              ))}
+            </>
+          )}
 
           {busLocations.map((bus) => (
              <Marker 
-                key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
+                key={`${bus.line}-${bus.id}`}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 zIndex={100}
                 icon={{
@@ -350,7 +283,6 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
                 }}
              />
           ))}
-
         </GoogleMap>
     </div>
   );
