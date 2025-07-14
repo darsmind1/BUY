@@ -195,37 +195,48 @@ export async function getBusLocation(lines: {line: string, destination?: string 
 
 
 export async function findClosestStmStop(lat: number, lng: number, line?: string): Promise<StmBusStop | null> {
-    const radius = 250; // Increased radius for better matching
-    let path = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}`;
+    const radius = 500; // Use a larger radius for more flexibility
+
+    // First attempt: Find stops for the specific line within the radius
     if (line) {
-        path += `&lines=${line}`; // Ask API to filter stops by line
+        try {
+            const pathWithLine = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}&lines=${line}`;
+            const stopsForLine: StmBusStop[] = await stmApiFetch(pathWithLine);
+
+            if (Array.isArray(stopsForLine) && stopsForLine.length > 0) {
+                // If we found stops for the line, return the geographically closest one
+                return stopsForLine.reduce((closest, current) => {
+                    const closestDist = haversineDistance({lat, lng}, {lat: closest.location.coordinates[1], lng: closest.location.coordinates[0]});
+                    const currentDist = haversineDistance({lat, lng}, {lat: current.location.coordinates[1], lng: current.location.coordinates[0]});
+                    return currentDist < closestDist ? current : closest;
+                });
+            }
+        } catch (error) {
+            console.warn(`Could not find a stop for line ${line} at ${lat},${lng}. Will try without line filter. Error:`, error);
+        }
     }
-    
+
+    // Fallback or if no line was provided: Find the closest stop regardless of the line
     try {
-        const nearbyStops: StmBusStop[] = await stmApiFetch(path);
+        const pathWithoutLine = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}`;
+        const nearbyStops: StmBusStop[] = await stmApiFetch(pathWithoutLine);
 
         if (!Array.isArray(nearbyStops) || nearbyStops.length === 0) {
             return null;
         }
 
-        let closestStop: StmBusStop | null = null;
-        let minDistance = Infinity;
-
-        nearbyStops.forEach(stop => {
-            const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
-            const distance = haversineDistance({ lat, lng }, stopCoords);
-            if (distance < minDistance) {
-                minDistance = distance;
-                closestStop = stop;
-            }
+        // Return the absolute closest stop from the results
+        return nearbyStops.reduce((closest, current) => {
+            const closestDist = haversineDistance({lat, lng}, {lat: closest.location.coordinates[1], lng: closest.location.coordinates[0]});
+            const currentDist = haversineDistance({lat, lng}, {lat: current.location.coordinates[1], lng: current.location.coordinates[0]});
+            return currentDist < closestDist ? current : closest;
         });
-
-        return closestStop;
     } catch (error) {
-        console.error(`Error finding closest stop for coords ${lat},${lng}:`, error);
+        console.error(`Error finding any closest stop for coords ${lat},${lng}:`, error);
         return null;
     }
 }
+
 
 export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     const path = `/buses/line/${line}/route`;
@@ -271,3 +282,4 @@ export async function getUpcomingBuses(busstopId: number, line: string, lineVari
         return null;
     }
 }
+
