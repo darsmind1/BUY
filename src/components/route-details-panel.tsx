@@ -267,19 +267,20 @@ export default function RouteDetailsPanel({
   const [liveStmInfo, setLiveStmInfo] = useState<StmInfo[]>(stmInfo);
 
   useEffect(() => {
-    setLiveStmInfo(stmInfo); // Initialize with passed stmInfo
+    // Initialize with passed stmInfo from props
+    setLiveStmInfo(stmInfo.map(s => ({ ...s, arrival: null })));
   }, [stmInfo]);
-  
+
   useEffect(() => {
+    let isMounted = true;
     const fetchEtas = async () => {
         if (busLocations.length === 0 || liveStmInfo.length === 0) return;
         
-        const updatedStmInfo = [...liveStmInfo];
-        let hasChanged = false;
-
-        for (let i = 0; i < updatedStmInfo.length; i++) {
-            const info = updatedStmInfo[i];
-            const busForLine = busLocations.find(b => b.line === info.line);
+        const updatedStmInfoPromises = liveStmInfo.map(async (info) => {
+            const busForLine = busLocations.find(b => 
+                b.line === info.line &&
+                (!info.lineDestination || b.destination?.toLowerCase().includes(info.lineDestination.toLowerCase()))
+            );
             
             if (busForLine && info.departureStopLocation) {
                 try {
@@ -296,38 +297,35 @@ export default function RouteDetailsPanel({
                         const data = await res.json();
                         if (data.eta !== null) {
                             const etaMinutes = Math.round(data.eta / 60);
-                            
-                            if (!info.arrival || info.arrival.eta !== etaMinutes) {
-                                info.arrival = {
+                            return { 
+                                ...info,
+                                arrival: {
                                     eta: etaMinutes,
                                     timestamp: new Date().toISOString()
-                                };
-                                hasChanged = true;
-                            }
-                        } else {
-                            if (info.arrival) {
-                                info.arrival = null; // Bus is moving away
-                                hasChanged = true;
-                            }
+                                }
+                            };
                         }
                     }
                 } catch (error) {
-                    console.error("Error fetching ETA:", error);
+                    console.error("Error fetching ETA for line", info.line, error);
                 }
             }
-        }
-        
-        if (hasChanged) {
-            setLiveStmInfo(updatedStmInfo);
+            return { ...info, arrival: null }; // No bus or no ETA, clear previous arrival
+        });
+
+        const newLiveStmInfo = await Promise.all(updatedStmInfoPromises);
+        if (isMounted) {
+            setLiveStmInfo(newLiveStmInfo);
         }
     };
     
     fetchEtas();
-    const interval = setInterval(fetchEtas, 15000); // Fetch every 15 seconds
-    
-    return () => clearInterval(interval);
 
-  }, [busLocations, liveStmInfo]);
+    return () => {
+        isMounted = false;
+    };
+
+  }, [busLocations]); // Rerun whenever bus locations change
 
   useEffect(() => {
     if (mapRef.current && userLocation) {

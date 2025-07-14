@@ -71,22 +71,18 @@ export default function Home() {
         return;
       }
   
-      const linesToFetch = selectedRouteStmInfo.map(info => ({
-        line: info.line,
-        destination: info.lineDestination
-      }));
+      const linesToFetch = selectedRouteStmInfo
+        .filter(info => info.line)
+        .map(info => ({ line: info.line, destination: info.lineDestination }));
+
+      if (linesToFetch.length === 0) {
+        setBusLocations([]);
+        return;
+      }
   
       try {
         const locations = await getBusLocation(linesToFetch);
-        
-        // Merge new locations with previous ones to prevent markers from disappearing
-        setBusLocations(prevBusLocations => {
-            const prevLocationsMap = new Map(prevBusLocations.map(bus => [bus.id, bus]));
-            locations.forEach(newBus => {
-                prevLocationsMap.set(newBus.id, newBus);
-            });
-            return Array.from(prevLocationsMap.values());
-        });
+        setBusLocations(locations);
   
       } catch (error) {
         console.error(`Error fetching real-time data for details view:`, error);
