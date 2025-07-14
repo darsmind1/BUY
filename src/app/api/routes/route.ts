@@ -30,44 +30,47 @@ function toDirectionsResult(routesApiResponse: any): any {
       },
       duration: leg.duration ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) } : undefined,
       distance: leg.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
-      steps: leg.steps?.map((step: any) => ({
-        ...step,
-        travel_mode: step.travelMode || 'TRANSIT',
-        duration: step.duration ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
-        distance: step.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
-        instructions: step.navigationInstruction?.instructions || step.instruction,
-        polyline: { points: step.polyline?.encodedPolyline },
-        transit: step.transitDetails ? {
-          ...step.transitDetails,
-          line: {
-            ...step.transitDetails.line,
-            short_name: step.transitDetails.transitLine?.shortName || 'N/A',
-            vehicle: {
-              name: step.transitDetails.transitLine?.vehicle?.name?.text || 'Bus',
-              type: step.transitDetails.transitLine?.vehicle?.type || 'BUS',
-            }
-          },
-          arrival_stop: {
-            name: step.transitDetails.arrivalStop?.name || 'Parada de llegada',
-            location: {
-              lat: () => step.transitDetails.arrivalStop?.location?.latLng?.latitude,
-              lng: () => step.transitDetails.arrivalStop?.location?.latLng?.longitude,
-              toJSON: () => ({ lat: step.transitDetails.arrivalStop?.location?.latLng?.latitude, lng: step.transitDetails.arrivalStop?.location?.latLng?.longitude })
-            }
-          },
-          departure_stop: {
-            name: step.transitDetails.departureStop?.name || 'Parada de salida',
-            location: {
-              lat: () => step.transitDetails.departureStop?.location?.latLng?.latitude,
-              lng: () => step.transitDetails.departureStop?.location?.latLng?.longitude,
-              toJSON: () => ({ lat: step.transitDetails.departureStop?.location?.latLng?.latitude, lng: step.transitDetails.departureStop?.location?.latLng?.longitude })
-            }
-          },
-          num_stops: step.transitDetails.stopCount,
-          headsign: step.transitDetails.headsign,
-          departure_time: { text: step.transitDetails.departureTime ? new Date(step.transitDetails.departureTime).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit'}) : 'N/A' },
-        } : undefined,
-      })) || [] // Use empty array as fallback if steps are missing
+      steps: leg.steps?.map((step: any) => {
+        const transitDetails = step.transitDetails;
+        return {
+          ...step,
+          travel_mode: step.travelMode || 'TRANSIT',
+          duration: step.duration ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
+          distance: step.distanceMeters ? { text: `${step.distanceMeters} m`, value: step.distanceMeters } : undefined,
+          instructions: step.navigationInstruction?.instructions || step.instruction,
+          polyline: { points: step.polyline?.encodedPolyline },
+          transit: transitDetails ? {
+            ...transitDetails,
+            line: {
+              ...transitDetails.line,
+              short_name: transitDetails.transitLine?.shortName || 'N/A',
+              vehicle: {
+                name: transitDetails.transitLine?.vehicle?.name?.text || 'Bus',
+                type: transitDetails.transitLine?.vehicle?.type || 'BUS',
+              }
+            },
+            arrival_stop: {
+              name: transitDetails.arrivalStop?.name || 'Parada de llegada',
+              location: {
+                lat: () => transitDetails.arrivalStop?.location?.latLng?.latitude,
+                lng: () => transitDetails.arrivalStop?.location?.latLng?.longitude,
+                toJSON: () => ({ lat: transitDetails.arrivalStop?.location?.latLng?.latitude, lng: transitDetails.arrivalStop?.location?.latLng?.longitude })
+              }
+            },
+            departure_stop: {
+              name: transitDetails.departureStop?.name || 'Parada de salida',
+              location: {
+                lat: () => transitDetails.departureStop?.location?.latLng?.latitude,
+                lng: () => transitDetails.departureStop?.location?.latLng?.longitude,
+                toJSON: () => ({ lat: transitDetails.departureStop?.location?.latLng?.latitude, lng: transitDetails.departureStop?.location?.latLng?.longitude })
+              }
+            },
+            num_stops: transitDetails.stopCount,
+            headsign: transitDetails.headsign,
+            departure_time: { text: transitDetails.departureTime ? new Date(transitDetails.departureTime).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit'}) : 'N/A' },
+          } : undefined,
+        }
+      }) || [] // Use empty array as fallback if steps are missing
     })) || [], // Use empty array as fallback if legs are missing
     bounds: route.viewport ? {
         north: route.viewport.high?.latitude,
