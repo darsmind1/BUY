@@ -265,69 +265,60 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
   }, [isApiConnected, routes, mapStops]);
 
 
-  const fetchAllArrivals = useCallback(async () => {
-    if (!isApiConnected || !stmStopMappings) {
-        return;
-    }
-
-    // Group routes by bus stop ID to make fewer API calls
-    const stopsToQuery: { [stopId: number]: string[] } = {};
-    const routeIndicesByStop: { [stopId: number]: number[] } = {};
-
-    Object.entries(stmStopMappings).forEach(([routeIndex, info]) => {
-        if (info.stopId && info.line) {
-            if (!stopsToQuery[info.stopId]) {
-                stopsToQuery[info.stopId] = [];
-                routeIndicesByStop[info.stopId] = [];
-            }
-            // Evitar duplicados de lineas para la misma parada
-            if (!stopsToQuery[info.stopId].includes(info.line)) {
-                stopsToQuery[info.stopId].push(info.line);
-            }
-            routeIndicesByStop[info.stopId].push(parseInt(routeIndex));
-        }
-    });
-
-    const newArrivals: BusArrivalsState = {};
-
-    const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
-        const stopIdNum = parseInt(stopId);
-        try {
-            console.log(`Consultando arribos para parada ${stopIdNum}, líneas: [${lines.join(', ')}]`); // LOG MEJORADO
-            const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
-            
-            if (upcomingBuses && upcomingBuses.length > 0) {
-                // Find the best upcoming bus for each route associated with this stop
-                routeIndicesByStop[stopIdNum].forEach(routeIndex => {
-                    const routeLine = stmStopMappings[routeIndex]?.line;
-                    // Encuentra el primer arribo que coincida con la línea de la ruta
-                    const bestUpcomingBus = upcomingBuses.find(bus => bus.line === routeLine);
-                    if (bestUpcomingBus) {
-                        newArrivals[routeIndex] = { bus: bestUpcomingBus };
-                    } else {
-                         newArrivals[routeIndex] = null;
-                    }
-                });
-            }
-        } catch (error) {
-            console.error(`Error fetching upcoming buses for stop ${stopId}:`, error);
-        }
-    });
-
-    await Promise.allSettled(arrivalPromises);
-    setBusArrivals(prev => ({ ...prev, ...newArrivals }));
-
-  }, [stmStopMappings, isApiConnected]);
-
-
   useEffect(() => {
-      if(isMappingStops) return;
+      if (!isApiConnected || !stmStopMappings) {
+        return;
+      }
 
-      fetchAllArrivals();
+      const fetchAllArrivals = async () => {
+        // Group routes by bus stop ID to make fewer API calls
+        const stopsToQuery: { [stopId: number]: string[] } = {};
+        const routeIndicesByStop: { [stopId: number]: number[] } = {};
+
+        Object.entries(stmStopMappings).forEach(([routeIndex, info]) => {
+            if (info.stopId && info.line) {
+                if (!stopsToQuery[info.stopId]) {
+                    stopsToQuery[info.stopId] = [];
+                    routeIndicesByStop[info.stopId] = [];
+                }
+                if (!stopsToQuery[info.stopId].includes(info.line)) {
+                    stopsToQuery[info.stopId].push(info.line);
+                }
+                routeIndicesByStop[info.stopId].push(parseInt(routeIndex));
+            }
+        });
+
+        const newArrivals: BusArrivalsState = {};
+        const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
+            const stopIdNum = parseInt(stopId);
+            try {
+                const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
+                
+                if (upcomingBuses && upcomingBuses.length > 0) {
+                    routeIndicesByStop[stopIdNum].forEach(routeIndex => {
+                        const routeLine = stmStopMappings[routeIndex]?.line;
+                        const bestUpcomingBus = upcomingBuses.find(bus => bus.line === routeLine);
+                        if (bestUpcomingBus) {
+                            newArrivals[routeIndex] = { bus: bestUpcomingBus };
+                        } else {
+                             newArrivals[routeIndex] = null;
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`Error fetching upcoming buses for stop ${stopId}:`, error);
+            }
+        });
+
+        await Promise.allSettled(arrivalPromises);
+        setBusArrivals(prev => ({ ...prev, ...newArrivals }));
+      };
+
+      fetchAllArrivals(); // Initial fetch
       const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
 
-      return () => clearInterval(intervalId);
-  }, [isMappingStops, fetchAllArrivals]);
+      return () => clearInterval(intervalId); // Cleanup on unmount or when dependencies change
+  }, [stmStopMappings, isApiConnected]);
 
 
   return (
@@ -354,5 +345,3 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
-
-    
