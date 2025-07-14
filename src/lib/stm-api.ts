@@ -237,13 +237,13 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
-export async function getUpcomingBuses(busstopId: number, line: string, lineVariantId: number | null): Promise<UpcomingBus | null> {
+export async function getUpcomingBuses(busstopId: number, line: string | null, lineVariantId: number | null): Promise<UpcomingBus | null> {
     let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
     
     const params = new URLSearchParams();
     if (lineVariantId) {
         params.append('lineVariantIds', lineVariantId.toString());
-    } else {
+    } else if (line) {
         params.append('lines', line);
     }
     params.append('amountperline', '1');

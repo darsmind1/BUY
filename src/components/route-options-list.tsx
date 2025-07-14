@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop, BusLocation } from '@/lib/stm-api';
+import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
@@ -179,12 +179,10 @@ export default function RouteOptionsList({
   routes, 
   onSelectRoute, 
   isApiConnected,
-  busLocations
 }: {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
-  busLocations: BusLocation[];
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -202,7 +200,7 @@ export default function RouteOptionsList({
       initialStmInfo[index] = transitSteps.map(step => ({
         stopId: null,
         line: step.transit!.line.short_name!,
-        lineVariantId: null, // We'll try to find this
+        lineVariantId: null,
         lineDestination: step.transit!.headsign || null,
         departureStopLocation: {
           lat: step.transit!.departure_stop.location!.lat(),
@@ -211,7 +209,7 @@ export default function RouteOptionsList({
         arrival: null,
       }));
     });
-
+    
     const enrichedStmInfo = { ...initialStmInfo };
     // This promise will handle all the async work for all routes.
     const allPromises = routes.map(async (route, index) => {
@@ -222,14 +220,12 @@ export default function RouteOptionsList({
         const closestStop = await findClosestStmStop(firstBusStep.departureStopLocation.lat, firstBusStep.departureStopLocation.lng);
         if (closestStop) {
           firstBusStep.stopId = closestStop.busstopId;
-          // Now that we have a stop, get upcoming buses for that stop and line.
           const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStep.line, null);
           if (upcomingBus?.arrival) {
             firstBusStep.arrival = {
                 eta: upcomingBus.arrival.minutes,
                 timestamp: upcomingBus.arrival.lastUpdate,
             };
-            firstBusStep.lineVariantId = upcomingBus.lineVariantId;
           }
         }
       } catch (error) {
