@@ -1,7 +1,8 @@
+
 'use server';
 
 import config from './config';
-import type { BusLocation, StmBusStop, StmLineRoute } from './types';
+import type { BusLocation, StmBusStop, StmLineRoute, UpcomingBus } from './types';
 import { haversineDistance } from './utils';
 
 // Initialize with a random index to distribute load initially
@@ -216,6 +217,21 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
         return data as StmLineRoute;
     } catch (error) {
         console.error(`Error in getLineRoute for line ${line}:`, error);
+        return null;
+    }
+}
+
+export async function getUpcomingBuses(busstopId: number, line: string): Promise<UpcomingBus | null> {
+    const path = `/buses/busstops/${busstopId}/upcomingbuses?lines=${line}&amountPerLine=1`;
+    try {
+        const data = await stmApiFetch(path);
+        if (!data || !Array.isArray(data) || data.length === 0) {
+            return null;
+        }
+        // Return the first result, as we requested only one
+        return data[0] as UpcomingBus;
+    } catch (error) {
+        console.error(`Error in getUpcomingBuses for stop ${busstopId} and line ${line}:`, error);
         return null;
     }
 }

@@ -31,8 +31,8 @@ export interface StmBusStop {
 }
 
 export interface ArrivalInfo {
-  eta: number; // calculated ETA in seconds
-  timestamp: string;
+  eta: number; // calculated ETA in minutes from /upcomingbuses
+  timestamp: string; // Not available from upcomingbuses, might need to remove or adapt
 }
 
 export interface StmInfo {
@@ -57,4 +57,15 @@ export interface StmLineRoute {
         lat: number;
         lng: number;
     }[];
+}
+
+export interface UpcomingBus {
+    busstopId: number;
+    line: string;
+    destination: string;
+    arrival: {
+        minutes: number;
+        lastUpdate: string;
+        busId: string;
+    };
 }

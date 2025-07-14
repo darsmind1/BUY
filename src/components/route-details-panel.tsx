@@ -283,7 +283,7 @@ export default function RouteDetailsPanel({
     .map(step => step.transit!.departure_stop.location);
 
   const getArrivalColorClass = (eta: number) => {
-    const arrivalMinutes = eta / 60;
+    const arrivalMinutes = eta;
     if (arrivalMinutes <= 5) return 'text-green-400';
     if (arrivalMinutes <= 10) return 'text-yellow-400';
     return 'text-red-500';
@@ -449,7 +449,7 @@ export default function RouteDetailsPanel({
                            <div className={cn("flex items-center gap-1.5 text-xs font-medium pt-1", getArrivalColorClass(transitStepInfo.arrival.eta))}>
                               <Wifi className="h-3.5 w-3.5" />
                               <span>
-                                {transitStepInfo.arrival.eta < 60 ? "Llegando" : `Llega en ${Math.round(transitStepInfo.arrival.eta / 60)} min`}
+                                {transitStepInfo.arrival.eta <= 0 ? "Llegando" : `Llega en ${transitStepInfo.arrival.eta} min`}
                               </span>
                            </div>
                         )}

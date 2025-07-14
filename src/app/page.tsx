@@ -61,19 +61,12 @@ export default function Home() {
     verifyApiConnection();
   }, [toast]);
 
-  const getSignalAge = useCallback((arrivalInfo: ArrivalInfo | null) => {
-    if (!arrivalInfo) return null;
-    const now = new Date().getTime();
-    const signalTimestamp = new Date(arrivalInfo.timestamp).getTime();
-    return (now - signalTimestamp) / 1000; // age in seconds
-  }, []);
-
-  // Effect to update bus locations and arrival times for the detailed view
+  // Effect to update bus locations for the detailed view
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
   
     const updateRealtimeData = async () => {
-      if (!selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0 || !isGoogleMapsLoaded) {
+      if (view !== 'details' || !selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0) {
         setBusLocations([]);
         return;
       }
@@ -95,38 +88,6 @@ export default function Home() {
             return Array.from(prevLocationsMap.values());
         });
   
-        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
-            const liveBus = locations.find(l => l.line === line); // No destination filter for now
-            if (liveBus) {
-                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
-                    new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
-                    new window.google.maps.LatLng(stopLocation)
-                );
-                // Rough ETA: 30km/h average speed => 8.33 m/s
-                const eta = distance / 8.33; 
-                return { eta, timestamp: liveBus.timestamp };
-            }
-            return null;
-        }
-
-        // Update arrival times for the selected route
-        setSelectedRouteStmInfo(currentStmInfo => {
-            return currentStmInfo.map(info => {
-              const newInfo = { ...info };
-              if (newInfo.departureStopLocation) {
-                const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
-                const oldSignalAge = getSignalAge(newInfo.arrival);
-
-                if (newArrival) {
-                  newInfo.arrival = newArrival;
-                } else if (oldSignalAge === null || oldSignalAge > 90) { 
-                  newInfo.arrival = null;
-                }
-              }
-              return newInfo;
-            });
-        });
-  
       } catch (error) {
         console.error(`Error fetching real-time data for details view:`, error);
         setBusLocations([]);
@@ -145,7 +106,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge, selectedRouteStmInfo]);
+  }, [view, selectedRoute, apiStatus, selectedRouteStmInfo]);
 
 
   useEffect(() => {
