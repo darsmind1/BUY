@@ -190,7 +190,6 @@ export default function RouteOptionsList({
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAllArrivals = useCallback(async () => {
-    console.log("----------------------------------------");
     console.log(`[TEST] Iniciando fetchAllArrivals para ${routes.length} rutas...`);
     
     if (!isApiConnected || routes.length === 0) {
