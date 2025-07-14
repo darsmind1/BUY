@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection, getLineRoute, getAllBusStops, StmBusStop } from '@/lib/stm-api';
-import type { StmLineRoute, StmInfo, ArrivalInfo, Place } from '@/lib/types';
+import type { StmLineRoute, StmInfo, Place } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 

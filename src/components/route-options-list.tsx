@@ -101,7 +101,7 @@ function RouteOptionCard({ route, onSelect, isApiConnected, allStops }: { route:
             <div className="flex justify-between items-start">
                 <div className="flex flex-col">
                     <span className="font-semibold text-lg">{leg.duration?.text}</span>
-                    {isApiConnected && firstTransitStep ? (
+                    {isApiConnected && firstTransitStep && firstTransitStep.departure_stop.location ? (
                        <UpcomingBusEta 
                          departureStopLocation={firstTransitStep.departure_stop.location}
                          line={firstTransitStep.line.short_name || null}
@@ -146,11 +146,15 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     // Extract STM-relevant information from the selected route
     const stmInfo: StmInfo[] = route.legs[0].steps.map((step, stepIndex) => {
         if (step.travel_mode === 'TRANSIT' && step.transit) {
+            // The location object from the backend is not a LatLng object, so we convert it.
+            const depLoc = step.transit.departure_stop.location;
+            const depLatLng = depLoc ? new google.maps.LatLng(depLoc.lat(), depLoc.lng()) : null;
+
             return {
                 stepIndex,
                 line: step.transit.line.short_name || null,
                 lineDestination: step.transit.headsign || null,
-                departureStopLocation: step.transit.departure_stop.location?.toJSON() || null,
+                departureStopLocation: depLatLng ? depLatLng.toJSON() : null,
                 arrival: null, // This will be populated in the details view
             };
         }

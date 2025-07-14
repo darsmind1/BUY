@@ -6,7 +6,6 @@ import type { BusLocation, StmInfo } from "@/lib/types";
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
 import { useEffect, useState } from "react";
-import { getUpcomingBuses } from "@/lib/stm-api";
 
 
 interface RouteDetailsPanelProps {
@@ -204,13 +203,15 @@ export default function RouteDetailsPanel({ route, stmInfo, busLocations, userLo
                                                 <p className="text-xs text-muted-foreground mt-0.5">({step.transit.num_stops} paradas)</p>
                                             </div>
                                             
-                                            <LiveBusIndicator
-                                                line={stepStmInfo?.line || null}
-                                                destination={stepStmInfo?.lineDestination || null}
-                                                busLocations={busLocations}
-                                                userLocation={userLocation}
-                                                departureStopLocation={step.transit.departure_stop.location}
-                                            />
+                                            {step.transit.departure_stop.location && (
+                                                <LiveBusIndicator
+                                                    line={stepStmInfo?.line || null}
+                                                    destination={stepStmInfo?.lineDestination || null}
+                                                    busLocations={busLocations}
+                                                    userLocation={userLocation}
+                                                    departureStopLocation={step.transit.departure_stop.location}
+                                                />
+                                            )}
                                         </div>
                                     )}
                                 </div>

@@ -184,12 +184,14 @@ export default function MapView({
         directionsResponse.routes.forEach(route => {
             if (route.bounds) {
                 bounds.union(route.bounds);
-            } else {
+            } else if (route.legs) {
                 route.legs.forEach(leg => {
                     leg.steps.forEach(step => {
-                        step.path.forEach(pathPoint => {
-                            bounds.extend(pathPoint);
-                        });
+                        if (step.path) {
+                            step.path.forEach(pathPoint => {
+                                bounds.extend(pathPoint);
+                            });
+                        }
                     });
                 });
             }
@@ -198,8 +200,11 @@ export default function MapView({
         if (userLocation) {
             bounds.extend(new window.google.maps.LatLng(userLocation.lat, userLocation.lng));
         }
+        
+        if (!bounds.isEmpty()) {
+          mapRef.current.fitBounds(bounds, 100);
+        }
 
-        mapRef.current.fitBounds(bounds, 100);
     } else if (mapRef.current && userLocation) {
         mapRef.current.panTo(userLocation);
         if(mapRef.current.getZoom()! < 15) {
@@ -235,14 +240,13 @@ export default function MapView({
           onLoad={onLoad}
           onUnmount={onUnmount}
         >
-          {directionsResponse && directionsResponse.routes.map((route, index) => (
+          {directionsResponse && directionsResponse.routes.length > 0 && (
              <DirectionsRenderer 
-                key={index}
                 directions={directionsResponse}
-                routeIndex={index}
-                options={directionsRendererOptions(index === routeIndex)}
+                routeIndex={routeIndex}
+                options={directionsRendererOptions(true)}
              />
-          ))}
+          )}
 
           {view === 'details' && Object.values(lineRoutes).map((route, index) => {
               if (route && route.route) {
@@ -274,21 +278,25 @@ export default function MapView({
              />
           ))}
 
-          {view === 'details' && transitStops && transitStops.map((location, index) => (
-              location && <Marker
-                  key={`stop-${index}`}
-                  position={location}
-                  zIndex={50}
-                  icon={{
-                      path: window.google.maps.SymbolPath.CIRCLE,
-                      scale: 5,
-                      fillColor: '#A40034',
-                      fillOpacity: 0.8,
-                      strokeColor: '#ffffff',
-                      strokeWeight: 1,
-                  }}
-              />
-          ))}
+          {view === 'details' && transitStops && transitStops.map((location, index) => {
+              if (location) {
+                  const latLng = location instanceof google.maps.LatLng ? location : new google.maps.LatLng(location);
+                  return <Marker
+                      key={`stop-${index}`}
+                      position={latLng}
+                      zIndex={50}
+                      icon={{
+                          path: window.google.maps.SymbolPath.CIRCLE,
+                          scale: 5,
+                          fillColor: '#A40034',
+                          fillOpacity: 0.8,
+                          strokeColor: '#ffffff',
+                          strokeWeight: 1,
+                      }}
+                  />
+              }
+              return null;
+          })}
         </GoogleMap>
     </div>
   );
