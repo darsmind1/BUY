@@ -145,8 +145,8 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: string[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(lines.filter(Boolean))];
+export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
@@ -161,6 +161,7 @@ export async function getBusLocation(lines: string[]): Promise<BusLocation[]> {
             return [];
         }
 
+        // Return all buses for the requested lines without destination filtering for now
         return data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
