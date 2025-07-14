@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
@@ -99,20 +99,20 @@ const RouteOptionItem = ({
     }
   };
 
-  const getScheduledArrivalInMinutes = () => {
+  const getScheduledArrival = () => {
       if (!scheduledDepartureTimeValue) return null;
       const departureTime = new Date(scheduledDepartureTimeValue);
       const diffMs = departureTime.getTime() - currentTime.getTime();
       const diffMins = Math.round(diffMs / 60000);
 
       if (diffMins <= 0) {
-          return "Saliendo ahora";
+          return { prefix: 'Saliendo', time: 'ahora' };
       }
-      return `Sale en ${diffMins} min`;
+      return { prefix: 'Sale en', time: `${diffMins} min` };
   };
 
   const arrivalText = getArrivalText();
-  const scheduledText = getScheduledArrivalInMinutes();
+  const scheduledArrival = getScheduledArrival();
     
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
 
@@ -166,10 +166,15 @@ const RouteOptionItem = ({
                   <Wifi className="h-3 w-3" />
                   <span>{arrivalText}</span>
               </div>
-            ) : scheduledText ? (
-              <div className={cn("flex items-center gap-2 text-xs", arrivalInfo ? "text-green-400 font-medium" : "text-muted-foreground")}>
-                  <Clock className="h-3 w-3" />
-                  <span>{scheduledText}</span>
+            ) : scheduledArrival ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>
+                  {scheduledArrival.prefix}{' '}
+                  <span className={cn(arrivalInfo ? "text-green-400 font-medium" : "")}>
+                    {scheduledArrival.time}
+                  </span>
+                </span>
               </div>
             ) : firstTransitStep ? (
               <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
