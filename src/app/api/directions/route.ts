@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': googleMapsApiKey,
-                'X-Goog-FieldMask': 'routes.legs,routes.duration,routes.distanceMeters,routes.polyline,routes.viewport',
+                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.legs,routes.polyline,routes.viewport',
             },
             body: JSON.stringify(requestBody),
         });
