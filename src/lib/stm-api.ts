@@ -174,12 +174,14 @@ export async function getBusLocation(lines: {line: string, destination?: string 
         const linesWithDestinations = lines.filter(l => l.destination);
         if (linesWithDestinations.length > 0) {
             return allBuses.filter(bus => {
-                const requestedLine = linesWithDestinations.find(l => l.line === bus.line);
+                const requestedLine = lines.find(l => l.line === bus.line);
                 if (requestedLine && bus.destination && requestedLine.destination) {
+                    // Check if the bus destination string includes the destination from Google.
+                    // This is more flexible than an exact match. e.g. "Pza. España" includes "España"
                     return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
                 }
-                // If the bus line wasn't one with a specific destination, include it
-                return !linesWithDestinations.some(l => l.line === bus.line);
+                // If the bus line wasn't one with a specific destination, include it if it matches any line number
+                return uniqueLineNumbers.includes(bus.line);
             });
         }
 
@@ -241,11 +243,13 @@ export async function getUpcomingBuses(busstopId: number, line: string | null, l
     let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
     
     const params = new URLSearchParams();
+    // Prioritize the more specific lineVariantId if available
     if (lineVariantId) {
         params.append('lineVariantIds', lineVariantId.toString());
     } else if (line) {
         params.append('lines', line);
     }
+    // Always ask for just one result per line to be efficient
     params.append('amountperline', '1');
     
     path += params.toString();

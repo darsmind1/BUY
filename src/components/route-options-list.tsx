@@ -197,7 +197,7 @@ export default function RouteOptionsList({
 
       const fetchAllArrivals = async () => {
         const allStmInfoPromises = routes.map(async (route, index) => {
-          const routeStmInfo = route.legs[0]?.steps
+          let routeStmInfo: StmInfo[] = route.legs[0]?.steps
             .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
             .map(step => ({
               stopId: null,
