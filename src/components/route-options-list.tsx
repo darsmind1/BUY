@@ -207,7 +207,7 @@ export default function RouteOptionsList({
 
   // Effect for initial data setup (stops, lines, etc.) and periodic updates
   useEffect(() => {
-    if (!isGoogleMapsLoaded) {
+    if (!isGoogleMapsLoaded || !routes.length) {
         setIsLoading(false);
         return;
     }
@@ -268,10 +268,21 @@ export default function RouteOptionsList({
             }));
             
             // Update the state for the specific route with the new info
-            setStmInfoByRoute(prev => ({
-              ...prev,
-              [index]: updatedStmInfoForRoute
-            }));
+            setStmInfoByRoute(prev => {
+              const currentRouteInfo = prev[index] || [];
+              const mergedInfo = currentRouteInfo.map(info => {
+                  const updated = updatedStmInfoForRoute.find(u => 
+                      u.line === info.line && 
+                      u.departureStopLocation.lat.toFixed(4) === info.departureStopLocation?.lat.toFixed(4)
+                  );
+                  return updated || info;
+              });
+
+              return {
+                ...prev,
+                [index]: mergedInfo
+              };
+            });
         });
     };
 

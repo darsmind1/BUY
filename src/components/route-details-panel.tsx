@@ -10,7 +10,6 @@ import { Footprints, Bus, Clock, Wifi, Accessibility, Snowflake, Dot, Loader2, C
 import type { BusLocation } from '@/lib/stm-api';
 import type { StmInfo } from '@/lib/types';
 import { getFormattedAddress } from '@/lib/google-maps-api';
-import { haversineDistance } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 
@@ -265,6 +264,70 @@ export default function RouteDetailsPanel({
   const busLines = getUniqueBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [liveStmInfo, setLiveStmInfo] = useState<StmInfo[]>(stmInfo);
+
+  useEffect(() => {
+    setLiveStmInfo(stmInfo); // Initialize with passed stmInfo
+  }, [stmInfo]);
+  
+  useEffect(() => {
+    const fetchEtas = async () => {
+        if (busLocations.length === 0 || liveStmInfo.length === 0) return;
+        
+        const updatedStmInfo = [...liveStmInfo];
+        let hasChanged = false;
+
+        for (let i = 0; i < updatedStmInfo.length; i++) {
+            const info = updatedStmInfo[i];
+            const busForLine = busLocations.find(b => b.line === info.line);
+            
+            if (busForLine && info.departureStopLocation) {
+                try {
+                    const res = await fetch('/api/eta', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            busLocation: { lat: busForLine.location.coordinates[1], lng: busForLine.location.coordinates[0] },
+                            stopLocation: info.departureStopLocation
+                        })
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.eta !== null) {
+                            const etaMinutes = Math.round(data.eta / 60);
+                            
+                            if (!info.arrival || info.arrival.eta !== etaMinutes) {
+                                info.arrival = {
+                                    eta: etaMinutes,
+                                    timestamp: new Date().toISOString()
+                                };
+                                hasChanged = true;
+                            }
+                        } else {
+                            if (info.arrival) {
+                                info.arrival = null; // Bus is moving away
+                                hasChanged = true;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error fetching ETA:", error);
+                }
+            }
+        }
+        
+        if (hasChanged) {
+            setLiveStmInfo(updatedStmInfo);
+        }
+    };
+    
+    fetchEtas();
+    const interval = setInterval(fetchEtas, 15000); // Fetch every 15 seconds
+    
+    return () => clearInterval(interval);
+
+  }, [busLocations, liveStmInfo]);
 
   useEffect(() => {
     if (mapRef.current && userLocation) {
@@ -294,22 +357,13 @@ export default function RouteDetailsPanel({
         const isTransit = step.travel_mode === 'TRANSIT' && step.transit;
         if (!isTransit) return false;
 
-        const transitStepInfo = stmInfo.find(info => 
+        const transitStepInfo = liveStmInfo.find(info => 
             info.line === step.transit?.line.short_name &&
             info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
         );
-
         if (transitStepInfo?.arrival) return false;
 
-        const busForStep = busLocations.find(b => b.line === step.transit?.line.short_name);
-        const busCoords = busForStep ? { lat: busForStep.location.coordinates[1], lng: busForStep.location.coordinates[0] } : null;
-        const stopCoords = transitStepInfo?.departureStopLocation;
-        
-        if (busCoords && stopCoords) {
-            const distance = haversineDistance(busCoords, stopCoords);
-            if (distance < 2000) return true;
-        }
-        return false;
+        return busLocations.some(b => b.line === step.transit?.line.short_name);
     });
   };
 
@@ -382,7 +436,7 @@ export default function RouteDetailsPanel({
           <CardContent className="pt-0 space-y-1">
              <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
              <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
-            <BusFeatures stmInfo={stmInfo} busLocations={busLocations} />
+            <BusFeatures stmInfo={liveStmInfo} busLocations={busLocations} />
           </CardContent>
         </Card>
 
@@ -393,23 +447,12 @@ export default function RouteDetailsPanel({
               const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 1;
               const isTransit = step.travel_mode === 'TRANSIT' && step.transit;
 
-              const transitStepInfo = isTransit ? stmInfo.find(info => 
+              const transitStepInfo = isTransit ? liveStmInfo.find(info => 
                   info.line === step.transit?.line.short_name &&
                   info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
               ) : null;
               
-              const busForStep = isTransit ? busLocations.find(b => b.line === step.transit?.line.short_name) : null;
-
-              const busCoords = busForStep ? { lat: busForStep.location.coordinates[1], lng: busForStep.location.coordinates[0] } : null;
-              const stopCoords = transitStepInfo?.departureStopLocation;
-              
-              let busIsOnMap = false;
-              if (busCoords && stopCoords) {
-                  const distance = haversineDistance(busCoords, stopCoords);
-                  if (distance < 2000) { 
-                      busIsOnMap = true;
-                  }
-              }
+              const busIsOnMap = isTransit && !transitStepInfo?.arrival && busLocations.some(b => b.line === step.transit?.line.short_name);
 
               if (hasDetailedWalkingSteps) {
                 return (
