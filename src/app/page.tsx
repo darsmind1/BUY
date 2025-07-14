@@ -87,10 +87,9 @@ export default function Home() {
         const locations = await getBusLocation(linesToFetch);
         setBusLocations(locations);
   
-        const findArrivalForStop = (line: string, lineDestination: string | null, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
+        const findArrivalForStop = async (line: string, lineDestination: string | null, stopLocation: google.maps.LatLngLiteral): Promise<ArrivalInfo | null> => {
             if (!isGoogleMapsLoaded) return null;
 
-            // Normalize destination for robust comparison
             const normalize = (str: string | null) => str ? str.toUpperCase().replace(/\s/g, '') : null;
             const normalizedLineDest = normalize(lineDestination);
             
@@ -102,33 +101,44 @@ export default function Home() {
             });
             
             if (liveBus) {
-                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
-                    new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
-                    new window.google.maps.LatLng(stopLocation)
-                );
-                // Rough ETA: 30km/h average speed => 8.33 m/s
-                const eta = distance / 8.33; 
-                return { eta, timestamp: liveBus.timestamp };
+                try {
+                    const response = await fetch('/api/eta', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            busLocation: { lat: liveBus.location.coordinates[1], lng: liveBus.location.coordinates[0] },
+                            stopLocation: stopLocation
+                        })
+                    });
+                    if (!response.ok) return null;
+                    const data = await response.json();
+                    if (data.eta !== null) {
+                        return { eta: data.eta, timestamp: liveBus.timestamp };
+                    }
+                } catch (e) {
+                    console.error("Error fetching ETA from server", e);
+                }
             }
             return null;
         }
 
         // Update arrival times for the selected route
-        setSelectedRouteStmInfo(currentStmInfo => {
-            return currentStmInfo.map(info => {
-              const newInfo = { ...info };
-              if (newInfo.departureStopLocation) {
-                const newArrival = findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
-                const oldSignalAge = getSignalAge(newInfo.arrival);
+        setSelectedRouteStmInfo(async (currentStmInfo) => {
+          const updatedInfoPromises = currentStmInfo.map(async (info) => {
+            const newInfo = { ...info };
+            if (newInfo.departureStopLocation) {
+              const newArrival = await findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
+              const oldSignalAge = getSignalAge(newInfo.arrival);
 
-                if (newArrival) {
-                  newInfo.arrival = newArrival;
-                } else if (oldSignalAge === null || oldSignalAge > 90) { 
-                  newInfo.arrival = null;
-                }
+              if (newArrival) {
+                newInfo.arrival = newArrival;
+              } else if (oldSignalAge === null || oldSignalAge > 90) { 
+                newInfo.arrival = null;
               }
-              return newInfo;
-            });
+            }
+            return newInfo;
+          });
+          return Promise.all(updatedInfoPromises);
         });
   
       } catch (error) {
@@ -139,7 +149,7 @@ export default function Home() {
   
     if (view === 'details' && selectedRoute) {
       updateRealtimeData(); 
-      intervalId = setInterval(updateRealtimeData, 20000); // Update every 20 seconds
+      intervalId = setInterval(updateRealtimeData, 30000); // Update every 30 seconds
     } else {
       setBusLocations([]);
     }
@@ -149,7 +159,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge, selectedRouteStmInfo]);
+  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge]);
 
 
   useEffect(() => {

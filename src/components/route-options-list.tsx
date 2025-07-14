@@ -405,13 +405,11 @@ export default function RouteOptionsList({
     }
 
     const fetchAllArrivals = async () => {
-      // Collect lines from primary route steps
       const primaryLines = Object.values(stmInfoByRoute).flat().map(info => ({
         line: info.line,
         destination: info.lineDestination,
       }));
 
-      // Collect lines from transfer alternatives
       const transferLines = Object.values(transferInfoByRoute).filter(Boolean).flatMap(info => 
         info!.alternativeLines.map(alt => ({ line: alt.line, destination: alt.destination }))
       );
@@ -422,80 +420,85 @@ export default function RouteOptionsList({
       try {
         const locations = await getBusLocation(linesToFetch);
         
-        const findArrivalForStop = (
+        const findArrivalForStop = async (
             line: string, 
             lineDestination: string | null,
             stopLocation: google.maps.LatLngLiteral
-        ): ArrivalInfo | null => {
+        ): Promise<ArrivalInfo | null> => {
             if (!isGoogleMapsLoaded) return null;
 
-            // Normalize destination for robust comparison
             const normalize = (str: string | null) => str ? str.toUpperCase().replace(/\s/g, '') : null;
             const normalizedLineDest = normalize(lineDestination);
 
             const liveBus = locations.find(l => {
                 const normalizedBusDest = normalize(l.destination);
                 const lineMatch = l.line === line;
-                // If the required destination is null, any bus on the line is a match.
-                // Otherwise, require a destination match.
                 const destMatch = !normalizedLineDest || (normalizedBusDest && normalizedBusDest.includes(normalizedLineDest));
                 return lineMatch && destMatch;
             });
             
             if (liveBus) {
-                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
-                    new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
-                    new window.google.maps.LatLng(stopLocation)
-                );
-                // Rough ETA: 30km/h average speed => 8.33 m/s
-                const eta = distance / 8.33; 
-                return { eta, timestamp: liveBus.timestamp };
+                try {
+                    const response = await fetch('/api/eta', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            busLocation: { lat: liveBus.location.coordinates[1], lng: liveBus.location.coordinates[0] },
+                            stopLocation: stopLocation
+                        })
+                    });
+                    if (!response.ok) return null;
+                    const data = await response.json();
+                    if (data.eta !== null) {
+                        return { eta: data.eta, timestamp: liveBus.timestamp };
+                    }
+                } catch (e) {
+                    console.error("Error fetching ETA from server", e);
+                }
             }
             return null;
         }
 
         // Update primary route arrivals with persistence logic
-        setStmInfoByRoute(currentStmInfo => {
+        setStmInfoByRoute(async (currentStmInfo) => {
             const newStmInfo: Record<number, StmInfo[]> = {};
             for (const routeIndex in currentStmInfo) {
-              newStmInfo[routeIndex] = currentStmInfo[routeIndex].map(info => {
+              newStmInfo[routeIndex] = await Promise.all(currentStmInfo[routeIndex].map(async (info) => {
                 const newInfo = { ...info };
                 if (newInfo.departureStopLocation) {
-                  const newArrival = findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
+                  const newArrival = await findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
                   const oldSignalAge = getSignalAge(newInfo.arrival);
                   if (newArrival) {
                     newInfo.arrival = newArrival;
-                  } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
+                  } else if (oldSignalAge === null || oldSignalAge > 90) { 
                     newInfo.arrival = null;
                   }
-                  // Otherwise, keep the old (still valid) signal
                 }
                 return newInfo;
-              });
+              }));
             }
             return newStmInfo;
         });
 
         // Update transfer alternatives arrivals
-        setTransferInfoByRoute(currentTransferInfo => {
+        setTransferInfoByRoute(async (currentTransferInfo) => {
             const newTransferInfo: Record<number, TransferInfo | null> = {};
             for (const routeIndex in currentTransferInfo) {
               const currentInfo = currentTransferInfo[routeIndex];
               if (currentInfo) {
                 newTransferInfo[routeIndex] = {
                   ...currentInfo,
-                  alternativeLines: currentInfo.alternativeLines.map(alt => {
+                  alternativeLines: await Promise.all(currentInfo.alternativeLines.map(async (alt) => {
                     const newAlt = { ...alt };
-                    const newArrival = findArrivalForStop(newAlt.line, newAlt.destination, currentInfo.stopLocation);
+                    const newArrival = await findArrivalForStop(newAlt.line, newAlt.destination, currentInfo.stopLocation);
                     const oldSignalAge = getSignalAge(newAlt.arrival);
                     if (newArrival) {
                       newAlt.arrival = newArrival;
-                    } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
+                    } else if (oldSignalAge === null || oldSignalAge > 90) { 
                       newAlt.arrival = null;
                     }
-                    // Otherwise, keep the old (still valid) signal
                     return newAlt;
-                  }),
+                  })),
                 };
               } else {
                 newTransferInfo[routeIndex] = null;
@@ -510,7 +513,7 @@ export default function RouteOptionsList({
     };
 
     fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 50000); // Update every 50 seconds
+    const intervalId = setInterval(fetchAllArrivals, 30000); // Update every 30 seconds
 
     return () => clearInterval(intervalId);
   }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);

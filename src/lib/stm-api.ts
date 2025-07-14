@@ -146,7 +146,7 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
+export async function getBusLocation(lines: {line: string, destination?: string | null}[]): Promise<BusLocation[]> {
     const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
