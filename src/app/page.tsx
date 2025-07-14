@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { Bus, ArrowLeft, Loader2, Map, ArrowRight } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map as MapIcon, ArrowRight } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -280,7 +280,7 @@ export default function Home() {
             )}
             {view !== 'search' && (
               <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                <Map className="h-5 w-5" />
+                <MapIcon className="h-5 w-5" />
               </Button>
             )}
           </header>
