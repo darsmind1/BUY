@@ -280,7 +280,10 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                 stopsToQuery[info.stopId] = [];
                 routeIndicesByStop[info.stopId] = [];
             }
-            stopsToQuery[info.stopId].push(info.line);
+            // Evitar duplicados de lineas para la misma parada
+            if (!stopsToQuery[info.stopId].includes(info.line)) {
+                stopsToQuery[info.stopId].push(info.line);
+            }
             routeIndicesByStop[info.stopId].push(parseInt(routeIndex));
         }
     });
@@ -290,12 +293,14 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
         const stopIdNum = parseInt(stopId);
         try {
+            console.log(`Consultando arribos para parada ${stopIdNum}, líneas: [${lines.join(', ')}]`); // LOG MEJORADO
             const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
-            console.log('Datos de arribo recibidos de la API:', upcomingBuses); // LOG PARA VERIFICACIÓN
+            
             if (upcomingBuses && upcomingBuses.length > 0) {
                 // Find the best upcoming bus for each route associated with this stop
                 routeIndicesByStop[stopIdNum].forEach(routeIndex => {
                     const routeLine = stmStopMappings[routeIndex]?.line;
+                    // Encuentra el primer arribo que coincida con la línea de la ruta
                     const bestUpcomingBus = upcomingBuses.find(bus => bus.line === routeLine);
                     if (bestUpcomingBus) {
                         newArrivals[routeIndex] = { bus: bestUpcomingBus };
@@ -310,7 +315,6 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     });
 
     await Promise.allSettled(arrivalPromises);
-    console.log('Estado de arribos actualizado:', newArrivals); // LOG PARA VERIFICACIÓN
     setBusArrivals(prev => ({ ...prev, ...newArrivals }));
 
   }, [stmStopMappings, isApiConnected]);
