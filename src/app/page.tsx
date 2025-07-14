@@ -14,11 +14,11 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
-import type { StmInfo, Place } from '@/lib/types';
+import type { Place } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
-const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const LIBRARIES: ("places" | "marker" | "geometry")[] = ['places', 'marker', 'geometry'];
 
 export default function Home() {
@@ -141,7 +141,7 @@ export default function Home() {
     };
   }, []);
 
-  const handleSearch = (origin: Place, destination: Place) => {
+  const handleSearch = async (origin: Place, destination: Place) => {
     if (!origin.location || !destination.location) return;
     
     setRoutes([]);
@@ -149,35 +149,54 @@ export default function Home() {
     setBusLocations([]);
     setIsLoading(true);
 
-    const directionsService = new window.google.maps.DirectionsService();
-    directionsService.route(
-      {
-        origin: origin.location,
-        destination: destination.location,
-        travelMode: google.maps.TravelMode.TRANSIT,
-        transitOptions: {
-          modes: [google.maps.TransitMode.BUS],
-        },
-        provideRouteAlternatives: true,
-        region: 'UY',
-      },
-      (result, status) => {
-        setIsLoading(false);
-        if (status === google.maps.DirectionsStatus.OK && result) {
-            setRoutes(result.routes.map(route => ({...result, routes: [route]})));
-            setView('options');
-            setMobileView('panel');
-        } else {
-          console.error(`Directions request failed due to ${status}`);
-          setRoutes([]);
-          toast({
-            variant: "destructive",
-            title: "Ruta no encontrada",
-            description: "No se pudieron encontrar rutas de autobús para el origen y destino seleccionados. Intenta con otras direcciones.",
-          });
-        }
+    try {
+      const response = await fetch('/api/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin: origin.location,
+          destination: destination.location,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
       }
-    );
+      
+      const result = await response.json();
+
+      if (result.routes && result.routes.length > 0) {
+        // The Routes API returns an array of routes. We need to wrap each route
+        // in a DirectionsResult-like structure for compatibility with our components.
+        const directionsResults: google.maps.DirectionsResult[] = result.routes.map((route: any) => ({
+          geocoded_waypoints: result.geocoded_waypoints,
+          routes: [route],
+          request: result.request, // This might not be perfect but good enough for now
+        }));
+        
+        setRoutes(directionsResults);
+        setView('options');
+        setMobileView('panel');
+      } else {
+        console.error('No routes found from Routes API', result);
+        setRoutes([]);
+        toast({
+          variant: "destructive",
+          title: "Ruta no encontrada",
+          description: "No se pudieron encontrar rutas de autobús para el origen y destino seleccionados. Intenta con otras direcciones.",
+        });
+      }
+    } catch(error) {
+       console.error('Error fetching from new /api/routes endpoint:', error);
+       setRoutes([]);
+       toast({
+        variant: "destructive",
+        title: "Error de Búsqueda",
+        description: "Ocurrió un error al buscar la ruta. Por favor, inténtalo de nuevo.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const handleRouteSelect = (route: google.maps.DirectionsResult) => {
