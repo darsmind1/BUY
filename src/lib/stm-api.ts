@@ -194,9 +194,12 @@ export async function getBusLocation(lines: {line: string, destination?: string 
 }
 
 
-export async function findClosestStmStop(lat: number, lng: number): Promise<StmBusStop | null> {
-    const radius = 200; // Search within a 200-meter radius
-    const path = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}`;
+export async function findClosestStmStop(lat: number, lng: number, line?: string): Promise<StmBusStop | null> {
+    const radius = 250; // Increased radius for better matching
+    let path = `/buses/busstops?latitude=${lat}&longitude=${lng}&radius=${radius}`;
+    if (line) {
+        path += `&lines=${line}`; // Ask API to filter stops by line
+    }
     
     try {
         const nearbyStops: StmBusStop[] = await stmApiFetch(path);
@@ -239,17 +242,18 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
-export async function getUpcomingBuses(busstopId: number, line: string, lineVariantId: number | null): Promise<UpcomingBus | null> {
+export async function getUpcomingBuses(busstopId: number, line: string, lineVariantId?: number | null): Promise<UpcomingBus | null> {
     let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
     
     const params = new URLSearchParams();
     
+    // The "lines" parameter is mandatory.
+    params.append('lines', line);
+
     // Prioritize lineVariantId for more specific queries, but always include lines as a fallback/requirement.
     if (lineVariantId) {
         params.append('lineVariantIds', lineVariantId.toString());
     } 
-    // The "lines" parameter is mandatory.
-    params.append('lines', line);
     
     params.append('amountperline', '1');
     

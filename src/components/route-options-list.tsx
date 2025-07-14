@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop, BusLocation, getBusLocation } from '@/lib/stm-api';
+import { findClosestStmStop, getUpcomingBuses, type BusLocation } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
@@ -53,7 +53,6 @@ const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return 'text-primary';
     const arrivalMinutes = arrivalInfo.eta;
-    console.log(`[TEST] Arrival ETA for color calculation: ${arrivalMinutes} minutes`);
     if (arrivalMinutes <= 5) return 'text-green-400';
     if (arrivalMinutes <= 10) return 'text-yellow-400';
     return 'text-red-500';
@@ -217,40 +216,27 @@ export default function RouteOptionsList({
           }
           
           const firstBusStepInfo = routeStmInfo[0];
-          
-          // TEST: Only check for CE1 line
-          if (firstBusStepInfo.line !== 'CE1') {
-            console.log(`[TEST] Skipping non-CE1 line: ${firstBusStepInfo.line}`);
-            return { index, stmInfo: routeStmInfo };
-          }
-          console.log(`[TEST] Attempting to fetch arrivals for line: ${firstBusStepInfo.line}`);
-          
           const stopLocation = firstBusStepInfo.departureStopLocation;
           if (!stopLocation) return { index, stmInfo: routeStmInfo };
 
-          const closestStop = await findClosestStmStop(stopLocation.lat, stopLocation.lng);
+          // Use the robust function to get the correct STM stop ID
+          const closestStop = await findClosestStmStop(stopLocation.lat, stopLocation.lng, firstBusStepInfo.line);
           
           if (closestStop) {
             firstBusStepInfo.stopId = closestStop.busstopId;
 
-            // Simple call, no need for lineVariantId here.
-            // Just get the next bus for the line at the stop.
+            // Now, get the upcoming bus for that specific stop and line
             const upcomingBus = await getUpcomingBuses(
               firstBusStepInfo.stopId,
-              firstBusStepInfo.line,
-              null // Passing null for lineVariantId to keep it simple and robust
+              firstBusStepInfo.line
             );
             
-            console.log(`[TEST] Upcoming bus for stop ${firstBusStepInfo.stopId} and line ${firstBusStepInfo.line}:`, upcomingBus);
-
             if (upcomingBus && upcomingBus.arrival) {
               firstBusStepInfo.arrival = {
                 eta: upcomingBus.arrival.minutes,
                 timestamp: upcomingBus.arrival.lastUpdate,
               };
             }
-          } else {
-             console.log(`[TEST] Could not find a close STM stop for route ${index}.`);
           }
           
           return { index, stmInfo: routeStmInfo };
@@ -315,3 +301,4 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
