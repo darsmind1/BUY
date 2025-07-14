@@ -266,11 +266,11 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
 
   useEffect(() => {
-      if (!isApiConnected || !stmStopMappings) {
-        return;
-      }
-
       const fetchAllArrivals = async () => {
+        if (!isApiConnected || !stmStopMappings) {
+          return;
+        }
+
         // Group routes by bus stop ID to make fewer API calls
         const stopsToQuery: { [stopId: number]: string[] } = {};
         const routeIndicesByStop: { [stopId: number]: number[] } = {};
@@ -295,6 +295,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             const stopIdNum = parseInt(stopId);
             try {
                 const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
+                console.log(`Respuesta de arribos para parada ${stopIdNum}:`, upcomingBuses);
                 
                 if (upcomingBuses && upcomingBuses.length > 0) {
                     routeIndicesByStop[stopIdNum].forEach(routeIndex => {
@@ -316,10 +317,11 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
         setBusArrivals(prev => ({ ...prev, ...newArrivals }));
       };
 
-      fetchAllArrivals(); // Initial fetch
-      const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
-
-      return () => clearInterval(intervalId); // Cleanup on unmount or when dependencies change
+      if (stmStopMappings) {
+          fetchAllArrivals(); // Initial fetch
+          const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
+          return () => clearInterval(intervalId); // Cleanup on unmount or when dependencies change
+      }
   }, [stmStopMappings, isApiConnected]);
 
 
