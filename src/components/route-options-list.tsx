@@ -4,29 +4,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
+import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
 import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { getFormattedAddress } from '@/lib/google-maps-api';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-
-interface AlternativeLineInfo {
-    line: string;
-    destination: string | null;
-    arrival: ArrivalInfo | null;
-}
-
-interface TransferInfo {
-    stopName: string;
-    stopLocation: google.maps.LatLngLiteral;
-    mainTransferLine: string | null;
-    mainTransferLineDestination: string | null;
-    alternativeLines: AlternativeLineInfo[];
-}
-
 
 const ArrivalInfoLegend = () => {
   return (
@@ -69,9 +52,7 @@ const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
   
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return 'text-primary';
-    
     const arrivalMinutes = arrivalInfo.eta;
-    
     if (arrivalMinutes <= 5) return 'text-green-400';
     if (arrivalMinutes <= 10) return 'text-yellow-400';
     return 'text-red-500';
@@ -83,15 +64,13 @@ const RouteOptionItem = ({
   index, 
   onSelectRoute,
   arrivalInfo,
-  stmInfo,
-  transferInfo
+  stmInfo
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void,
   arrivalInfo: ArrivalInfo | null,
-  stmInfo: StmInfo[],
-  transferInfo: TransferInfo | null
+  stmInfo: StmInfo[]
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const leg = route.legs[0];
@@ -127,11 +106,11 @@ const RouteOptionItem = ({
       className="hover:shadow-md hover:border-primary/50 transition-all duration-300 animate-in fade-in-0"
       style={{ animationDelay: `${index * 100}ms`}}
     >
-      <CardContent className="p-4 space-y-3">
-        <div 
-            className="flex items-start justify-between cursor-pointer"
-            onClick={() => onSelectRoute(route, index, stmInfo)}
-        >
+      <CardContent 
+        className="p-4 space-y-3 cursor-pointer"
+        onClick={() => onSelectRoute(route, index, stmInfo)}
+      >
+        <div className="flex items-start justify-between">
             <div className="flex items-center gap-1.5 flex-wrap flex-1">
               {renderableSteps.map((step, stepIndex) => {
                   const isLastStep = stepIndex === renderableSteps.length - 1;
@@ -166,7 +145,7 @@ const RouteOptionItem = ({
                 <span>{totalDuration} min</span>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground cursor-pointer" onClick={() => onSelectRoute(route, index, stmInfo)}>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
             {arrivalInfo && arrivalText ? (
               <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass(arrivalInfo))}>
                   <Wifi className="h-3 w-3" />
@@ -181,49 +160,6 @@ const RouteOptionItem = ({
               <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             ) : null}
           </div>
-          {transferInfo && (
-            <Accordion type="single" collapsible className="w-full -mb-3">
-                <AccordionItem value="item-1" className="border-t mt-3 border-dashed">
-                    <AccordionTrigger className="text-xs hover:no-underline py-3">
-                        <div className="flex flex-col text-left space-y-1.5">
-                             <div className="flex items-center gap-2 text-muted-foreground font-medium">
-                                <Bus className="h-3.5 w-3.5" />
-                                <span>Transbordo en <span className="text-foreground">{transferInfo.stopName.split(',')[0]}</span></span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <ChevronsRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span className="text-foreground">
-                                    {transferInfo.mainTransferLine}
-                                    {transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine).length > 0 && ` y ${transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine).length} ${transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine).length === 1 ? 'opción más' : 'opciones más'}`}
-                                </span>
-                            </div>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-3 pr-2 space-y-2">
-                        {[
-                            { line: transferInfo.mainTransferLine, destination: transferInfo.mainTransferLineDestination, arrival: transferInfo.alternativeLines.find(l => l.line === transferInfo.mainTransferLine && l.destination === transferInfo.mainTransferLineDestination)?.arrival ?? null },
-                            ...transferInfo.alternativeLines.filter(l => l.line !== transferInfo.mainTransferLine || l.destination !== transferInfo.mainTransferLineDestination)
-                        ].map((alt, altIndex) => {
-                            if (!alt.line) return null;
-                            const altArrivalText = getArrivalText(alt.arrival);
-                            return (
-                                <div key={altIndex} className="flex items-center justify-between text-xs ml-5 pl-1.5 border-l border-dashed">
-                                    <Badge variant="secondary" className="font-mono">{alt.line}</Badge>
-                                    {altArrivalText ? (
-                                        <div className={cn("flex items-center gap-1.5 font-medium", getArrivalColorClass(alt.arrival))}>
-                                            <Wifi className="h-3 w-3" />
-                                            <span>{altArrivalText}</span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-muted-foreground">Sin arribos</span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </AccordionContent>
-                </AccordionItem>
-            </Accordion>
-          )}
       </CardContent>
     </Card>
   )
@@ -243,60 +179,13 @@ export default function RouteOptionsList({
   routes, 
   onSelectRoute, 
   isApiConnected,
-  isGoogleMapsLoaded,
 }: {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
-  isGoogleMapsLoaded: boolean;
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [transferInfoByRoute, setTransferInfoByRoute] = useState<Record<number, TransferInfo | null>>({});
-
-  const findAlternativeLines = useCallback(async (
-        transferStopLocation: google.maps.LatLngLiteral, 
-        destination: google.maps.LatLng | string
-    ): Promise<{line: string, destination: string | null}[]> => {
-    
-    return new Promise((resolve) => {
-        if (!isGoogleMapsLoaded) return resolve([]);
-        const directionsService = new window.google.maps.DirectionsService();
-
-        directionsService.route({
-            origin: transferStopLocation,
-            destination: destination,
-            travelMode: google.maps.TravelMode.TRANSIT,
-            transitOptions: {
-                modes: [google.maps.TransitMode.BUS],
-            },
-            provideRouteAlternatives: true,
-            region: 'UY'
-        }, (result, status) => {
-            if (status === google.maps.DirectionsStatus.OK && result) {
-                const alternativeLines = new Map<string, {line: string, destination: string | null}>();
-                result.routes.forEach(route => {
-                    route.legs.forEach(leg => {
-                        leg.steps.forEach(step => {
-                            if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
-                                const line = step.transit.line.short_name;
-                                const headsign = step.transit.headsign || null;
-                                // Use a composite key to store unique line-destination pairs
-                                const key = `${line}-${headsign}`;
-                                if (!alternativeLines.has(key)) {
-                                    alternativeLines.set(key, { line, destination: headsign });
-                                }
-                            }
-                        })
-                    })
-                });
-                resolve(Array.from(alternativeLines.values()));
-            } else {
-                resolve([]);
-            }
-        });
-    });
-  }, [isGoogleMapsLoaded]);
 
   const fetchAllArrivals = useCallback(async () => {
     if (!isApiConnected) {
@@ -351,7 +240,7 @@ export default function RouteOptionsList({
     const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
     return () => clearInterval(intervalId);
 
-  }, [routes, fetchAllArrivals]);
+  }, [fetchAllArrivals]);
   
 
   if (isLoading) {
@@ -396,7 +285,6 @@ export default function RouteOptionsList({
           onSelectRoute={onSelectRoute}
           arrivalInfo={getFirstArrival(stmInfoByRoute[index] ?? [])}
           stmInfo={stmInfoByRoute[index] ?? []}
-          transferInfo={transferInfoByRoute[index] ?? null}
         />
       ))}
     </div>
