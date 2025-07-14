@@ -16,27 +16,27 @@ const ArrivalInfoLegend = () => {
       <div className="p-3 mb-2 rounded-lg bg-muted/50 border border-dashed text-xs text-muted-foreground space-y-2">
          <div className="flex items-center gap-2 font-medium text-foreground">
               <Info className="h-4 w-4" />
-              <span>Señales Recibidas</span>
+              <span>Leyenda de Arribos</span>
          </div>
         <div className="flex items-center gap-2">
            <Wifi className="h-3.5 w-3.5 text-primary" />
            <span>Tiempo real:</span>
            <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-green-400" />
-              <span className="text-foreground">Confiable</span>
+              <span className="text-foreground">Próximo</span>
            </div>
           <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-yellow-400" />
-              <span className="text-foreground">Demora</span>
+              <span className="text-foreground">En minutos</span>
            </div>
           <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-red-500" />
-              <span className="text-foreground">Antigua</span>
+              <span className="text-foreground">Demorado</span>
            </div>
         </div>
          <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-primary" />
-              <span>Horario programado para la línea</span>
+              <span>Horario programado (sin datos en tiempo real)</span>
          </div>
       </div>
     
@@ -45,8 +45,8 @@ const ArrivalInfoLegend = () => {
 
 const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return null;
-    if (arrivalInfo.eta <= 0) return "Llegando";
     const arrivalMinutes = Math.round(arrivalInfo.eta);
+    if (arrivalMinutes <= 0) return "Llegando";
     return `Llega en ${arrivalMinutes} min`;
 };
   
