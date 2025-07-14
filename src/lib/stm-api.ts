@@ -16,6 +16,14 @@ interface StmToken {
   expires_in: number;
 }
 
+export interface UpcomingBus {
+    line: string;
+    busstopId: number;
+    arrivalTime: number; // minutes
+    busId: number;
+    destination: string;
+}
+
 export interface BusLocation {
     id: string;
     timestamp: string;
@@ -122,14 +130,13 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
       next: { revalidate: 0 }
     });
 
-    // Special retry logic for the bus stops endpoint, as it can occasionally return 204 incorrectly.
     if (response.status === 204) {
-      if (path === '/buses/busstops' && retries > 0) {
-        console.warn(`Received 204 for /buses/busstops. Retrying... (${retries - 1} left)`);
-        await delay(1000); // Wait 1 second before retrying
+      if (path.includes('/buses/busstops') && !path.includes('upcomingbuses') && retries > 0) {
+        console.warn(`Received 204 for ${path}. Retrying... (${retries - 1} left)`);
+        await delay(1000); 
         return stmApiFetch(path, options, retries - 1);
       }
-      return []; // Return empty for other 204s or after retries are exhausted.
+      return []; 
     }
     
     if (response.status === 429) {
@@ -151,7 +158,6 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
-    // Return null to allow the caller to handle the failure gracefully
     return null;
   }
 }
@@ -195,36 +201,29 @@ export async function getBusLocation(line: string, destination?: string): Promis
     }) as BusLocation[];
 }
 
+export async function getUpcomingBuses(busstopId: number, lines: string[]): Promise<UpcomingBus[]> {
+    if (!busstopId) return [];
+    
+    let path = `/buses/busstops/${busstopId}/upcomingbuses?amountperline=2`;
+    if (lines && lines.length > 0) {
+        path += `&lines=${lines.join(',')}`;
+    }
+
+    const data = await stmApiFetch(path);
+
+    if (!Array.isArray(data)) {
+         console.warn(`STM API upcomingbuses response for stop ${busstopId} was not an array.`, data);
+        return [];
+    }
+
+    return data as UpcomingBus[];
+}
+
+
 export async function getAllBusStops(): Promise<StmBusStop[] | null> {
     const data = await stmApiFetch('/buses/busstops');
     if (data === null) {
       return null;
     }
     return (Array.isArray(data) ? data : []) as StmBusStop[];
-}
-
-export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo[]> {
-    const data = await stmApiFetch(`/buses/busstops/${busstopId}/lines`);
-    return (Array.isArray(data) ? data : []) as StmLineInfo[];
-}
-
-export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[] | null> {
-    const data = await stmApiFetch(`/buses/busstops/${stopId}/lines/${lineId}/arrivals`);
-    
-    if (data === null) { // Handle rate limit case or other fetch errors
-        return null;
-    }
-    
-    if (!Array.isArray(data)) {
-        console.warn(`STM API response for arrivals was not an array for stop ${stopId} line ${lineId}.`, data);
-        return [];
-    }
-    return data.map(arrival => ({
-        ...arrival,
-        bus: arrival.bus ? {
-            ...arrival.bus,
-            line: arrival.bus.line.toString(),
-            id: arrival.bus.id?.toString()
-        } : null,
-    }));
 }
