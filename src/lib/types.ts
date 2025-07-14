@@ -32,12 +32,18 @@ export interface StmBusStop {
     };
 }
 
-// Minimal info needed for STM API calls from a Google Maps route step
+export interface ArrivalInfo {
+  eta: number; // in seconds
+  timestamp: string; // ISO 8601 format
+}
+
+// Info needed for STM API calls extracted from a Google Maps route step
 export interface StmInfo {
-    stopId: number | null;
+    stepIndex: number;
     line: string | null;
-    lineVariantId: number | null;
-    arrival: UpcomingBus | null;
+    lineDestination: string | null;
+    departureStopLocation: google.maps.LatLngLiteral | null;
+    arrival: ArrivalInfo | null;
 }
 
 export interface StmLineRouteStop {
@@ -46,6 +52,7 @@ export interface StmLineRouteStop {
     name: string;
     lat: number;
     lng: number;
+    isWaypoint: boolean;
 }
 export interface StmLineRoute {
     line: string;

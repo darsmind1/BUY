@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { Bus, ArrowLeft, Loader2, Map as MapIcon, ArrowRight, List } from 'lucide-react';
+import { Bus, ArrowLeft, Loader2, Map, ArrowRight } from 'lucide-react';
 import React from 'react';
 
 import RouteSearchForm from '@/components/route-search-form';
@@ -13,8 +12,8 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
-import type { Place } from '@/lib/types';
+import { getBusLocation, BusLocation, checkApiConnection, getLineRoute, getAllBusStops, StmBusStop } from '@/lib/stm-api';
+import type { StmLineRoute, StmInfo, ArrivalInfo, Place } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -24,12 +23,18 @@ const LIBRARIES: ("places" | "marker" | "geometry")[] = ['places', 'marker', 'ge
 export default function Home() {
   const [view, setView] = useState<'search' | 'options' | 'details'>('search');
   const [mobileView, setMobileView] = useState<'panel' | 'map'>('panel');
-  const [routes, setRoutes] = useState<google.maps.DirectionsResult[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsResult | null>(null);
+  const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<google.maps.DirectionsRoute | null>(null);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [selectedRouteStmInfo, setSelectedRouteStmInfo] = useState<StmInfo[]>([]);
+  const [lineRoutes, setLineRoutes] = useState<Record<string, StmLineRoute | null>>({});
+
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [allStops, setAllStops] = useState<StmBusStop[]>([]);
+
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
@@ -44,6 +49,15 @@ export default function Home() {
         const isConnected = await checkApiConnection();
         if (isConnected) {
             setApiStatus('connected');
+            // Pre-load all bus stops for faster lookups later
+            getAllBusStops().then(setAllStops).catch(err => {
+              console.error("Failed to preload bus stops", err);
+              toast({
+                  variant: "destructive",
+                  title: "Error de datos",
+                  description: "No se pudieron cargar los datos de las paradas de ómnibus.",
+              });
+            });
         } else {
             setApiStatus('error');
             toast({
@@ -57,58 +71,41 @@ export default function Home() {
     verifyApiConnection();
   }, [toast]);
 
-  // Effect to update bus locations when routes are available
+  // This effect will be responsible for fetching real-time bus locations for the selected route
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    const updateRealtimeData = async () => {
-      if (view === 'search' || routes.length === 0 || apiStatus !== 'connected') {
-        setBusLocations([]);
-        return;
-      }
-      
-      // Extract all unique bus lines from all route options
-      const linesToTrack: { line: string; destination: string | null }[] = [];
-      routes.forEach(route => {
-        route.routes[0]?.legs.forEach(leg => {
-          leg.steps.forEach(step => {
-            if (step.travel_mode === 'TRANSIT' && step.transit?.line.vehicle.type === 'BUS') {
-              const line = step.transit.line.short_name;
-              const destination = step.transit.headsign;
-              if (line && !linesToTrack.some(l => l.line === line && l.destination === destination)) {
-                linesToTrack.push({ line, destination });
-              }
-            }
-          });
-        });
-      });
-
-      if (linesToTrack.length > 0) {
-        try {
-          const locations = await getBusLocation(linesToTrack);
-          setBusLocations(locations);
-        } catch (error) {
-          console.error(`Error fetching real-time data:`, error);
-          setBusLocations([]);
+    const updateRealtimeBusLocations = async () => {
+        if (view !== 'details' || !selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0) {
+            setBusLocations([]);
+            return;
         }
-      } else {
-        setBusLocations([]);
-      }
-    };
 
-    if (view !== 'search' && routes.length > 0) {
-      updateRealtimeData(); // Initial fetch
-      intervalId = setInterval(updateRealtimeData, 20000); // Refresh every 20 seconds
-    } else {
-      setBusLocations([]);
-    }
+        const linesToFetch = selectedRouteStmInfo
+            .map(info => ({
+                line: info.line,
+                destination: info.lineDestination
+            }))
+            .filter(item => item.line);
+
+        if (linesToFetch.length > 0) {
+            try {
+                const locations = await getBusLocation(linesToFetch);
+                setBusLocations(locations);
+            } catch (error) {
+                console.error("Error fetching real-time bus locations:", error);
+                setBusLocations([]);
+            }
+        }
+    };
+    
+    updateRealtimeBusLocations();
+    intervalId = setInterval(updateRealtimeBusLocations, 20000); // Refresh every 20 seconds
 
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+        if (intervalId) clearInterval(intervalId);
     };
-  }, [view, routes, apiStatus]);
+}, [view, selectedRoute, selectedRouteStmInfo, apiStatus]);
 
 
   useEffect(() => {
@@ -124,7 +121,11 @@ export default function Home() {
           setCurrentUserLocation(newLocation);
         },
         (error) => {
-          console.log(`Error watching position: ${error.message}`);
+          if (error.code === error.PERMISSION_DENIED) {
+            console.log("El usuario denegó la solicitud de geolocalización.");
+          } else {
+            console.log(`Error watching position: ${error.message}`);
+          }
         },
         {
           enableHighAccuracy: true,
@@ -142,21 +143,27 @@ export default function Home() {
   }, []);
 
   const handleSearch = async (origin: Place, destination: Place) => {
-    if (!origin.location || !destination.location) return;
+    if (!origin.location || !destination.location) {
+        toast({
+            variant: "destructive",
+            title: "Error de búsqueda",
+            description: "Por favor, selecciona un origen y destino válidos desde las sugerencias.",
+        });
+        return;
+    }
     
-    setRoutes([]);
+    setDirectionsResponse(null);
     setSelectedRoute(null);
-    setBusLocations([]);
+    setSelectedRouteIndex(0);
+    setSelectedRouteStmInfo([]);
+    setLineRoutes({});
     setIsLoading(true);
 
     try {
       const response = await fetch('/api/routes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          origin: origin.location,
-          destination: destination.location,
-        }),
+        body: JSON.stringify({ origin: origin.location, destination: destination.location }),
       });
       
       const result = await response.json();
@@ -167,66 +174,74 @@ export default function Home() {
       }
       
       if (result.routes && result.routes.length > 0) {
-        // The Routes API returns an array of routes. We need to wrap each route
-        // in a DirectionsResult-like structure for compatibility with our components.
-        const directionsResults: google.maps.DirectionsResult[] = result.routes.map((route: any) => ({
-          geocoded_waypoints: result.geocoded_waypoints,
-          routes: [route],
-          request: result.request, // This might not be perfect but good enough for now
-        }));
-        
-        setRoutes(directionsResults);
+        setDirectionsResponse(result);
         setView('options');
         setMobileView('panel');
       } else {
-        console.error('No routes found from Routes API', result);
-        setRoutes([]);
         toast({
           variant: "destructive",
           title: "Ruta no encontrada",
-          description: "No se pudieron encontrar rutas de autobús para el origen y destino seleccionados. Intenta con otras direcciones.",
+          description: "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.",
         });
       }
-    } catch(error) {
-       console.error('Error fetching from /api/routes endpoint:', error);
-       setRoutes([]);
-       toast({
+    } catch (error) {
+      console.error("Failed to fetch directions:", error);
+      toast({
         variant: "destructive",
-        title: "Error de Búsqueda",
-        description: error instanceof Error ? error.message : "Ocurrió un error al buscar la ruta. Por favor, inténtalo de nuevo.",
+        title: "Error al buscar ruta",
+        description: error instanceof Error ? error.message : "Ocurrió un error inesperado al buscar la ruta. Por favor, intenta de nuevo.",
       });
     } finally {
       setIsLoading(false);
     }
   };
-  
-  const handleRouteSelect = (route: google.maps.DirectionsResult) => {
+
+  const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => {
     setSelectedRoute(route);
+    setSelectedRouteIndex(index);
+    setSelectedRouteStmInfo(stmInfo);
+
+    if (apiStatus === 'connected') {
+        const linesWithInfo = stmInfo.map(info => info.line).filter((line): line is string => line !== null);
+        const uniqueLines = [...new Set(linesWithInfo)];
+
+        const lineRoutePromises = uniqueLines.map(line => getLineRoute(line));
+        const results = await Promise.all(lineRoutePromises);
+        
+        const newLineRoutes: Record<string, StmLineRoute | null> = {};
+        uniqueLines.forEach((line, i) => {
+            newLineRoutes[line] = results[i];
+        });
+        setLineRoutes(newLineRoutes);
+    }
+
     setView('details');
     setMobileView('panel');
   };
 
   const handleBack = () => {
-    if (mobileView === 'map' && (view === 'options' || view === 'details')) {
+    if (mobileView === 'map' && view === 'details') {
       setMobileView('panel');
       return;
     }
-    
     if (view === 'details') {
       setView('options');
       setSelectedRoute(null);
+      setSelectedRouteStmInfo([]);
+      setBusLocations([]);
+      setLineRoutes({});
+      setMobileView('panel');
     } else if (view === 'options') {
       setView('search');
-      setRoutes([]);
-      setBusLocations([]);
+      setDirectionsResponse(null);
     }
   };
   
   const getHeaderTitle = () => {
     switch(view) {
-      case 'search': return 'BUSCAR VIAJE';
+      case 'search': return '¿A DÓNDE VAMOS?';
       case 'options': return 'OPCIONES DE TRAYECTO';
-      case 'details': return `DETALLES DE LA RUTA`;
+      case 'details': return 'DETALLES DEL VIAJE';
       default: return 'BusesUY';
     }
   }
@@ -258,7 +273,7 @@ export default function Home() {
             )}
             {view !== 'search' && (
               <Button variant="outline" size="icon" className="md:hidden" onClick={() => setMobileView('map')}>
-                <MapIcon className="h-5 w-5" />
+                <Map className="h-5 w-5" />
               </Button>
             )}
           </header>
@@ -271,25 +286,26 @@ export default function Home() {
                 </div>
               )}
               {view === 'search' && (
-                <RouteSearchForm 
-                  onSearch={handleSearch} 
-                  isGoogleMapsLoaded={isGoogleMapsLoaded}
-                  currentUserLocation={currentUserLocation}
+                <RouteSearchForm
+                    isGoogleMapsLoaded={isGoogleMapsLoaded}
+                    onSearch={handleSearch} 
+                    currentUserLocation={currentUserLocation}
                 />
               )}
-              {view === 'options' && (
-                  <RouteOptionsList
-                    routes={routes}
-                    onRouteSelect={handleRouteSelect}
-                    isApiConnected={apiStatus === 'connected'}
-                    busLocations={busLocations}
-                  />
+              {view === 'options' && directionsResponse && (
+                <RouteOptionsList 
+                  routes={directionsResponse.routes} 
+                  onSelectRoute={handleSelectRoute}
+                  isApiConnected={apiStatus === 'connected'}
+                  allStops={allStops}
+                />
               )}
               {view === 'details' && selectedRoute && (
-                <RouteDetailsPanel
+                <RouteDetailsPanel 
                   route={selectedRoute}
-                  isApiConnected={apiStatus === 'connected'}
+                  stmInfo={selectedRouteStmInfo}
                   busLocations={busLocations}
+                  userLocation={currentUserLocation}
                 />
               )}
           </main>
@@ -298,21 +314,28 @@ export default function Home() {
         <div className={`${isMobile && mobileView === 'panel' ? 'hidden' : 'flex'} flex-1 md:flex h-full w-full relative`}>
             {isMobile && mobileView === 'map' && view !== 'search' && (
               <div className="absolute top-4 left-4 right-4 z-10 shadow-lg flex justify-between">
-                <Button variant="secondary" size="icon" onClick={() => setMobileView('panel')} aria-label="Volver al panel">
-                  <List className="h-5 w-5" />
+                <Button variant="secondary" size="icon" onClick={handleBack} aria-label="Volver al panel">
+                  <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <Button variant="secondary" onClick={handleBack} aria-label="Volver a la búsqueda">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    <span>{view === 'details' ? 'Ver Opciones' : 'Nueva Búsqueda'}</span>
-                </Button>
+                 {view === 'details' && (
+                    <Button variant="secondary" onClick={() => setMobileView('panel')} className="bg-background hover:bg-muted">
+                        Ver detalles
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                )}
               </div>
             )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
-              directions={selectedRoute || (routes.length > 0 ? routes[0] : null)}
+              directionsResponse={directionsResponse} 
+              routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
-              busLocations={busLocations}
               selectedRoute={selectedRoute}
+              busLocations={busLocations}
+              lineRoutes={lineRoutes}
+              view={view}
+              allStops={allStops}
+              stmInfo={selectedRouteStmInfo}
             />
         </div>
       </div>

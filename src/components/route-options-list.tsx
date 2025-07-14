@@ -1,147 +1,176 @@
-
 "use client";
 
-import React, { useEffect, useState, memo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Clock, User, Bus, Wifi, Loader2 } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop, BusLocation } from '@/lib/stm-api';
-import type { UpcomingBus } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { ScrollArea } from './ui/scroll-area';
+import { useState, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, Bus, Footprints, Clock, AlertTriangle } from "lucide-react";
+import { Skeleton } from "./ui/skeleton";
+import { cn, haversineDistance } from "@/lib/utils";
+import type { StmBusStop, UpcomingBus, StmInfo } from "@/lib/types";
+import { getUpcomingBuses, findClosestStmStop } from "@/lib/stm-api";
+import { Badge } from "./ui/badge";
 
 interface RouteOptionsListProps {
-  routes: google.maps.DirectionsResult[];
-  onRouteSelect: (route: google.maps.DirectionsResult) => void;
+  routes: google.maps.DirectionsRoute[];
+  onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
-  busLocations: BusLocation[];
+  allStops: StmBusStop[];
 }
 
+function UpcomingBusEta({ 
+    departureStopLocation, 
+    line, 
+    lineVariantId,
+    allStops
+}: { 
+    departureStopLocation: google.maps.LatLng | null;
+    line: string | null;
+    lineVariantId: number | null;
+    allStops: StmBusStop[];
+}) {
+  const [eta, setEta] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-const RouteOptionCard = memo(({ route, onRouteSelect, isApiConnected, index }: { route: google.maps.DirectionsResult, onRouteSelect: (route: google.maps.DirectionsResult) => void, isApiConnected: boolean, index: number }) => {
-    const leg = route.routes[0].legs[0];
-    const firstBusStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-    const [arrival, setArrival] = useState<UpcomingBus | null | 'loading'>('loading');
+  const fetchEta = useCallback(async () => {
+    if (!departureStopLocation || !line || allStops.length === 0) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
 
-    useEffect(() => {
-        let isMounted = true;
-        
-        const fetchArrival = async () => {
-            if (!isApiConnected || !firstBusStep || !firstBusStep.transit?.departure_stop?.location) {
-                setArrival(null);
-                return;
-            }
-            
-            setArrival('loading');
+    try {
+      const stmStop = await findClosestStmStop(departureStopLocation.lat(), departureStopLocation.lng(), allStops);
+      
+      if (stmStop) {
+        const upcomingBuses = await getUpcomingBuses(stmStop.busstopId, [line]);
+        if (upcomingBuses.length > 0) {
+          // Try to find the exact variant first, otherwise take any bus on the line
+          const nextBus = upcomingBuses.find(b => b.lineVariantId === lineVariantId) || upcomingBuses.find(b => b.line === line);
+          setEta(nextBus ? nextBus.arrival.minutes : null);
+        } else {
+          setEta(null);
+        }
+      } else {
+        setEta(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch ETA for route option", error);
+      setEta(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [departureStopLocation, line, lineVariantId, allStops]);
 
-            try {
-                const departureStopCoords = firstBusStep.transit.departure_stop.location.toJSON();
-                const line = firstBusStep.transit.line.short_name;
-                
-                const stmStop = await findClosestStmStop(departureStopCoords.lat, departureStopCoords.lng);
-                
-                if (stmStop && line) {
-                    const arrivals = await getUpcomingBuses(stmStop.busstopId, [line]);
-                    if (isMounted) {
-                        setArrival(arrivals.length > 0 ? arrivals[0] : null);
-                    }
-                } else {
-                    if (isMounted) setArrival(null);
-                }
+  useEffect(() => {
+    fetchEta();
+    const intervalId = setInterval(fetchEta, 30000); // Refresh every 30 seconds
+    return () => clearInterval(intervalId);
+  }, [fetchEta]);
 
-            } catch (error) {
-                console.error(`Failed to fetch arrivals for route ${index}`, error);
-                if (isMounted) {
-                    setArrival(null);
-                }
-            }
-        };
+  if (loading) {
+    return <Skeleton className="h-5 w-24" />;
+  }
 
-        fetchArrival();
-        const intervalId = setInterval(fetchArrival, 30000);
+  if (eta !== null) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mt-1 md:text-sm">
+        <Clock size={14} className="flex-shrink-0" />
+        <span className="truncate">{eta <= 1 ? "Llegando" : `Próximo en ${eta} min`}</span>
+      </div>
+    );
+  }
 
-        return () => {
-            isMounted = false;
-            clearInterval(intervalId);
-        };
-    }, [firstBusStep, isApiConnected, index]);
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1 md:text-sm">
+        <Clock size={14} className="flex-shrink-0"/>
+        <span className="truncate">Sin arribo en vivo</span>
+    </div>
+  );
+}
 
-    const getArrivalColorClass = (eta: number) => {
-        if (eta <= 5) return 'text-green-400';
-        if (eta <= 10) return 'text-yellow-400';
-        return 'text-red-500';
-    };
+function RouteOptionCard({ route, onSelect, isApiConnected, allStops }: { route: google.maps.DirectionsRoute, onSelect: () => void, isApiConnected: boolean, allStops: StmBusStop[] }) {
+    const leg = route.legs[0];
+    const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
+    const firstTransitStep = transitSteps[0]?.transit;
 
     return (
-        <Card className="hover:bg-secondary/50 transition-colors cursor-pointer" onClick={() => onRouteSelect(route)}>
-            <CardContent className="p-4">
-                <div className="flex justify-between items-start">
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {leg.steps.map((step, i) => (
-                                <React.Fragment key={i}>
-                                    <div className="flex items-center gap-1.5">
-                                        {step.travel_mode === 'WALKING' ? <User className="h-4 w-4 text-muted-foreground" /> : <Bus className="h-4 w-4 text-muted-foreground" />}
-                                        <span className="text-sm">{step.duration?.text}</span>
-                                    </div>
-                                    {i < leg.steps.length - 1 && <span className="text-muted-foreground text-xs">&gt;</span>}
-                                </React.Fragment>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold">{leg.duration?.text}</span>
-                            <span className="text-sm text-muted-foreground">({leg.distance?.text})</span>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        {arrival === 'loading' && isApiConnected && (
-                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                <span>Buscando...</span>
-                            </div>
-                        )}
-                        {arrival && arrival !== 'loading' && (
-                             <div className={cn("flex items-center gap-1.5 text-xs font-bold", getArrivalColorClass(arrival.arrival.minutes))}>
-                                <Wifi className="h-3.5 w-3.5" />
-                                <span>
-                                    {arrival.arrival.minutes <= 0 ? "Llegando" : `${arrival.arrival.minutes} min`}
-                                </span>
-                             </div>
-                        )}
-                         {arrival === null && isApiConnected && (
-                             <p className="text-xs text-muted-foreground italic">Sin arribos</p>
-                         )}
-                         {!isApiConnected && firstBusStep?.transit?.departure_time && (
-                            <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                                <Clock className="h-3.5 w-3.5" />
-                                <span>Sale {firstBusStep.transit.departure_time.text}</span>
-                            </div>
-                         )}
-                    </div>
+        <button 
+            onClick={onSelect} 
+            className="w-full text-left bg-card p-4 rounded-lg border hover:border-primary hover:shadow-md transition-all duration-200 space-y-3"
+        >
+            <div className="flex justify-between items-start">
+                <div className="flex flex-col">
+                    <span className="font-semibold text-lg">{leg.duration?.text}</span>
+                    {isApiConnected && firstTransitStep ? (
+                       <UpcomingBusEta 
+                         departureStopLocation={firstTransitStep.departure_stop.location}
+                         line={firstTransitStep.line.short_name || null}
+                         lineVariantId={null} // Simplified for list view
+                         allStops={allStops}
+                       />
+                    ) : (
+                       <span className="text-xs text-muted-foreground mt-1">{leg.departure_time?.text}</span>
+                    )}
                 </div>
-            </CardContent>
-        </Card>
+                <div className="flex items-center gap-2 -mt-1">
+                  {leg.steps.map((step, index) => {
+                      if (step.travel_mode === 'WALKING') {
+                          return <Footprints key={index} className="h-5 w-5 text-muted-foreground" />
+                      }
+                      if (step.travel_mode === 'TRANSIT' && step.transit) {
+                          return (
+                              <Badge key={index} variant="secondary" className="font-bold">
+                                  <Bus size={12} className="mr-1"/>
+                                  {step.transit.line.short_name}
+                              </Badge>
+                          )
+                      }
+                      return null;
+                  }).reduce((prev, curr, index) => {
+                      if (index === 0) return [curr];
+                      return [...prev, <span key={`sep-${index}`} className="text-muted-foreground/50 text-sm">&gt;</span>, curr]
+                  }, [] as React.ReactNode[])}
+                </div>
+            </div>
+            
+            <div className="text-xs text-muted-foreground">
+                {leg.distance?.text} &middot; {route.summary || 'Ruta estándar'}
+            </div>
+        </button>
     );
-});
-RouteOptionCard.displayName = 'RouteOptionCard';
+}
 
+export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected, allStops }: RouteOptionsListProps) {
 
-export default function RouteOptionsList({ routes, onRouteSelect, isApiConnected, busLocations }: RouteOptionsListProps) {
+  const handleSelect = (route: google.maps.DirectionsRoute, index: number) => {
+    // Extract STM-relevant information from the selected route
+    const stmInfo: StmInfo[] = route.legs[0].steps.map((step, stepIndex) => {
+        if (step.travel_mode === 'TRANSIT' && step.transit) {
+            return {
+                stepIndex,
+                line: step.transit.line.short_name || null,
+                lineDestination: step.transit.headsign || null,
+                departureStopLocation: step.transit.departure_stop.location?.toJSON() || null,
+                arrival: null, // This will be populated in the details view
+            };
+        }
+        return { stepIndex, line: null, lineDestination: null, departureStopLocation: null, arrival: null };
+    });
+
+    onSelectRoute(route, index, stmInfo);
+  };
+
   return (
-    <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
-      <ScrollArea className="h-[calc(100dvh-150px)] md:h-auto">
-        <div className="p-4 space-y-3">
-          {routes.map((route, index) => (
-            <RouteOptionCard 
-                key={index} 
-                route={route} 
-                onRouteSelect={onRouteSelect} 
-                isApiConnected={isApiConnected}
-                index={index}
-            />
-          ))}
-        </div>
-      </ScrollArea>
+    <div className="space-y-4 animate-in fade-in duration-300">
+      {routes.map((route, index) => (
+        <RouteOptionCard 
+            key={index}
+            route={route}
+            onSelect={() => handleSelect(route, index)}
+            isApiConnected={isApiConnected}
+            allStops={allStops}
+        />
+      ))}
     </div>
   );
 }

@@ -19,9 +19,13 @@ interface StmToken {
 }
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+const allStopsCache = {
+    stops: [] as StmBusStop[],
+    expiresAt: 0,
+};
 
 const STM_TOKEN_URL = 'https://mvdapi-auth.montevideo.gub.uy/token';
-const STM_API_BASE_URL = 'https://api.transportepublico.montevideo.gub.uy/api';
+const STM_API_BASE_URL = 'https://api.montevideo.gub.uy/api/transportepublico';
 
 // Forcefully gets a new token, ignoring the cache.
 async function getNewAccessToken(): Promise<string> {
@@ -91,8 +95,8 @@ async function getAccessToken(): Promise<string> {
 }
 
 async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any> {
-    const makeRequest = async (isRetry = false) => {
-        const accessToken = isRetry ? await getNewAccessToken() : await getAccessToken();
+    const makeRequest = async () => {
+        const accessToken = await getAccessToken();
         const url = `${STM_API_BASE_URL}${path}`;
 
         return fetch(url, {
@@ -102,6 +106,7 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
                 Authorization: `Bearer ${accessToken}`,
                 Accept: 'application/json',
             },
+            next: { revalidate: 0 } // No caching for these requests
         });
     };
 
@@ -111,7 +116,8 @@ async function stmApiFetch(path: string, options: RequestInit = {}): Promise<any
     // Force a new token and retry once.
     if (response.status === 401 || response.status === 403) {
         console.warn(`STM API authentication failed with status ${response.status} for path ${path}. Forcing new token and retrying.`);
-        response = await makeRequest(true);
+        await getNewAccessToken(); // This will clear the cache and rotate credentials
+        response = await makeRequest();
     }
     
     if (response.status === 204) {
@@ -144,8 +150,8 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: {line: string, destination?: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(lines.map(l => l.line))];
+export async function getBusLocation(lines: {line?: string | null, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
@@ -160,32 +166,18 @@ export async function getBusLocation(lines: {line: string, destination?: string 
             return [];
         }
 
-        const allBuses: BusLocation[] = data.map((bus: any) => ({
+        const allBuses = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
-            lineVariantId: bus.lineVariantId,
-            destination: bus.destination
-        }));
-        
-        const linesWithDestinations = lines.filter(l => l.destination);
-        if (linesWithDestinations.length === 0) {
-            return allBuses;
-        }
+        })) as BusLocation[];
 
-        // Filter by line and destination for more precision
+        // Filter by destination if provided
         return allBuses.filter(bus => {
-            return lines.some(requestedLine => {
-                if (bus.line !== requestedLine.line) {
-                    return false;
-                }
-                // If the request doesn't specify a destination, a line match is enough
-                if (!requestedLine.destination || !bus.destination) {
-                    return true;
-                }
-                // If both exist, check if the bus destination includes the requested one
-                return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
-            });
+            const lineMatch = lines.find(l => l.line === bus.line);
+            // If no destination is specified for this line, include it.
+            // If a destination is specified, check if the bus's destination includes it.
+            return !lineMatch?.destination || (bus.destination && bus.destination.includes(lineMatch.destination));
         });
 
     } catch (error) {
@@ -196,52 +188,52 @@ export async function getBusLocation(lines: {line: string, destination?: string 
 
 
 export async function getAllBusStops(): Promise<StmBusStop[]> {
+    // Cache for 24 hours
+    if (allStopsCache.stops.length > 0 && Date.now() < allStopsCache.expiresAt) {
+        return allStopsCache.stops;
+    }
+
     try {
-        // This response is cached for a day due to next: { revalidate }
-        const data: StmBusStop[] = await stmApiFetch(`/buses/busstops`, { next: { revalidate: 3600 * 24 } });
+        const path = '/buses/busstops';
+        const data = await stmApiFetch(path);
+
+        if (!Array.isArray(data)) {
+            console.error('Failed to fetch bus stops, response was not an array.');
+            return [];
+        }
+
+        allStopsCache.stops = data;
+        allStopsCache.expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
         return data;
+
     } catch (error) {
-        console.error('Error in getAllBusStops:', error);
-        throw error;
+        console.error("Error fetching all bus stops:", error);
+        return [];
     }
 }
 
-export async function findClosestStmStop(lat: number, lng: number): Promise<StmBusStop | null> {
-    try {
-        const allStops = await getAllBusStops();
-        if (allStops.length === 0) {
-            return null;
-        }
 
-        let closestStop: StmBusStop | null = null;
-        let minDistance = Infinity;
-
-        for (const stop of allStops) {
-            const stopCoords = {
-                lat: stop.location.coordinates[1],
-                lng: stop.location.coordinates[0],
-            };
-            const distance = haversineDistance({ lat, lng }, stopCoords);
-
-            if (distance < minDistance) {
-                minDistance = distance;
-                closestStop = stop;
-            }
-        }
-        
-        // Only return if the stop is within a reasonable distance (e.g., 500 meters)
-        if (closestStop && minDistance < 500) {
-            return closestStop;
-        }
-
-        return null;
-
-    } catch (error) {
-        console.error(`Error finding closest stop locally for coords ${lat},${lng}:`, error);
+export async function findClosestStmStop(lat: number, lng: number, allStops: StmBusStop[]): Promise<StmBusStop | null> {
+    if (allStops.length === 0) {
+        console.warn("findClosestStmStop called with empty stops list.");
         return null;
     }
-}
+    
+    let closestStop: StmBusStop | null = null;
+    let minDistance = Infinity;
+    const searchRadius = 300; // 300 meters radius
 
+    for (const stop of allStops) {
+        const stopCoords = { lat: stop.location.coordinates[1], lng: stop.location.coordinates[0] };
+        const distance = haversineDistance({ lat, lng }, stopCoords);
+
+        if (distance < minDistance && distance <= searchRadius) {
+            minDistance = distance;
+            closestStop = stop;
+        }
+    }
+    return closestStop;
+}
 
 export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     const path = `/buses/line/${line}/route`;
@@ -258,32 +250,20 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
-export async function getUpcomingBuses(busstopId: number, lines: string[], lineVariantId?: number | null): Promise<UpcomingBus[]> {
-    if (lines.length === 0) {
-        return [];
+export async function getUpcomingBuses(busstopId: number, lines: string[] = []): Promise<UpcomingBus[]> {
+    let path = `/buses/busstops/${busstopId}/arrivals`;
+    if (lines.length > 0) {
+        path += `?lines=${lines.join(',')}`;
     }
-    
-    let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
-    const params = new URLSearchParams();
-    params.append('amountperline', '1');
-    
-    // Prioritize lineVariantId for precision, but ensure 'lines' is always present
-    if (lineVariantId) {
-        params.append('lineVariantIds', lineVariantId.toString());
-    }
-    params.append('lines', lines.join(','));
-    
-    path += params.toString();
 
     try {
-        const data = await stmApiFetch(path, { cache: 'no-store' });
+        const data = await stmApiFetch(path);
         if (!Array.isArray(data)) {
-            console.warn(`Upcoming buses response for stop ${busstopId} was not an array.`);
             return [];
         }
         return data as UpcomingBus[];
     } catch (error) {
-        console.error(`Error in getUpcomingBuses for stop ${busstopId} and lines '${lines.join(',')}':`, error);
+        console.error(`Error fetching upcoming buses for stop ${busstopId}:`, error);
         return [];
     }
 }
