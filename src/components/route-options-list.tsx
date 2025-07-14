@@ -9,6 +9,7 @@ import { findClosestStmStop, getUpcomingBuses } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 const ArrivalInfoLegend = () => {
@@ -191,7 +192,10 @@ export default function RouteOptionsList({
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAllArrivals = useCallback(async () => {
-    if (!isApiConnected) return;
+    if (!isApiConnected || !isGoogleMapsLoaded) {
+      setIsLoading(false);
+      return;
+    }
 
     const allRoutesStmInfoPromises = routes.map(async (route, index) => {
         const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
@@ -230,27 +234,34 @@ export default function RouteOptionsList({
         return { index, stmInfo };
     });
 
-    const results = await Promise.all(allRoutesStmInfoPromises);
-    
-    setStmInfoByRoute(prev => {
-        const newState = { ...prev };
-        results.forEach(({ index, stmInfo }) => {
-            newState[index] = stmInfo;
+    try {
+        const results = await Promise.all(allRoutesStmInfoPromises);
+        
+        setStmInfoByRoute(prev => {
+            const newState = { ...prev };
+            results.forEach(({ index, stmInfo }) => {
+                newState[index] = stmInfo;
+            });
+            return newState;
         });
-        return newState;
-    });
 
-  }, [routes, isApiConnected]);
+    } catch (error) {
+        console.error("Error fetching arrivals:", error);
+    } finally {
+        if (isLoading) {
+            setIsLoading(false);
+        }
+    }
+  }, [routes, isApiConnected, isGoogleMapsLoaded, isLoading]);
 
 
-  // Effect for initial data setup (stops, lines, etc.) and periodic updates
   useEffect(() => {
     if (!isGoogleMapsLoaded || !routes.length) {
         setIsLoading(false);
         return;
     }
     
-    // 1. Initialize with basic structure from Google Directions
+    // Set initial structure based on Google routes
     const initialStmInfo: Record<number, StmInfo[]> = {};
     routes.forEach((route, index) => {
         const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
@@ -263,10 +274,11 @@ export default function RouteOptionsList({
         }));
     });
     setStmInfoByRoute(initialStmInfo);
-    setIsLoading(false);
+    setIsLoading(true);
     
-    fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 30000); // Update every 30 seconds
+    // Perform initial fetch and then set up interval
+    fetchAllArrivals();
+    const intervalId = setInterval(fetchAllArrivals, 30000);
 
     return () => clearInterval(intervalId);
 
@@ -274,9 +286,15 @@ export default function RouteOptionsList({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center space-y-2 text-sm text-muted-foreground py-8">
-        <Loader2 className="h-6 w-6 animate-spin" />
-        <p>Calculando mejores opciones...</p>
+      <div className="space-y-3">
+        {[...Array(3)].map((_, i) => (
+           <Card key={i}>
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-5 w-1/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </CardContent>
+           </Card>
+        ))}
       </div>
     );
   }
