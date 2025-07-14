@@ -4,26 +4,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
+import { Clock, Footprints, ChevronsRight, Wifi, Loader2, Info, AlertTriangle } from 'lucide-react';
 import { findClosestStmStop, getUpcomingBuses } from '@/lib/stm-api';
-import type { ArrivalInfo, StmInfo, UpcomingBus } from '@/lib/types';
+import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert } from '@/components/ui/alert';
-
-interface AlternativeLineInfo {
-    line: string;
-    destination: string | null;
-    arrival: ArrivalInfo | null;
-}
-
-interface TransferInfo {
-    stopName: string;
-    stopLocation: google.maps.LatLngLiteral;
-    mainTransferLine: string | null;
-    mainTransferLineDestination: string | null;
-    alternativeLines: AlternativeLineInfo[];
-}
 
 
 const ArrivalInfoLegend = () => {
@@ -205,6 +190,59 @@ export default function RouteOptionsList({
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
+  const fetchAllArrivals = useCallback(async () => {
+    if (!isApiConnected) return;
+
+    const allRoutesStmInfoPromises = routes.map(async (route, index) => {
+        const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
+        if (!transitSteps || transitSteps.length === 0) {
+            return { index, stmInfo: [] };
+        }
+
+        const stmInfoForRoutePromises = transitSteps.map(async (step) => {
+            const googleTransitLine = step.transit!.line.short_name!;
+            const departureStopLocation = step.transit!.departure_stop.location!;
+            const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
+
+            const closestStop = await findClosestStmStop(lat, lng);
+            let arrival: ArrivalInfo | null = null;
+            
+            if (closestStop) {
+                const upcomingBus = await getUpcomingBuses(closestStop.busstopId, googleTransitLine);
+                if (upcomingBus && upcomingBus.arrival) {
+                    arrival = {
+                        eta: upcomingBus.arrival.minutes,
+                        timestamp: upcomingBus.arrival.lastUpdate,
+                    };
+                }
+            }
+
+            return {
+                stopId: closestStop?.busstopId ?? null,
+                line: googleTransitLine,
+                lineDestination: step.transit!.headsign || null,
+                departureStopLocation: { lat, lng },
+                arrival,
+            };
+        });
+        
+        const stmInfo = await Promise.all(stmInfoForRoutePromises);
+        return { index, stmInfo };
+    });
+
+    const results = await Promise.all(allRoutesStmInfoPromises);
+    
+    setStmInfoByRoute(prev => {
+        const newState = { ...prev };
+        results.forEach(({ index, stmInfo }) => {
+            newState[index] = stmInfo;
+        });
+        return newState;
+    });
+
+  }, [routes, isApiConnected]);
+
+
   // Effect for initial data setup (stops, lines, etc.) and periodic updates
   useEffect(() => {
     if (!isGoogleMapsLoaded || !routes.length) {
@@ -226,72 +264,13 @@ export default function RouteOptionsList({
     });
     setStmInfoByRoute(initialStmInfo);
     setIsLoading(false);
-
-
-    const fetchAllArrivals = async () => {
-        if (!isApiConnected) return;
-
-        // 2. Asynchronously enrich with real-time data
-        routes.forEach(async (route, index) => {
-            const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
-            if (!transitSteps || transitSteps.length === 0) return;
-
-            const updatedStmInfoForRoute = await Promise.all(transitSteps.map(async (step) => {
-                const googleTransitLine = step.transit!.line.short_name!;
-                const departureStopLocation = step.transit!.departure_stop.location!;
-                
-                const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
-                
-                // Find the corresponding STM stop
-                const closestStop = await findClosestStmStop(lat, lng);
-                
-                let arrival: ArrivalInfo | null = null;
-                if (closestStop) {
-                    // If stop is found, get the upcoming bus for the specific line
-                    const upcomingBus = await getUpcomingBuses(closestStop.busstopId, googleTransitLine);
-                    if (upcomingBus && upcomingBus.arrival) {
-                        arrival = {
-                            eta: upcomingBus.arrival.minutes,
-                            timestamp: upcomingBus.arrival.lastUpdate,
-                        };
-                    }
-                }
-
-                // Return the enriched info for this step
-                return {
-                    stopId: closestStop?.busstopId ?? null,
-                    line: googleTransitLine,
-                    lineDestination: step.transit!.headsign || null,
-                    departureStopLocation: { lat, lng },
-                    arrival,
-                };
-            }));
-            
-            // Update the state for the specific route with the new info
-            setStmInfoByRoute(prev => {
-              const currentRouteInfo = prev[index] || [];
-              const mergedInfo = currentRouteInfo.map(info => {
-                  const updated = updatedStmInfoForRoute.find(u => 
-                      u.line === info.line && 
-                      u.departureStopLocation.lat.toFixed(4) === info.departureStopLocation?.lat.toFixed(4)
-                  );
-                  return updated || info;
-              });
-
-              return {
-                ...prev,
-                [index]: mergedInfo
-              };
-            });
-        });
-    };
-
+    
     fetchAllArrivals(); // Initial fetch
     const intervalId = setInterval(fetchAllArrivals, 30000); // Update every 30 seconds
 
     return () => clearInterval(intervalId);
 
-  }, [routes, isApiConnected, isGoogleMapsLoaded]);
+  }, [routes, isApiConnected, isGoogleMapsLoaded, fetchAllArrivals]);
 
   if (isLoading) {
     return (
@@ -334,3 +313,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
