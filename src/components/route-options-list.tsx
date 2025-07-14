@@ -53,6 +53,7 @@ const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return 'text-primary';
     const arrivalMinutes = arrivalInfo.eta;
+    console.log(`[TEST] Arrival ETA for color calculation: ${arrivalMinutes} minutes`);
     if (arrivalMinutes <= 5) return 'text-green-400';
     if (arrivalMinutes <= 10) return 'text-yellow-400';
     return 'text-red-500';
@@ -216,6 +217,13 @@ export default function RouteOptionsList({
           }
           
           const firstBusStepInfo = routeStmInfo[0];
+          
+          // TEST: Only check for CE1 line
+          if (firstBusStepInfo.line !== 'CE1') {
+            console.log(`[TEST] Skipping non-CE1 line: ${firstBusStepInfo.line}`);
+            return { index, stmInfo: routeStmInfo };
+          }
+          console.log(`[TEST] Attempting to fetch arrivals for line: ${firstBusStepInfo.line}`);
           
           const stopLocation = firstBusStepInfo.departureStopLocation;
           if (!stopLocation) return { index, stmInfo: routeStmInfo };
