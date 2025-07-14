@@ -42,8 +42,9 @@ function toDirectionsResult(routesApiResponse: any): any {
           transit: transitDetails ? {
             ...transitDetails,
             line: {
-              ...transitDetails.line,
+              ...(transitDetails.line || {}),
               short_name: transitDetails.transitLine?.shortName || 'N/A',
+              name: transitDetails.transitLine?.name || '',
               vehicle: {
                 name: transitDetails.transitLine?.vehicle?.name?.text || 'Bus',
                 type: transitDetails.transitLine?.vehicle?.type || 'BUS',
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
     if (!response.ok || data.error) {
        console.error('Routes API Error:', data.error || `Status: ${response.status}`);
        const errorMessage = data.error?.message || 'Unknown error from Google Routes API';
-       return NextResponse.json({ error: 'Failed to get routes from Google', details: errorMessage }, { status: response.status });
+       return NextResponse.json({ error: 'Failed to get routes from Google', details: errorMessage }, { status: response.status || 500 });
     }
     
     // Convert the response to be as compatible as possible with DirectionsResult
