@@ -151,8 +151,8 @@ async function stmApiFetch(path: string, options: RequestInit = {}, retries = 3)
 
   } catch (error) {
     console.error(`Exception during STM API fetch for path ${path}:`, error);
-    // Re-throw the error so the calling server action fails clearly.
-    throw error;
+    // Return null to allow the caller to handle the failure gracefully
+    return null;
   }
 }
 
@@ -195,8 +195,11 @@ export async function getBusLocation(line: string, destination?: string): Promis
     }) as BusLocation[];
 }
 
-export async function getAllBusStops(): Promise<StmBusStop[]> {
+export async function getAllBusStops(): Promise<StmBusStop[] | null> {
     const data = await stmApiFetch('/buses/busstops');
+    if (data === null) {
+      return null;
+    }
     return (Array.isArray(data) ? data : []) as StmBusStop[];
 }
 
@@ -208,7 +211,7 @@ export async function getLinesForBusStop(busstopId: number): Promise<StmLineInfo
 export async function getArrivalsForStop(stopId: number, lineId: number): Promise<BusArrival[] | null> {
     const data = await stmApiFetch(`/buses/busstops/${stopId}/lines/${lineId}/arrivals`);
     
-    if (data === null) { // Handle rate limit case
+    if (data === null) { // Handle rate limit case or other fetch errors
         return null;
     }
     
