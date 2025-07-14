@@ -246,6 +246,14 @@ const transitPolylineOptions = { strokeColor: '#A40034', strokeOpacity: 0.8, str
 const walkingPolylineOptions = { strokeColor: '#4A4A4A', strokeOpacity: 0, strokeWeight: 2, zIndex: 4, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeWeight: 3, scale: 3, strokeColor: '#4A4A4A' }, offset: '0', repeat: '15px' }] };
 
 
+const BusOnMapIndicator = () => (
+    <div className="flex items-center gap-1.5 text-green-400/80 text-xs font-medium">
+        <Wifi className="h-3.5 w-3.5" />
+        <span>Bus en mapa</span>
+    </div>
+);
+
+
 export default function RouteDetailsPanel({ 
   route, 
   busLocations = [],
@@ -280,6 +288,32 @@ export default function RouteDetailsPanel({
     if (arrivalMinutes <= 10) return 'text-yellow-400';
     return 'text-red-500';
   };
+
+  const isAnyBusOnMapWithoutArrival = () => {
+    return leg.steps.some(step => {
+        const isTransit = step.travel_mode === 'TRANSIT' && step.transit;
+        if (!isTransit) return false;
+
+        const transitStepInfo = stmInfo.find(info => 
+            info.line === step.transit?.line.short_name &&
+            info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
+        );
+
+        if (transitStepInfo?.arrival) return false; // Has arrival info, so we don't show "Bus on map"
+
+        const busForStep = busLocations.find(b => b.line === step.transit?.line.short_name);
+        const busCoords = busForStep ? { lat: busForStep.location.coordinates[1], lng: busForStep.location.coordinates[0] } : null;
+        const stopCoords = transitStepInfo?.departureStopLocation;
+        
+        if (busCoords && stopCoords) {
+            const distance = haversineDistance(busCoords, stopCoords);
+            if (distance < 2000) return true; // Bus is on map and has no arrival info
+        }
+        return false;
+    });
+  };
+
+  const showBusOnMapInHeader = isAnyBusOnMapWithoutArrival();
 
   return (
     <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
@@ -324,8 +358,8 @@ export default function RouteDetailsPanel({
                 </div>
             )}
           <CardHeader className="pt-4 pb-3">
-            <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2 flex-wrap">
+            <CardTitle className="flex items-start justify-between text-base">
+              <div className="flex items-center gap-2 flex-wrap flex-1">
                   {busLines.map((bus, index) => (
                     <React.Fragment key={bus}>
                       <Badge variant="outline" className="text-sm font-mono">{bus}</Badge>
@@ -336,11 +370,12 @@ export default function RouteDetailsPanel({
                     <Badge variant="outline" className="text-sm">A pie</Badge>
                   )}
               </div>
-              <div className="flex items-center gap-3 text-sm font-normal">
+              <div className="flex flex-col items-end gap-1.5 text-sm font-normal">
                 <div className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{duration} min</span>
                 </div>
+                 {showBusOnMapInHeader && <BusOnMapIndicator />}
               </div>
             </CardTitle>
           </CardHeader>
@@ -417,13 +452,6 @@ export default function RouteDetailsPanel({
                                 {transitStepInfo.arrival.eta < 60 ? "Llegando" : `Llega en ${Math.round(transitStepInfo.arrival.eta / 60)} min`}
                               </span>
                            </div>
-                        )}
-
-                        {isTransit && busIsOnMap && !transitStepInfo?.arrival &&(
-                            <div className="flex items-center gap-1.5 text-green-400/80 text-xs font-medium pt-1">
-                                <Wifi className="h-3.5 w-3.5" />
-                                <span>Bus en mapa</span>
-                            </div>
                         )}
 
                         {isTransit && !transitStepInfo?.arrival && !busIsOnMap && step.transit?.departure_time?.text && (
