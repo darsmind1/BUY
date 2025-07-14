@@ -110,7 +110,7 @@ export default function Home() {
         return;
       }
   
-      const linesToFetch = selectedRouteStmInfo.map(info => info.line);
+      const linesToFetch = [...new Set(selectedRouteStmInfo.map(info => info.line))];
   
       try {
         const locations = await getBusLocation(linesToFetch);
