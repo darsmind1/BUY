@@ -5,7 +5,7 @@ const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
 const ROUTES_API_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 
 // Function to convert API response to a google.maps.DirectionsResult compatible format
-// This is a simplified conversion and might need adjustments for full compatibility.
+// This version is more robust and uses optional chaining to prevent crashes.
 function toDirectionsResult(routesApiResponse: any): any {
   if (!routesApiResponse.routes || routesApiResponse.routes.length === 0) {
     return { routes: [] };
@@ -59,8 +59,8 @@ function toDirectionsResult(routesApiResponse: any): any {
           departure_time: { text: step.transitDetails.departureTime ? new Date(step.transitDetails.departureTime).toLocaleTimeString('es-UY') : 'N/A' },
         } : undefined,
         polyline: { points: step.polyline?.encodedPolyline }
-      })) || []
-    })) || [],
+      })) || [] // Use empty array as fallback if steps are missing
+    })) || [], // Use empty array as fallback if legs are missing
     bounds: route.viewport ? {
         north: route.viewport.high?.latitude,
         south: route.viewport.low?.latitude,
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error in routes endpoint:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
 
