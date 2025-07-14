@@ -305,73 +305,43 @@ export default function RouteOptionsList({
     }
 
     const initialStmInfo: Record<number, StmInfo[]> = {};
-    const transferInfoPromises: Promise<{ index: number; info: TransferInfo | null; }>[] = [];
-
-    // First, populate initial data from Google routes
     routes.forEach((route, index) => {
-        const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
-        initialStmInfo[index] = transitSteps.map(step => ({
-            stopId: null,
-            line: step.transit!.line.short_name!,
-            lineDestination: step.transit!.headsign || null,
-            departureStopLocation: { 
-                lat: step.transit!.departure_stop.location!.lat(), 
-                lng: step.transit!.departure_stop.location!.lng() 
-            },
-            arrival: null,
-        }));
-
-        if (transitSteps.length > 1) {
-            const transferStep = transitSteps[1];
-            const transferStopLocation = transferStep.transit?.departure_stop.location;
-            if (transferStopLocation) {
-                transferInfoPromises.push(
-                    (async () => {
-                        const stopLocationLiteral = { lat: transferStopLocation.lat(), lng: transferStopLocation.lng() };
-                        const stopName = await getFormattedAddress(stopLocationLiteral.lat, stopLocationLiteral.lng);
-                        const mainTransferLine = transferStep.transit?.line.short_name ?? null;
-                        const mainTransferLineDestination = transferStep.transit?.headsign ?? null;
-                        const alternativeLines = await findAlternativeLines(stopLocationLiteral, route.legs[0].end_location);
-                        const alternativeLinesInfo: AlternativeLineInfo[] = alternativeLines.map(lineInfo => ({ ...lineInfo, arrival: null }));
-                        return { index, info: { stopName, stopLocation: stopLocationLiteral, mainTransferLine, mainTransferLineDestination, alternativeLines: alternativeLinesInfo } };
-                    })()
-                );
-            }
-        }
+      const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
+      initialStmInfo[index] = transitSteps.map(step => ({
+        stopId: null,
+        line: step.transit!.line.short_name!,
+        lineDestination: step.transit!.headsign || null,
+        departureStopLocation: {
+          lat: step.transit!.departure_stop.location!.lat(),
+          lng: step.transit!.departure_stop.location!.lng()
+        },
+        arrival: null,
+      }));
     });
 
-    setStmInfoByRoute(initialStmInfo);
-
-    const transferResults = await Promise.all(transferInfoPromises);
-    const newTransferInfo: Record<number, TransferInfo | null> = {};
-    transferResults.forEach(result => { newTransferInfo[result.index] = result.info; });
-    setTransferInfoByRoute(newTransferInfo);
-
-    // Now, enrich with real-time data
     const enrichedStmInfo = { ...initialStmInfo };
-    
-    for (const routeIndex in enrichedStmInfo) {
-      for (const info of enrichedStmInfo[routeIndex]) {
-        if (info.departureStopLocation) {
-          const closestStop = await findClosestStmStop(info.departureStopLocation.lat, info.departureStopLocation.lng);
-          if (closestStop) {
-            info.stopId = closestStop.busstopId;
-            const upcomingBus = await getUpcomingBuses(closestStop.busstopId, info.line);
-            if (upcomingBus && upcomingBus.arrival) {
-              info.arrival = {
-                eta: upcomingBus.arrival.minutes,
-                timestamp: upcomingBus.arrival.lastUpdate,
-              };
-            }
+    const allPromises = routes.map(async (route, index) => {
+      const firstTransitStepInfo = enrichedStmInfo[index]?.[0];
+      if (firstTransitStepInfo?.departureStopLocation && firstTransitStepInfo.line) {
+        const closestStop = await findClosestStmStop(firstTransitStepInfo.departureStopLocation.lat, firstTransitStepInfo.departureStopLocation.lng);
+        if (closestStop) {
+          firstTransitStepInfo.stopId = closestStop.busstopId;
+          const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstTransitStepInfo.line);
+          if (upcomingBus?.arrival) {
+            firstTransitStepInfo.arrival = {
+              eta: upcomingBus.arrival.minutes,
+              timestamp: upcomingBus.arrival.lastUpdate,
+            };
           }
         }
       }
-    }
+    });
 
+    await Promise.all(allPromises);
     setStmInfoByRoute(enrichedStmInfo);
     setIsLoading(false);
 
-  }, [routes, isApiConnected, findAlternativeLines, isGoogleMapsLoaded]);
+  }, [routes, isApiConnected]);
 
 
   useEffect(() => {
@@ -432,7 +402,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    
-
-    
