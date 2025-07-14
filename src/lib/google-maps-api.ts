@@ -1,7 +1,7 @@
 
 'use server';
 
-const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY || "";
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 export async function getFormattedAddress(lat: number, lng: number): Promise<string> {
   if (!googleMapsApiKey) {
