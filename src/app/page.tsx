@@ -17,7 +17,7 @@ import type { StmLineRoute, StmInfo, ArrivalInfo } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
-const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY || "";
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const LIBRARIES: ("places" | "marker" | "geometry")[] = ['places', 'marker', 'geometry'];
 
 export default function Home() {
