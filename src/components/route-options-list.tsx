@@ -76,12 +76,11 @@ const getSignalAge = (arrivalInfo: ArrivalInfo | null) => {
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return 'text-primary';
     
-    const age = getSignalAge(arrivalInfo);
-    if (age === null) return 'text-primary';
+    const arrivalMinutes = arrivalInfo.eta / 60;
     
-    if (age <= 60) return 'text-green-400'; // Less than 1 minute old
-    if (age <= 120) return 'text-yellow-400'; // 1 to 2 minutes old
-    return 'text-red-500'; // Older than 2 minutes
+    if (arrivalMinutes <= 5) return 'text-green-400';
+    if (arrivalMinutes <= 10) return 'text-yellow-400';
+    return 'text-red-500';
 };
 
 
@@ -413,15 +412,15 @@ export default function RouteOptionsList({
       try {
         const locations = await getBusLocation(linesToFetch);
         
-        const findArrivalForStop = (
-            line: string,
-            destination: string | null,
-            stopLocation: google.maps.LatLngLiteral
-        ): ArrivalInfo | null => {
+        const findArrivalForStop = (line: string, destination: string | null, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
             if (!isGoogleMapsLoaded) return null;
-            const liveBus = locations.find(l => 
-                l.line === line && l.destination === destination
-            );
+            // Find a bus that matches BOTH line and destination (if destination is provided)
+            const liveBus = locations.find(l => {
+              const lineMatch = l.line === line;
+              if (!destination) return lineMatch; // If no destination required, line match is enough
+              return lineMatch && l.destination === destination;
+            });
+            
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
                     new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
@@ -466,7 +465,7 @@ export default function RouteOptionsList({
                   ...currentInfo,
                   alternativeLines: currentInfo.alternativeLines.map(alt => {
                     const newAlt = { ...alt };
-                    const newArrival = findArrivalForStop(alt.line, alt.destination, currentInfo.stopLocation);
+                    const newArrival = findArrivalForStop(newAlt.line, newAlt.destination, currentInfo.stopLocation);
                     const oldSignalAge = getSignalAge(newAlt.arrival);
                     if (newArrival) {
                       newAlt.arrival = newArrival;
@@ -490,7 +489,7 @@ export default function RouteOptionsList({
     };
 
     fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 20000); // Update every 20 seconds
+    const intervalId = setInterval(fetchAllArrivals, 50000); // Update every 50 seconds
 
     return () => clearInterval(intervalId);
   }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
@@ -537,5 +536,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    

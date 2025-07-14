@@ -146,55 +146,28 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-// Helper to normalize destination strings for comparison
-const normalizeDestination = (str: string | null | undefined): string => {
-    if (!str) return '';
-    return str.toUpperCase().replace(/\s/g, '');
-};
-
-export async function getBusLocation(requiredLines: {line: string, destination: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(requiredLines.map(l => l.line))];
+export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
     const path = `/buses?lines=${lineParams}`;
     
     try {
-        const allBusesForLines = await stmApiFetch(path);
+        const data = await stmApiFetch(path);
 
-        if (!Array.isArray(allBusesForLines)) {
-            if (allBusesForLines === null) return []; // Handle rate limiting case
-            console.warn(`STM API response for ${path} was not an array, returning empty. Response:`, allBusesForLines);
+        if (!Array.isArray(data)) {
+            if (data === null) return []; // Handle rate limiting case
+            console.warn(`STM API response for ${path} was not an array, returning empty. Response:`, data);
             return [];
         }
 
-        // Filter the buses based on the required destination (headsign)
-        const filteredBuses = allBusesForLines.filter(bus => {
-            const busLineStr = (bus.line?.value ?? bus.line).toString();
-
-            // Find if this bus line is one of the ones we need
-            const requiredLine = requiredLines.find(rl => rl.line === busLineStr);
-            if (!requiredLine) {
-                return false; // Should not happen if API works as expected, but good practice
-            }
-
-            // If the required line doesn't have a specific destination, it's a match.
-            if (!requiredLine.destination) {
-                return true;
-            }
-
-            // If a destination is required, check for a match
-            const busDestination = normalizeDestination(bus.destination);
-            const requiredDestination = normalizeDestination(requiredLine.destination);
-            
-            return busDestination === requiredDestination;
-        });
-
-        return filteredBuses.map((bus: any) => ({
+        // Return all buses for the requested lines without destination filtering for now
+        return data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
-        }));
+        })) as BusLocation[];
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);

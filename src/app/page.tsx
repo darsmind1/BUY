@@ -87,12 +87,8 @@ export default function Home() {
         const locations = await getBusLocation(linesToFetch);
         setBusLocations(locations);
   
-        const findArrivalForStop = (
-            line: string, 
-            destination: string | null,
-            stopLocation: google.maps.LatLngLiteral
-        ): ArrivalInfo | null => {
-            const liveBus = locations.find(l => l.line === line && l.destination === destination);
+        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
+            const liveBus = locations.find(l => l.line === line); // No destination filter for now
             if (liveBus) {
                 const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
                     new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
@@ -110,7 +106,7 @@ export default function Home() {
             return currentStmInfo.map(info => {
               const newInfo = { ...info };
               if (newInfo.departureStopLocation) {
-                const newArrival = findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
+                const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
                 const oldSignalAge = getSignalAge(newInfo.arrival);
 
                 if (newArrival) {
