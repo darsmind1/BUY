@@ -429,64 +429,62 @@ export default function RouteOptionsList({
       // Collect lines from primary route steps
       const primaryLines = Object.values(stmInfoByRoute).flat().map(info => info.line);
       const transferLines = Object.values(transferInfoByRoute).filter(Boolean).flatMap(info => info!.alternativeLines.map(alt => alt.line));
-      const linesToFetch = [...new Set([...primaryLines, ...transferLines])].filter(Boolean);
+      const linesToFetch = [...new Set([...primaryLines, ...transferLines])].filter(Boolean) as string[];
       if (linesToFetch.length === 0) return;
 
       try {
         const locations = await getBusLocation(linesToFetch);
         
         // Update primary route arrivals with persistence logic
-        setStmInfoByRoute(currentStmInfo => {
-            const newStmInfo: Record<number, StmInfo[]> = { ...currentStmInfo };
-            Object.keys(newStmInfo).forEach(async routeIndexStr => {
-              const routeIndex = parseInt(routeIndexStr, 10);
-              const infoList = newStmInfo[routeIndex];
-              const updatedInfoListPromises = infoList.map(async info => {
-                  const newInfo = { ...info };
-                  if (newInfo.departureStopLocation && newInfo.lineDestination) {
-                      const newArrival = await findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation, locations);
-                      const oldSignalAge = getSignalAge(newInfo.arrival);
-                      if (newArrival) {
-                          newInfo.arrival = newArrival;
-                      } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
-                          newInfo.arrival = null;
-                      }
-                  }
-                  return newInfo;
-              });
-              newStmInfo[routeIndex] = await Promise.all(updatedInfoListPromises);
+        const newStmInfo: Record<number, StmInfo[]> = {};
+        for (const routeIndexStr of Object.keys(stmInfoByRoute)) {
+            const routeIndex = parseInt(routeIndexStr, 10);
+            const infoList = stmInfoByRoute[routeIndex];
+            const updatedInfoListPromises = infoList.map(async info => {
+                const newInfo = { ...info };
+                if (newInfo.departureStopLocation && newInfo.lineDestination) {
+                    const newArrival = await findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation, locations);
+                    const oldSignalAge = getSignalAge(newInfo.arrival);
+                    if (newArrival) {
+                        newInfo.arrival = newArrival;
+                    } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
+                        newInfo.arrival = null;
+                    }
+                }
+                return newInfo;
             });
-            return newStmInfo;
-        });
+            newStmInfo[routeIndex] = await Promise.all(updatedInfoListPromises);
+        }
+        setStmInfoByRoute(newStmInfo);
 
         // Update transfer alternatives arrivals
-        setTransferInfoByRoute(currentTransferInfo => {
-            const newTransferInfo: Record<number, TransferInfo | null> = { ...currentTransferInfo };
-            Object.keys(newTransferInfo).forEach(async routeIndexStr => {
-              const routeIndex = parseInt(routeIndexStr, 10);
-              const currentInfo = newTransferInfo[routeIndex];
-              if (currentInfo) {
-                  const updatedAlternativesPromises = currentInfo.alternativeLines.map(async alt => {
-                      const newAlt = { ...alt };
-                      if (alt.destination) {
-                        const newArrival = await findArrivalForStop(alt.line, alt.destination, currentInfo.stopLocation, locations);
-                        const oldSignalAge = getSignalAge(alt.arrival);
-                        if (newArrival) {
-                            newAlt.arrival = newArrival;
-                        } else if (oldSignalAge === null || oldSignalAge > 90) {
-                            newAlt.arrival = null;
-                        }
+        const newTransferInfo: Record<number, TransferInfo | null> = {};
+        for (const routeIndexStr of Object.keys(transferInfoByRoute)) {
+            const routeIndex = parseInt(routeIndexStr, 10);
+            const currentInfo = transferInfoByRoute[routeIndex];
+            if (currentInfo) {
+                const updatedAlternativesPromises = currentInfo.alternativeLines.map(async alt => {
+                    const newAlt = { ...alt };
+                    if (alt.destination) {
+                      const newArrival = await findArrivalForStop(alt.line, alt.destination, currentInfo.stopLocation, locations);
+                      const oldSignalAge = getSignalAge(alt.arrival);
+                      if (newArrival) {
+                          newAlt.arrival = newArrival;
+                      } else if (oldSignalAge === null || oldSignalAge > 90) {
+                          newAlt.arrival = null;
                       }
-                      return newAlt;
-                  });
-                  newTransferInfo[routeIndex] = {
-                      ...currentInfo,
-                      alternativeLines: await Promise.all(updatedAlternativesPromises)
-                  };
-              }
-            });
-            return newTransferInfo;
-        });
+                    }
+                    return newAlt;
+                });
+                newTransferInfo[routeIndex] = {
+                    ...currentInfo,
+                    alternativeLines: await Promise.all(updatedAlternativesPromises)
+                };
+            } else {
+                 newTransferInfo[routeIndex] = null;
+            }
+        }
+        setTransferInfoByRoute(newTransferInfo);
 
       } catch (error) {
         console.error(`Error fetching bus locations:`, error);

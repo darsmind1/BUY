@@ -153,7 +153,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge, findArrivalForStop, selectedRouteStmInfo]); // Added selectedRouteStmInfo dependency
+  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge, findArrivalForStop, selectedRouteStmInfo]);
 
 
   useEffect(() => {
