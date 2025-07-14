@@ -146,8 +146,8 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
+export async function getBusLocation(lines: {line: string, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
@@ -162,12 +162,22 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        // Return all buses for the requested lines without destination filtering for now
-        return data.map((bus: any) => ({
+        const allBuses = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
+
+        // Filter by destination if provided
+        return allBuses.filter(bus => {
+            const lineInfo = lines.find(l => l.line === bus.line);
+            if (!lineInfo) return false; // Should not happen
+            if (!lineInfo.destination) return true; // No destination filter for this line
+            
+            const normalize = (str: string) => str.toUpperCase().replace(/\s/g, '');
+            
+            return bus.destination && normalize(bus.destination) === normalize(lineInfo.destination);
+        });
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
@@ -203,6 +213,24 @@ export async function findClosestStmStop(lat: number, lng: number): Promise<StmB
     } catch (error) {
         console.error(`Error finding closest stop for coords ${lat},${lng}:`, error);
         return null;
+    }
+}
+
+export async function getLinesForStop(stopId: number): Promise<{line: string, destination: string}[]> {
+    const path = `/buses/busstops/${stopId}/lines`;
+    try {
+        const data = await stmApiFetch(path);
+        if (!Array.isArray(data)) {
+            console.warn(`Could not get lines for stop ${stopId}`);
+            return [];
+        }
+        return data.map((item: any) => ({
+            line: item.line.toString(),
+            destination: item.destination.description,
+        }));
+    } catch (error) {
+        console.error(`Error in getLinesForStop for stop ${stopId}:`, error);
+        return [];
     }
 }
 
