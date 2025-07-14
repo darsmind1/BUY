@@ -279,7 +279,7 @@ export default function RouteOptionsList({
     const intervalId = setInterval(() => fetchAllArrivals(false), 30000);
 
     return () => clearInterval(intervalId);
-  }, [routes, isApiConnected, isGoogleMapsLoaded, fetchAllArrivals]);
+  }, [routes, fetchAllArrivals, isGoogleMapsLoaded]);
 
   if (isLoading) {
     return (
