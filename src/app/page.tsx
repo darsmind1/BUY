@@ -200,7 +200,7 @@ export default function Home() {
       originParam = currentUserLocation;
     }
 
-    if (!originParam || !destination) return;
+    if (!originParam || !destination || !isGoogleMapsLoaded) return;
     
     setDirectionsResponse(null);
     setSelectedRoute(null);
@@ -209,43 +209,39 @@ export default function Home() {
     setLineRoutes({});
     setIsLoading(true);
 
-    try {
-        const response = await fetch('/api/directions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ origin: originParam, destination }),
-        });
-
+    const directionsService = new window.google.maps.DirectionsService();
+    directionsService.route({
+        origin: originParam,
+        destination,
+        travelMode: google.maps.TravelMode.TRANSIT,
+        transitOptions: {
+            modes: [google.maps.TransitMode.BUS],
+        },
+        provideRouteAlternatives: true,
+        region: 'UY'
+    }, (result, status) => {
         setIsLoading(false);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Request failed with status ${response.status}`);
-        }
-
-        const result: google.maps.DirectionsResult = await response.json();
-        
-        if (result && result.routes.length > 0) {
-            setDirectionsResponse(result);
-            setView('options');
-            setMobileView('panel');
+        if (status === window.google.maps.DirectionsStatus.OK && result) {
+            if (result.routes.length > 0) {
+                setDirectionsResponse(result);
+                setView('options');
+                setMobileView('panel');
+            } else {
+                 toast({
+                    variant: "destructive",
+                    title: "Error al buscar ruta",
+                    description: "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.",
+                 });
+            }
         } else {
-             toast({
+            console.error(`Error fetching directions ${status}`);
+            toast({
                 variant: "destructive",
                 title: "Error al buscar ruta",
-                description: "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.",
-             });
+                description: "No se pudo calcular la ruta. Intenta con otras direcciones.",
+            });
         }
-    } catch(error: any) {
-        setIsLoading(false);
-        console.error(`Error fetching directions from API route:`, error);
-        toast({
-            variant: "destructive",
-            title: "Error al buscar ruta",
-            description: error.message || "No se pudo calcular la ruta. Intenta con otras direcciones.",
-        });
-    }
+    });
   };
 
   const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => {
