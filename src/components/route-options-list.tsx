@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
+import { getUpcomingBuses, findClosestStmStop, getBusLocation } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
@@ -201,6 +201,7 @@ export default function RouteOptionsList({
       initialStmInfo[index] = transitSteps.map(step => ({
         stopId: null,
         line: step.transit!.line.short_name!,
+        lineVariantId: null,
         lineDestination: step.transit!.headsign || null,
         departureStopLocation: {
           lat: step.transit!.departure_stop.location!.lat(),
@@ -209,21 +210,35 @@ export default function RouteOptionsList({
         arrival: null,
       }));
     });
+    setStmInfoByRoute(initialStmInfo);
 
     const enrichedStmInfo = { ...initialStmInfo };
     const allPromises = routes.map(async (route, index) => {
-      const firstTransitStepInfo = enrichedStmInfo[index]?.[0];
-      if (firstTransitStepInfo?.departureStopLocation && firstTransitStepInfo.line) {
-        const closestStop = await findClosestStmStop(firstTransitStepInfo.departureStopLocation.lat, firstTransitStepInfo.departureStopLocation.lng);
+      for (const stepInfo of enrichedStmInfo[index]) {
+        if (!stepInfo.line || !stepInfo.departureStopLocation) continue;
+
+        // Step 1: Find the lineVariantId by looking for a live bus with matching destination
+        const liveBuses = await getBusLocation([{ line: stepInfo.line, destination: stepInfo.lineDestination }]);
+        const matchingBus = liveBuses[0]; // Assume the first one is correct for simplicity
+        if (matchingBus?.lineVariantId) {
+          stepInfo.lineVariantId = matchingBus.lineVariantId;
+        }
+
+        // Step 2: Find the closest STM stop ID
+        const closestStop = await findClosestStmStop(stepInfo.departureStopLocation.lat, stepInfo.departureStopLocation.lng);
         if (closestStop) {
-          firstTransitStepInfo.stopId = closestStop.busstopId;
-          const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstTransitStepInfo.line);
-          if (upcomingBus?.arrival) {
-            firstTransitStepInfo.arrival = {
-              eta: upcomingBus.arrival.minutes,
-              timestamp: upcomingBus.arrival.lastUpdate,
-            };
-          }
+          stepInfo.stopId = closestStop.busstopId;
+        }
+        
+        // Step 3: Get upcoming bus if we have both IDs
+        if (stepInfo.stopId && (stepInfo.lineVariantId || stepInfo.line)) {
+            const upcomingBus = await getUpcomingBuses(stepInfo.stopId, stepInfo.line, stepInfo.lineVariantId);
+            if (upcomingBus?.arrival) {
+                stepInfo.arrival = {
+                    eta: upcomingBus.arrival.minutes,
+                    timestamp: upcomingBus.arrival.lastUpdate,
+                };
+            }
         }
       }
     });
@@ -242,6 +257,8 @@ export default function RouteOptionsList({
       
       const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
       return () => clearInterval(intervalId);
+    } else {
+        setIsLoading(false);
     }
 
   }, [routes, isGoogleMapsLoaded, fetchAllArrivals]);
@@ -294,5 +311,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    

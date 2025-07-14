@@ -162,12 +162,22 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        // Return all buses for the requested lines without destination filtering for now
-        return data.map((bus: any) => ({
+        // Now, filter by destination if provided
+        const allBuses: BusLocation[] = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
-        })) as BusLocation[];
+        }));
+
+        const requestedDestinations = lines.map(l => l.destination?.toLowerCase()).filter(Boolean);
+
+        if (requestedDestinations.length > 0) {
+            return allBuses.filter(bus => 
+                bus.destination && requestedDestinations.some(dest => bus.destination!.toLowerCase().includes(dest!))
+            );
+        }
+
+        return allBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
@@ -222,8 +232,11 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
 }
 
 
-export async function getUpcomingBuses(busstopId: number, line: string): Promise<UpcomingBus | null> {
-    const path = `/buses/busstops/${busstopId}/upcomingbuses?lines=${line}&amountperline=1`;
+export async function getUpcomingBuses(busstopId: number, line: string, lineVariantId: number | null): Promise<UpcomingBus | null> {
+    // Prefer the more specific lineVariantId if available
+    const idParam = lineVariantId ? `lineVariantIds=${lineVariantId}` : `lines=${line}`;
+    
+    const path = `/buses/busstops/${busstopId}/upcomingbuses?${idParam}&amountperline=1`;
     try {
         const data = await stmApiFetch(path);
         // The API returns an array, we want the first element
@@ -232,7 +245,7 @@ export async function getUpcomingBuses(busstopId: number, line: string): Promise
         }
         return null;
     } catch (error) {
-        console.error(`Error in getUpcomingBuses for stop ${busstopId} and line ${line}:`, error);
+        console.error(`Error in getUpcomingBuses for stop ${busstopId} and params '${idParam}':`, error);
         return null;
     }
 }

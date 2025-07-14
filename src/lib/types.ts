@@ -19,6 +19,7 @@ export interface BusLocation {
     tripId: string;
     thermalConfort: string;
     destination: string | null;
+    lineVariantId?: number; // Added this property
 }
 
 export interface StmBusStop {
@@ -38,6 +39,7 @@ export interface ArrivalInfo {
 export interface StmInfo {
   stopId: number | null;
   line: string;
+  lineVariantId: number | null;
   lineDestination: string | null;
   departureStopLocation: google.maps.LatLngLiteral | null;
   arrival: ArrivalInfo | null;
@@ -68,4 +70,5 @@ export interface UpcomingBus {
         lastUpdate: string;
         busId: string;
     };
+    lineVariantId: number;
 }
