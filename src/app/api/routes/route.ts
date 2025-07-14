@@ -5,9 +5,9 @@ const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
 const ROUTES_API_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 
 // Function to convert API response to a google.maps.DirectionsResult compatible format
-// This version is more robust and uses optional chaining to prevent crashes.
+// This version is highly robust, using optional chaining to prevent crashes.
 function toDirectionsResult(routesApiResponse: any): any {
-  if (!routesApiResponse.routes || routesApiResponse.routes.length === 0) {
+  if (!routesApiResponse?.routes?.length) {
     return { routes: [] };
   }
 
@@ -28,22 +28,29 @@ function toDirectionsResult(routesApiResponse: any): any {
         lng: () => leg.endLocation?.latLng?.longitude,
         toJSON: () => ({ lat: leg.endLocation?.latLng?.latitude, lng: leg.endLocation?.latLng?.longitude })
       },
-      duration: leg.duration && typeof leg.duration === 'string' ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) } : undefined,
-      distance: leg.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
+      duration: leg.duration && typeof leg.duration === 'string' 
+        ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) || 0 } 
+        : undefined,
+      distance: leg.distanceMeters 
+        ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } 
+        : undefined,
       steps: leg.steps?.map((step: any) => {
         const transitDetails = step.transitDetails;
-        const navInstructions = step.navigationInstruction || step.instruction;
         return {
           ...step,
           travel_mode: step.travelMode || 'TRANSIT',
-          duration: step.duration && typeof step.duration === 'string' ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
-          distance: step.distanceMeters ? { text: `${step.distanceMeters} m`, value: step.distanceMeters } : undefined,
-          instructions: navInstructions?.instructions || step.instructions,
+          duration: step.duration && typeof step.duration === 'string' 
+            ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) || 0 } 
+            : undefined,
+          distance: step.distanceMeters 
+            ? { text: `${step.distanceMeters} m`, value: step.distanceMeters } 
+            : undefined,
+          instructions: step.navigationInstruction?.instructions,
           polyline: { points: step.polyline?.encodedPolyline },
           transit: transitDetails ? {
             ...transitDetails,
             line: {
-              ...(transitDetails.line || {}),
+              ...(transitDetails.transitLine || {}),
               short_name: transitDetails.transitLine?.shortName || 'N/A',
               name: transitDetails.transitLine?.name || '',
               vehicle: {
@@ -72,8 +79,8 @@ function toDirectionsResult(routesApiResponse: any): any {
             departure_time: { text: transitDetails.departureTime ? new Date(transitDetails.departureTime).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit'}) : 'N/A' },
           } : undefined,
         }
-      }) || [] // Use empty array as fallback if steps are missing
-    })) || [], // Use empty array as fallback if legs are missing
+      }) || [],
+    })) || [],
     bounds: route.viewport ? {
         north: route.viewport.high?.latitude,
         south: route.viewport.low?.latitude,
@@ -128,7 +135,6 @@ export async function POST(request: Request) {
        return NextResponse.json({ error: 'Failed to get routes from Google', details: errorMessage }, { status: response.status || 500 });
     }
     
-    // Convert the response to be as compatible as possible with DirectionsResult
     const compatibleResult = toDirectionsResult(data);
     
     return NextResponse.json(compatibleResult, { status: 200 });
