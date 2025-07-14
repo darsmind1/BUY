@@ -2,10 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // This is a simplified polyline decoder. For production, a robust library is recommended.
-function decode(encoded: string): [number, number][] {
+function decode(encoded: string): {lat: number, lng: number}[] {
     let index = 0, len = encoded.length;
     let lat = 0, lng = 0;
-    const path: [number, number][] = [];
+    const path: {lat: number, lng: number}[] = [];
 
     while (index < len) {
         let b, shift = 0, result = 0;
@@ -27,7 +27,7 @@ function decode(encoded: string): [number, number][] {
         let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
         lng += dlng;
 
-        path.push([lat / 1e5, lng / 1e5]);
+        path.push({lat: lat / 1e5, lng: lng / 1e5});
     }
     return path;
 }
@@ -55,81 +55,87 @@ function formatLocation(location: any) {
     };
 }
 
-async function translateRoutesResponse(routesApiResponse: any): Promise<google.maps.DirectionsResult> {
-    const directionsResult: google.maps.DirectionsResult = {
-        geocoded_waypoints: [], // This can be populated if needed
-        routes: routesApiResponse.routes?.map((route: any) => {
-            const leg = route.legs?.[0];
-            return {
-                bounds: new google.maps.LatLngBounds(
-                    { lat: route.viewport.low.latitude, lng: route.viewport.low.longitude },
-                    { lat: route.viewport.high.latitude, lng: route.viewport.high.longitude }
-                ),
-                copyrights: 'Google',
-                legs: [{
-                    steps: leg.steps?.map((step: any) => {
-                        const travelMode = step.travelMode === 'WALK' ? google.maps.TravelMode.WALKING : google.maps.TravelMode.TRANSIT;
-                        const decodedPath = decode(step.polyline.encodedPolyline).map(p => new google.maps.LatLng(p[0], p[1]));
+async function translateRoutesResponse(routesApiResponse: any): Promise<any> {
+    if (!routesApiResponse.routes || routesApiResponse.routes.length === 0) {
+        return { routes: [] };
+    }
+    
+    const translatedRoutes = routesApiResponse.routes.map((route: any) => {
+        const leg = route.legs?.[0];
+        if (!leg) return null;
 
-                        const directionsStep: google.maps.DirectionsStep = {
-                            distance: { text: `${step.distanceMeters} m`, value: step.distanceMeters },
-                            duration: { text: leg.duration, value: parseInt(leg.duration) || 0 }, // fallback
-                            end_location: new google.maps.LatLng(step.endLocation.latLng.latitude, step.endLocation.latLng.longitude),
-                            start_location: new google.maps.LatLng(step.startLocation.latLng.latitude, step.startLocation.latLng.longitude),
-                            instructions: step.navigationInstruction?.instructions || '',
-                            path: decodedPath,
-                            travel_mode: travelMode,
-                            transit: null
+        return {
+            bounds: {
+                north: route.viewport.high.latitude,
+                south: route.viewport.low.latitude,
+                east: route.viewport.high.longitude,
+                west: route.viewport.low.longitude,
+            },
+            copyrights: 'Google',
+            legs: [{
+                steps: leg.steps?.map((step: any) => {
+                    const travelMode = step.travelMode === 'WALK' ? 'WALKING' : 'TRANSIT';
+                    const decodedPath = decode(step.polyline.encodedPolyline);
+
+                    const directionsStep: any = {
+                        distance: { text: `${step.distanceMeters} m`, value: step.distanceMeters },
+                        duration: { text: step.staticDuration, value: parseInt(step.staticDuration.replace('s', ''), 10) || 0 },
+                        end_location: { lat: step.endLocation.latLng.latitude, lng: step.endLocation.latLng.longitude },
+                        start_location: { lat: step.startLocation.latLng.latitude, lng: step.startLocation.latLng.longitude },
+                        instructions: step.navigationInstruction?.instructions || '',
+                        path: decodedPath,
+                        travel_mode: travelMode,
+                        transit: null
+                    };
+
+                    if (travelMode === 'TRANSIT' && step.transitDetails) {
+                        const transit = step.transitDetails;
+                        directionsStep.transit = {
+                            arrival_stop: {
+                                location: { lat: transit.stopDetails.arrivalStop.location.latLng.latitude, lng: transit.stopDetails.arrivalStop.location.latLng.longitude },
+                                name: transit.stopDetails.arrivalStop.name
+                            },
+                            departure_stop: {
+                                location: { lat: transit.stopDetails.departureStop.location.latLng.latitude, lng: transit.stopDetails.departureStop.location.latLng.longitude },
+                                name: transit.stopDetails.departureStop.name
+                            },
+                            arrival_time: { text: '', value: new Date(), time_zone: '' }, 
+                            departure_time: { text: '', value: new Date(), time_zone: '' },
+                            headsign: transit.headsign,
+                            line: {
+                                name: transit.transitLine.name,
+                                short_name: transit.transitLine.shortName,
+                                color: transit.transitLine.color,
+                                agencies: transit.transitLine.agencies.map((a:any) => ({ name: a.name, phone: a.phoneNumber, url: a.uri })),
+                                vehicle: {
+                                    name: transit.transitLine.vehicle.name.text,
+                                    type: transit.transitLine.vehicle.type,
+                                    icon: ''
+                                }
+                            },
+                            num_stops: transit.stopCount,
                         };
+                    }
+                    return directionsStep;
+                }),
+                start_address: leg.startAddress,
+                end_address: leg.endAddress,
+                start_location: { lat: leg.startLocation.latLng.latitude, lng: leg.startLocation.latLng.longitude },
+                end_location: { lat: leg.endLocation.latLng.latitude, lng: leg.endLocation.latLng.longitude },
+                distance: { text: `${leg.distanceMeters} m`, value: leg.distanceMeters },
+                duration: { text: leg.staticDuration, value: parseInt(leg.staticDuration.replace('s', ''), 10) || 0 }
+            }],
+            overview_polyline: { points: route.polyline.encodedPolyline },
+            summary: route.description || 'STM Route',
+            warnings: [],
+            waypoint_order: [],
+        };
+    }).filter(Boolean);
 
-                        if (travelMode === google.maps.TravelMode.TRANSIT && step.transitDetails) {
-                            directionsStep.transit = {
-                                arrival_stop: {
-                                    location: new google.maps.LatLng(step.transitDetails.stopDetails.arrivalStop.location.latLng.latitude, step.transitDetails.stopDetails.arrivalStop.location.latLng.longitude),
-                                    name: step.transitDetails.stopDetails.arrivalStop.name
-                                },
-                                departure_stop: {
-                                    location: new google.maps.LatLng(step.transitDetails.stopDetails.departureStop.location.latLng.latitude, step.transitDetails.stopDetails.departureStop.location.latLng.longitude),
-                                    name: step.transitDetails.stopDetails.departureStop.name
-                                },
-                                arrival_time: { text: '', value: new Date(), time_zone: '' }, // Placeholder
-                                departure_time: { text: '', value: new Date(), time_zone: '' }, // Placeholder
-                                headsign: step.transitDetails.headsign,
-                                line: {
-                                    name: step.transitDetails.transitLine.name,
-                                    short_name: step.transitDetails.transitLine.shortName,
-                                    color: step.transitDetails.transitLine.color,
-                                    agencies: step.transitDetails.transitLine.agencies.map((a:any) => ({ name: a.name, phone: a.phoneNumber, url: a.uri })),
-                                    vehicle: {
-                                        name: step.transitDetails.transitLine.vehicle.name.text,
-                                        type: step.transitDetails.transitLine.vehicle.type,
-                                        icon: ''
-                                    }
-                                },
-                                num_stops: step.transitDetails.stopCount,
-                            };
-                        }
-
-                        return directionsStep;
-                    }),
-                    start_address: leg.startAddress,
-                    end_address: leg.endAddress,
-                    start_location: new google.maps.LatLng(leg.startLocation.latLng.latitude, leg.startLocation.latLng.longitude),
-                    end_location: new google.maps.LatLng(leg.endLocation.latLng.latitude, leg.endLocation.latLng.longitude),
-                    distance: { text: `${leg.distanceMeters} m`, value: leg.distanceMeters },
-                    duration: { text: leg.duration, value: parseInt(leg.duration) || 0 }
-                }],
-                overview_polyline: { points: route.polyline.encodedPolyline },
-                summary: 'STM Route',
-                warnings: [],
-                waypoint_order: [],
-                fare: undefined,
-                overview_path: [],
-            };
-        }) || [],
+    return {
+        geocoded_waypoints: [],
+        routes: translatedRoutes,
     };
-
-    return directionsResult;
 }
 
 
@@ -164,14 +170,14 @@ export async function POST(req: NextRequest) {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': googleMapsApiKey,
-                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.legs,routes.polyline,routes.viewport',
+                'X-Goog-FieldMask': 'routes.legs,routes.duration,routes.distanceMeters,routes.description,routes.polyline,routes.viewport',
             },
             body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
             const error = await response.json();
-            console.error('Google Routes API Error:', error);
+            console.error('Google Routes API Error:', JSON.stringify(error, null, 2));
             return NextResponse.json({ error: 'Failed to fetch directions from Google Routes API' }, { status: response.status });
         }
 
@@ -183,12 +189,13 @@ export async function POST(req: NextRequest) {
 
         const translatedData = await translateRoutesResponse(data);
         
-        // The `google.maps` classes won't be available here, so we send the plain object
-        // and the client-side Google Maps script will re-hydrate them.
+        // The client-side will receive a plain JSON object that mimics the structure of
+        // a google.maps.DirectionsResult. The Google Maps script on the client will
+        // re-hydrate this into proper LatLng, LatLngBounds etc. objects.
         return NextResponse.json(translatedData);
 
     } catch (error) {
-        console.error('Server error:', error);
+        console.error('Server error in /api/directions:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
