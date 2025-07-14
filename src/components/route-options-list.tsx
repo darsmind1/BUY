@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
@@ -288,14 +288,11 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             }
         });
         
-        console.log("Consultando arribos para las siguientes paradas y líneas:", stopsToQuery);
-
         const newArrivals: BusArrivalsState = {};
         const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
             const stopIdNum = parseInt(stopId);
             try {
                 const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
-                console.log(`Respuesta de arribos para parada ${stopIdNum}:`, upcomingBuses);
                 
                 if (upcomingBuses && upcomingBuses.length > 0) {
                     routeIndicesByStop[stopIdNum].forEach(routeIndex => {
