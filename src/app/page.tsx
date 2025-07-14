@@ -72,15 +72,19 @@ export default function Home() {
         return;
       }
       
+      const routeForBusLocation = selectedRoute || (directionsResponse?.routes[0] ?? null);
+      if (!routeForBusLocation) {
+        setBusLocations([]);
+        return;
+      }
+
       // Collect all unique lines from all route options, including their destination headsign
-      const linesToFetch = directionsResponse.routes.flatMap(route => 
-          route.legs[0].steps
+      const linesToFetch = routeForBusLocation.legs[0].steps
               .filter(step => step.travel_mode === 'TRANSIT' && step.transit?.line.short_name)
               .map(step => ({ 
                   line: step.transit!.line.short_name!, 
                   destination: step.transit!.headsign || null
-              }))
-      );
+              }));
       
       const uniqueLinesWithDest = Array.from(new Map(linesToFetch.map(item => [`${item.line}-${item.destination}`, item])).values());
 
@@ -90,19 +94,17 @@ export default function Home() {
       }
   
       try {
-        // Now passing the destination to the API call
         const locations = await getBusLocation(uniqueLinesWithDest);
         setBusLocations(locations);
       } catch (error) {
         console.error(`Error fetching real-time data:`, error);
-        setBusLocations([]); // Clear locations on error to avoid stale data
+        setBusLocations([]);
       }
     };
   
-    // Run only when we have options or details to show
     if (view === 'options' || view === 'details') {
       updateRealtimeData(); 
-      intervalId = setInterval(updateRealtimeData, 20000); // Update every 20 seconds
+      intervalId = setInterval(updateRealtimeData, 20000); 
     } else {
       setBusLocations([]);
     }
@@ -112,7 +114,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, apiStatus, isGoogleMapsLoaded, directionsResponse]);
+  }, [view, apiStatus, isGoogleMapsLoaded, directionsResponse, selectedRoute]);
 
 
   useEffect(() => {
@@ -310,7 +312,6 @@ export default function Home() {
                   routes={directionsResponse.routes} 
                   onSelectRoute={handleSelectRoute}
                   isApiConnected={apiStatus === 'connected'}
-                  busLocations={busLocations}
                 />
               )}
               {view === 'details' && selectedRoute && (

@@ -72,5 +72,3 @@ export interface UpcomingBus {
     };
     lineVariantId: number;
 }
-
-    

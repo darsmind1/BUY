@@ -5,8 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import type { BusLocation } from '@/lib/stm-api';
-import type { ArrivalInfo, StmInfo, UpcomingBus } from '@/lib/types';
+import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -181,12 +180,10 @@ export default function RouteOptionsList({
   routes, 
   onSelectRoute, 
   isApiConnected,
-  busLocations
 }: {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
-  busLocations: BusLocation[];
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -269,9 +266,12 @@ export default function RouteOptionsList({
     };
     
     fetchAllArrivals();
+    const intervalId = setInterval(fetchAllArrivals, 20000);
 
-    // No need to clear interval, this runs once when routes change
-    return () => { isMounted = false };
+    return () => { 
+        isMounted = false;
+        clearInterval(intervalId);
+    };
   }, [routes, isApiConnected]); // Rerun when routes or API status change
   
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));

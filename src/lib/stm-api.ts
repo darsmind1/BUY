@@ -179,9 +179,6 @@ export async function getBusLocation(lines: {line: string, destination?: string 
                     return false;
                 }
                 if (!requestedLine.destination || !bus.destination) {
-                    // This comparison is tricky. If Google gives no destination, we can't filter.
-                    // For now, let's assume if a bus line matches, it's a potential candidate.
-                    // The best way is to filter by lineVariantId if available.
                     return true;
                 }
                 return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
