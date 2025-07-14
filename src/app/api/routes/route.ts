@@ -14,55 +14,59 @@ function toDirectionsResult(routesApiResponse: any): any {
   const transformedRoutes = routesApiResponse.routes.map((route: any) => ({
     ...route,
     overview_polyline: { points: route.polyline?.encodedPolyline },
-    legs: route.legs.map((leg: any) => ({
+    legs: route.legs?.map((leg: any) => ({
       ...leg,
       start_address: leg.startAddress,
       end_address: leg.endAddress,
-      start_location: { lat: () => leg.startLocation.latLng.latitude, lng: () => leg.startLocation.latLng.longitude },
-      end_location: { lat: () => leg.endLocation.latLng.latitude, lng: () => leg.endLocation.latLng.longitude },
-      duration: { text: leg.duration, value: parseInt(leg.duration.replace('s', ''), 10) },
-      distance: { text: `${leg.distanceMeters} m`, value: leg.distanceMeters },
-      steps: leg.steps.map((step: any) => ({
+      start_location: { lat: () => leg.startLocation?.latLng?.latitude, lng: () => leg.startLocation?.latLng?.longitude },
+      end_location: { lat: () => leg.endLocation?.latLng?.latitude, lng: () => leg.endLocation?.latLng?.longitude },
+      duration: leg.duration ? { text: leg.duration.replace('s',' seg'), value: parseInt(leg.duration.replace('s', ''), 10) } : undefined,
+      distance: leg.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
+      steps: leg.steps?.map((step: any) => ({
         ...step,
-        travel_mode: step.travelMode,
-        duration: { text: step.duration, value: parseInt(step.duration.replace('s', ''), 10) },
-        distance: { text: `${step.distanceMeters} m`, value: step.distanceMeters },
-        instructions: step.navigationInstruction?.instructions,
+        travel_mode: step.travelMode || 'TRANSIT',
+        duration: step.duration ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
+        distance: step.distanceMeters ? { text: `${step.distanceMeters} m`, value: step.distanceMeters } : undefined,
+        instructions: step.navigationInstruction?.instructions || step.instruction,
         transit: step.transitDetails ? {
           ...step.transitDetails,
           line: {
             ...step.transitDetails.line,
-            short_name: step.transitDetails.line.shortName,
+            short_name: step.transitDetails.transitLine?.shortName || 'N/A',
             vehicle: {
-              name: step.transitDetails.line.vehicle.name.text,
-              type: step.transitDetails.line.vehicle.type,
+              name: step.transitDetails.transitLine?.vehicle?.name?.text || 'Bus',
+              type: step.transitDetails.transitLine?.vehicle?.type || 'BUS',
             }
           },
           arrival_stop: {
-            name: step.transitDetails.arrivalStop.name,
+            name: step.transitDetails.arrivalStop?.name || 'Parada de llegada',
             location: {
-              lat: () => step.transitDetails.arrivalStop.location.latLng.latitude,
-              lng: () => step.transitDetails.arrivalStop.location.latLng.longitude,
-              toJSON: () => ({ lat: step.transitDetails.arrivalStop.location.latLng.latitude, lng: step.transitDetails.arrivalStop.location.latLng.longitude })
+              lat: () => step.transitDetails.arrivalStop?.location?.latLng?.latitude,
+              lng: () => step.transitDetails.arrivalStop?.location?.latLng?.longitude,
+              toJSON: () => ({ lat: step.transitDetails.arrivalStop?.location?.latLng?.latitude, lng: step.transitDetails.arrivalStop?.location?.latLng?.longitude })
             }
           },
           departure_stop: {
-            name: step.transitDetails.departureStop.name,
+            name: step.transitDetails.departureStop?.name || 'Parada de salida',
             location: {
-              lat: () => step.transitDetails.departureStop.location.latLng.latitude,
-              lng: () => step.transitDetails.departureStop.location.latLng.longitude,
-              toJSON: () => ({ lat: step.transitDetails.departureStop.location.latLng.latitude, lng: step.transitDetails.departureStop.location.latLng.longitude })
+              lat: () => step.transitDetails.departureStop?.location?.latLng?.latitude,
+              lng: () => step.transitDetails.departureStop?.location?.latLng?.longitude,
+              toJSON: () => ({ lat: step.transitDetails.departureStop?.location?.latLng?.latitude, lng: step.transitDetails.departureStop?.location?.latLng?.longitude })
             }
           },
           num_stops: step.transitDetails.stopCount,
           headsign: step.transitDetails.headsign,
-          departure_time: { text: new Date(step.transitDetails.departureTime).toLocaleTimeString('es-UY') },
+          departure_time: { text: step.transitDetails.departureTime ? new Date(step.transitDetails.departureTime).toLocaleTimeString('es-UY') : 'N/A' },
         } : undefined,
         polyline: { points: step.polyline?.encodedPolyline }
-      }))
-    })),
-    // Bounds might need to be calculated manually if not directly available
-    bounds: route.viewport,
+      })) || []
+    })) || [],
+    bounds: route.viewport ? {
+        north: route.viewport.high?.latitude,
+        south: route.viewport.low?.latitude,
+        east: route.viewport.high?.longitude,
+        west: route.viewport.low?.longitude,
+    } : undefined,
   }));
   
   return { ...routesApiResponse, routes: transformedRoutes };
@@ -98,7 +102,8 @@ export async function POST(request: Request) {
         headers: {
             'Content-Type': 'application/json',
             'X-Goog-Api-Key': googleMapsApiKey,
-            'X-Goog-FieldMask': 'routes.legs,routes.duration,routes.distanceMeters,routes.polyline,routes.description,routes.warnings,routes.viewport'
+            // This is a comprehensive FieldMask that asks for all the necessary details.
+            'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.legs,routes.polyline.encodedPolyline,routes.description,routes.warnings,routes.viewport'
         },
         body: JSON.stringify(body)
     });
@@ -107,12 +112,13 @@ export async function POST(request: Request) {
 
     if (!response.ok || data.error) {
        console.error('Routes API Error:', data.error || `Status: ${response.status}`);
-       return NextResponse.json({ error: 'Failed to get routes from Google', details: data.error?.message || 'Unknown error' }, { status: response.status });
+       const errorMessage = data.error?.message || 'Unknown error from Google Routes API';
+       return NextResponse.json({ error: 'Failed to get routes from Google', details: errorMessage }, { status: response.status });
     }
     
     // Convert the response to be as compatible as possible with DirectionsResult
     const compatibleResult = toDirectionsResult(data);
-
+    
     return NextResponse.json(compatibleResult, { status: 200 });
 
   } catch (error) {

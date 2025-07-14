@@ -74,7 +74,7 @@ export default function Home() {
           leg.steps.forEach(step => {
             if (step.travel_mode === 'TRANSIT' && step.transit?.line.vehicle.type === 'BUS') {
               const line = step.transit.line.short_name;
-              const destination = step.transit.line.headsign;
+              const destination = step.transit.headsign;
               if (line && !linesToTrack.some(l => l.line === line && l.destination === destination)) {
                 linesToTrack.push({ line, destination });
               }
@@ -163,7 +163,7 @@ export default function Home() {
 
       if (!response.ok) {
         console.error("Server error details:", result);
-        throw new Error(`Server responded with ${response.status}`);
+        throw new Error(result.details || `Server responded with ${response.status}`);
       }
       
       if (result.routes && result.routes.length > 0) {
@@ -188,12 +188,12 @@ export default function Home() {
         });
       }
     } catch(error) {
-       console.error('Error fetching from new /api/routes endpoint:', error);
+       console.error('Error fetching from /api/routes endpoint:', error);
        setRoutes([]);
        toast({
         variant: "destructive",
         title: "Error de Búsqueda",
-        description: "Ocurrió un error al buscar la ruta. Por favor, inténtalo de nuevo.",
+        description: error instanceof Error ? error.message : "Ocurrió un error al buscar la ruta. Por favor, inténtalo de nuevo.",
       });
     } finally {
       setIsLoading(false);
@@ -309,7 +309,7 @@ export default function Home() {
             )}
             <MapView 
               isLoaded={isGoogleMapsLoaded}
-              directions={selectedRoute || routes[0]}
+              directions={selectedRoute || (routes.length > 0 ? routes[0] : null)}
               userLocation={currentUserLocation}
               busLocations={busLocations}
               selectedRoute={selectedRoute}
