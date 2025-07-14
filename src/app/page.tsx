@@ -158,13 +158,14 @@ export default function Home() {
           destination: destination.location,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
       
       const result = await response.json();
 
+      if (!response.ok) {
+        console.error("Server error details:", result);
+        throw new Error(`Server responded with ${response.status}`);
+      }
+      
       if (result.routes && result.routes.length > 0) {
         // The Routes API returns an array of routes. We need to wrap each route
         // in a DirectionsResult-like structure for compatibility with our components.
