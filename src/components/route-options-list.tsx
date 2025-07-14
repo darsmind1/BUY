@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -234,7 +235,7 @@ export default function RouteOptionsList({
                   let arrival: ArrivalInfo | null = null;
                   if (closestStop) {
                       const upcomingBus = await getUpcomingBuses(closestStop.busstopId, googleTransitLine);
-                      if (upcomingBus) {
+                      if (upcomingBus && upcomingBus.arrival) {
                           arrival = {
                               eta: upcomingBus.arrival.minutes,
                               timestamp: upcomingBus.arrival.lastUpdate,
