@@ -179,10 +179,12 @@ export default function RouteOptionsList({
   routes, 
   onSelectRoute, 
   isApiConnected,
+  isGoogleMapsLoaded,
 }: {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
+  isGoogleMapsLoaded: boolean;
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -234,13 +236,15 @@ export default function RouteOptionsList({
 
 
   useEffect(() => {
-    setIsLoading(true);
-    fetchAllArrivals();
-    
-    const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
-    return () => clearInterval(intervalId);
+    if (isGoogleMapsLoaded && routes.length > 0) {
+      setIsLoading(true);
+      fetchAllArrivals();
+      
+      const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
+      return () => clearInterval(intervalId);
+    }
 
-  }, [fetchAllArrivals]);
+  }, [routes, isGoogleMapsLoaded, fetchAllArrivals]);
   
 
   if (isLoading) {
@@ -290,3 +294,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
