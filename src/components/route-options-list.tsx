@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AlternativeLineInfo {
     line: string;
@@ -305,7 +306,7 @@ export default function RouteOptionsList({
   }, [isGoogleMapsLoaded]);
 
   const fetchAllArrivals = useCallback(async () => {
-    if (!isGoogleMapsLoaded || !isApiConnected) {
+    if (!isApiConnected) {
       setIsLoading(false);
       return;
     }
@@ -377,7 +378,7 @@ export default function RouteOptionsList({
     setStmInfoByRoute(enrichedStmInfo);
     setIsLoading(false);
 
-  }, [routes, isGoogleMapsLoaded, isApiConnected, findAlternativeLines]);
+  }, [routes, isApiConnected, findAlternativeLines, isGoogleMapsLoaded]);
 
 
   useEffect(() => {
@@ -438,3 +439,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
