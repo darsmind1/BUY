@@ -1,9 +1,14 @@
 
 'use server';
 
-const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
+const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY || "";
 
 export async function getFormattedAddress(lat: number, lng: number): Promise<string> {
+  if (!googleMapsApiKey) {
+    console.error('Google Maps API key is not configured.');
+    return 'Error de configuración';
+  }
+  
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${googleMapsApiKey}&language=es&result_type=street_address`;
 
   try {

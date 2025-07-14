@@ -1,7 +1,7 @@
 
 import {NextResponse} from 'next/server';
 
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
 const DISTANCE_MATRIX_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json';
 
 export async function POST(request: Request) {
