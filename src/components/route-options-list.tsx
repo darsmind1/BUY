@@ -195,7 +195,6 @@ export default function RouteOptionsList({
       return;
     }
     
-    // Initialize a structure to hold all the STM info we gather.
     const initialStmInfo: Record<number, StmInfo[]> = {};
     routes.forEach((route, index) => {
         initialStmInfo[index] = route.legs[0]?.steps
@@ -215,16 +214,15 @@ export default function RouteOptionsList({
     
     const enrichedStmInfo = { ...initialStmInfo };
 
-    // This promise will handle all the async work for all routes.
     const allPromises = routes.map(async (route, index) => {
-      // We only care about the *first* bus the user has to take for this view.
       const firstBusStepInfo = enrichedStmInfo[index]?.[0];
       if (!firstBusStepInfo || !firstBusStepInfo.line || !firstBusStepInfo.departureStopLocation) {
-        return; // No bus step in this route option.
+        return; 
       }
         
       try {
         const closestStop = await findClosestStmStop(firstBusStepInfo.departureStopLocation.lat, firstBusStepInfo.departureStopLocation.lng);
+        
         if (closestStop) {
           firstBusStepInfo.stopId = closestStop.busstopId;
           const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStepInfo.line, null);
@@ -253,7 +251,7 @@ export default function RouteOptionsList({
       setIsLoading(true);
       fetchAllArrivals();
       
-      const intervalId = setInterval(fetchAllArrivals, 30000); // Refresh every 30 seconds
+      const intervalId = setInterval(fetchAllArrivals, 30000); 
       return () => clearInterval(intervalId);
     } else {
         setIsLoading(false);
@@ -308,3 +306,5 @@ export default function RouteOptionsList({
     </div>
   );
 }
+
+    
