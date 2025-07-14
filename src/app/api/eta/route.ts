@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const element = data.rows[0].elements[0];
 
     if (element.status !== 'OK') {
-        // This can happen if a route is not found between the points
+        // This can happen if a route is not found between the points (e.g., bus is moving away)
         return NextResponse.json({ eta: null }, { status: 200 });
     }
     
