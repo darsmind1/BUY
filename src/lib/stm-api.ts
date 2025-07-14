@@ -162,25 +162,12 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        const allBusesForLines = data.map((bus: any) => ({
+        // Return all buses for the requested lines without destination filtering for now
+        return data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
-        
-        // Filter by specific line and destination pairs
-        const filteredBuses = lines.flatMap(lineInfo => {
-            if (!lineInfo.line) return [];
-            return allBusesForLines.filter(bus => 
-                bus.line === lineInfo.line &&
-                (!lineInfo.destination || bus.destination?.toLowerCase().includes(lineInfo.destination.toLowerCase()))
-            );
-        });
-
-        // Remove duplicates in case multiple requests are for the same bus
-        const uniqueBuses = Array.from(new Map(filteredBuses.map(bus => [bus.id, bus])).values());
-        
-        return uniqueBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
@@ -222,7 +209,7 @@ export async function findClosestStmStop(lat: number, lng: number): Promise<StmB
 export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     const path = `/buses/line/${line}/route`;
     try {
-        const data = await stmApifetch(path);
+        const data = await stmApiFetch(path);
         if (!data || !Array.isArray(data.route) || data.route.length === 0) {
             console.warn(`Could not get route for line ${line}`);
             return null;
@@ -234,15 +221,16 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
+
 export async function getUpcomingBuses(busstopId: number, line: string): Promise<UpcomingBus | null> {
-    const path = `/buses/busstops/${busstopId}/upcomingbuses?lines=${line}&amountPerLine=1`;
+    const path = `/buses/busstops/${busstopId}/upcomingbuses?lines=${line}&amountperline=1`;
     try {
         const data = await stmApiFetch(path);
-        if (!data || !Array.isArray(data) || data.length === 0) {
-            return null;
+        // The API returns an array, we want the first element
+        if (Array.isArray(data) && data.length > 0) {
+            return data[0] as UpcomingBus;
         }
-        // Return the first result, as we requested only one
-        return data[0] as UpcomingBus;
+        return null;
     } catch (error) {
         console.error(`Error in getUpcomingBuses for stop ${busstopId} and line ${line}:`, error);
         return null;
