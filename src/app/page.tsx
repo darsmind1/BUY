@@ -66,25 +66,25 @@ export default function Home() {
     let intervalId: NodeJS.Timeout | null = null;
   
     const updateRealtimeData = async () => {
-      // Don't run if we are in search view, api is down, or maps aren't loaded
       if (view === 'search' || apiStatus !== 'connected' || !isGoogleMapsLoaded || !directionsResponse) {
         setBusLocations([]);
         return;
       }
       
-      const routeForBusLocation = selectedRoute || (directionsResponse?.routes[0] ?? null);
-      if (!routeForBusLocation) {
+      const routesToScan = directionsResponse.routes;
+      if (!routesToScan) {
         setBusLocations([]);
         return;
       }
 
-      // Collect all unique lines from all route options, including their destination headsign
-      const linesToFetch = routeForBusLocation.legs[0].steps
+      const linesToFetch = routesToScan.flatMap(route => 
+          route.legs[0].steps
               .filter(step => step.travel_mode === 'TRANSIT' && step.transit?.line.short_name)
               .map(step => ({ 
                   line: step.transit!.line.short_name!, 
                   destination: step.transit!.headsign || null
-              }));
+              }))
+      );
       
       const uniqueLinesWithDest = Array.from(new Map(linesToFetch.map(item => [`${item.line}-${item.destination}`, item])).values());
 
@@ -114,7 +114,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, apiStatus, isGoogleMapsLoaded, directionsResponse, selectedRoute]);
+  }, [view, apiStatus, isGoogleMapsLoaded, directionsResponse]);
 
 
   useEffect(() => {
@@ -209,17 +209,31 @@ export default function Home() {
     );
   };
 
-  const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => {
+  const handleSelectRoute = async (route: google.maps.DirectionsRoute, index: number) => {
     setSelectedRoute(route);
     setSelectedRouteIndex(index);
-    setSelectedRouteStmInfo(stmInfo);
+    
+    const transitSteps = route.legs[0].steps.filter(s => s.travel_mode === 'TRANSIT' && s.transit);
+
+    const stmInfoForRoute: StmInfo[] = transitSteps.map(step => ({
+        stopId: null,
+        line: step.transit!.line.short_name!,
+        lineVariantId: null,
+        lineDestination: step.transit!.headsign || null,
+        departureStopLocation: {
+            lat: step.transit!.departure_stop.location!.lat(),
+            lng: step.transit!.departure_stop.location!.lng()
+        },
+        arrival: null,
+    }));
+    setSelectedRouteStmInfo(stmInfoForRoute);
 
     if (apiStatus === 'connected') {
-        const lineRoutePromises = stmInfo.map(info => info.line ? getLineRoute(info.line) : Promise.resolve(null));
+        const lineRoutePromises = stmInfoForRoute.map(info => info.line ? getLineRoute(info.line) : Promise.resolve(null));
         const results = await Promise.all(lineRoutePromises);
         
         const newLineRoutes: Record<string, StmLineRoute | null> = {};
-        stmInfo.forEach((info, i) => {
+        stmInfoForRoute.forEach((info, i) => {
             if (info.line) {
                 newLineRoutes[info.line] = results[i];
             }
@@ -240,13 +254,12 @@ export default function Home() {
       setView('options');
       setSelectedRoute(null);
       setSelectedRouteStmInfo([]);
-      // Don't clear bus locations, they are still relevant for options view
       setLineRoutes({});
       setMobileView('panel');
     } else if (view === 'options') {
       setView('search');
       setDirectionsResponse(null);
-      setBusLocations([]); // Clear locations when going back to search
+      setBusLocations([]);
     }
   };
   

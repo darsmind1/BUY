@@ -255,11 +255,22 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
-export async function getUpcomingBuses(busstopId: number, lines: string[]): Promise<UpcomingBus[]> {
+export async function getUpcomingBuses(busstopId: number, lines: string[], lineVariantId?: number | null): Promise<UpcomingBus[]> {
     if (lines.length === 0) {
         return [];
     }
-    const path = `/buses/busstops/${busstopId}/upcomingbuses?lines=${lines.join(',')}&amountperline=1`;
+    
+    let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
+    const params = new URLSearchParams();
+    params.append('amountperline', '1');
+    
+    // Prioritize lineVariantId for precision, but ensure 'lines' is always present
+    if (lineVariantId) {
+        params.append('lineVariantIds', lineVariantId.toString());
+    }
+    params.append('lines', lines.join(','));
+    
+    path += params.toString();
 
     try {
         const data = await stmApiFetch(path, { cache: 'no-store' });

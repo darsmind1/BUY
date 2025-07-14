@@ -45,10 +45,6 @@ export interface StmInfo {
   arrival: ArrivalInfo | null;
 }
 
-export interface BusArrivalsState {
-  [routeIndex: number]: ArrivalInfo | null;
-}
-
 export interface StmLineRoute {
     line: string;
     description: string;
