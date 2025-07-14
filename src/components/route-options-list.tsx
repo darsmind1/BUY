@@ -233,18 +233,15 @@ export default function RouteOptionsList({
           if (closestStop) {
             firstBusStepInfo.stopId = closestStop.busstopId;
 
-            const activeBuses = await getBusLocation([{ line: firstBusStepInfo.line, destination: firstBusStepInfo.lineDestination }]);
-            const activeBusForRoute = activeBuses.find(b => b.lineVariantId);
-            
-            if (activeBusForRoute) {
-                firstBusStepInfo.lineVariantId = activeBusForRoute.lineVariantId ?? null;
-            }
-
+            // Simple call, no need for lineVariantId here.
+            // Just get the next bus for the line at the stop.
             const upcomingBus = await getUpcomingBuses(
               firstBusStepInfo.stopId,
               firstBusStepInfo.line,
-              firstBusStepInfo.lineVariantId
+              null // Passing null for lineVariantId to keep it simple and robust
             );
+            
+            console.log(`[TEST] Upcoming bus for stop ${firstBusStepInfo.stopId} and line ${firstBusStepInfo.line}:`, upcomingBus);
 
             if (upcomingBus && upcomingBus.arrival) {
               firstBusStepInfo.arrival = {
@@ -252,6 +249,8 @@ export default function RouteOptionsList({
                 timestamp: upcomingBus.arrival.lastUpdate,
               };
             }
+          } else {
+             console.log(`[TEST] Could not find a close STM stop for route ${index}.`);
           }
           
           return { index, stmInfo: routeStmInfo };
