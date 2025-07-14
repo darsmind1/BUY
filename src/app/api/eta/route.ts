@@ -1,10 +1,15 @@
 
 import {NextResponse} from 'next/server';
 
-const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 const DISTANCE_MATRIX_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json';
 
 export async function POST(request: Request) {
+  if (!googleMapsApiKey) {
+    console.error('Google Maps API key is not configured.');
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
   try {
     const { busLocation, stopLocation } = await request.json();
 

@@ -1,4 +1,3 @@
-
 'use server';
 
 import config from './config';
@@ -146,8 +145,8 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: {line: string, destination?: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
+export async function getBusLocation(lines: string[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.filter(Boolean))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
@@ -162,34 +161,11 @@ export async function getBusLocation(lines: {line: string, destination?: string 
             return [];
         }
 
-        const allBusesForLines = data.map((bus: any) => ({
+        return data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
         })) as BusLocation[];
-
-        if (lines.every(l => l.destination === undefined)) {
-            return allBusesForLines;
-        }
-
-        const normalize = (str: string | null | undefined) => str ? str.toUpperCase().replace(/\s/g, '') : null;
-
-        const filteredBuses = allBusesForLines.filter(bus => {
-             return lines.some(lineInfo => {
-                if (bus.line !== lineInfo.line) return false;
-                
-                const normalizedBusDest = normalize(bus.destination);
-                const normalizedLineDest = normalize(lineInfo.destination);
-                
-                // If the required destination is null or undefined, any bus on the line is a match for that specific requirement.
-                if (!normalizedLineDest) return true;
-
-                // Otherwise, require a destination match.
-                return normalizedBusDest && normalizedBusDest.includes(normalizedLineDest);
-             });
-        });
-
-        return filteredBuses;
 
     } catch (error) {
         console.error(`Error in getBusLocation for lines ${lineParams}:`, error);
@@ -240,21 +216,5 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     } catch (error) {
         console.error(`Error in getLineRoute for line ${line}:`, error);
         return null;
-    }
-}
-
-export async function getLinesForStop(stopId: number): Promise<{ line: string }[]> {
-    const path = `/buses/busstops/${stopId}/lines`;
-    try {
-        const data = await stmApiFetch(path);
-        if (!data || !Array.isArray(data)) {
-            console.warn(`Could not get lines for stop ${stopId}`);
-            return [];
-        }
-        // The API returns an array of strings, so we map it to the expected object structure.
-        return data.map((line: string) => ({ line }));
-    } catch (error) {
-        console.error(`Error in getLinesForStop for stop ${stopId}:`, error);
-        return [];
     }
 }

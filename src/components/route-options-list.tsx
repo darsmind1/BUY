@@ -1,12 +1,11 @@
-
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, Bus, MapPin, AlertTriangle } from 'lucide-react';
-import { getBusLocation, findClosestStmStop, getLinesForStop } from '@/lib/stm-api';
-import type { ArrivalInfo, StmInfo, BusArrivalsState } from '@/lib/types';
+import { getBusLocation } from '@/lib/stm-api';
+import type { ArrivalInfo, StmInfo, BusArrivalsState, BusLocation } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getFormattedAddress } from '@/lib/google-maps-api';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -76,11 +75,12 @@ const getSignalAge = (arrivalInfo: ArrivalInfo | null) => {
 const getArrivalColorClass = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return 'text-primary';
     
-    const arrivalMinutes = arrivalInfo.eta / 60;
-    
-    if (arrivalMinutes <= 5) return 'text-green-400';
-    if (arrivalMinutes <= 10) return 'text-yellow-400';
-    return 'text-red-500';
+    const signalAge = getSignalAge(arrivalInfo);
+    if (signalAge === null) return 'text-primary';
+
+    if (signalAge <= 60) return 'text-green-400'; // Under 1 min old
+    if (signalAge <= 120) return 'text-yellow-400'; // 1-2 mins old
+    return 'text-red-500'; // Over 2 mins old
 };
 
 
@@ -142,10 +142,7 @@ const RouteOptionItem = ({
               {renderableSteps.map((step, stepIndex) => {
                   const isLastStep = stepIndex === renderableSteps.length - 1;
                   if (step.travel_mode === 'TRANSIT') {
-                    const lineInfo = stmInfo.find(info => 
-                        info.departureStopLocation?.lat.toFixed(4) === step.transit?.departure_stop.location?.lat().toFixed(4)
-                    );
-                    const lineToShow = lineInfo?.line || step.transit?.line.short_name;
+                    const lineToShow = step.transit?.line.short_name;
                     return (
                       <React.Fragment key={stepIndex}>
                         <Badge variant="secondary" className="font-mono">{lineToShow}</Badge>
@@ -290,7 +287,6 @@ export default function RouteOptionsList({
                             if (step.travel_mode === 'TRANSIT' && step.transit?.line.short_name) {
                                 const line = step.transit.line.short_name;
                                 const headsign = step.transit.headsign || null;
-                                // Use a composite key to store unique line-destination pairs
                                 const key = `${line}-${headsign}`;
                                 if (!alternativeLines.has(key)) {
                                     alternativeLines.set(key, { line, destination: headsign });
@@ -306,6 +302,39 @@ export default function RouteOptionsList({
         });
     });
   }, [isGoogleMapsLoaded]);
+
+  const findArrivalForStop = useCallback(async (line: string, lineDestination: string, stopLocation: google.maps.LatLngLiteral, liveBuses: BusLocation[]): Promise<ArrivalInfo | null> => {
+      // Normalize destination strings for better matching
+      const normalize = (str: string) => str.toUpperCase().replace(/\s/g, '');
+      const normalizedDestination = normalize(lineDestination);
+
+      const liveBus = liveBuses.find(l => {
+        const busDestination = l.destination || '';
+        return l.line === line && normalize(busDestination).includes(normalizedDestination);
+      });
+
+      if (liveBus) {
+        try {
+          const response = await fetch('/api/eta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              busLocation: { lat: liveBus.location.coordinates[1], lng: liveBus.location.coordinates[0] },
+              stopLocation: stopLocation
+            }),
+          });
+          if (!response.ok) return null;
+          const data = await response.json();
+          if (data.eta !== null) {
+            return { eta: data.eta, timestamp: liveBus.timestamp };
+          }
+        } catch (error) {
+          console.error("Error fetching ETA:", error);
+          return null;
+        }
+      }
+      return null;
+  }, []);
 
   // Effect for initial data setup (stops, lines, etc.)
   useEffect(() => {
@@ -327,21 +356,13 @@ export default function RouteOptionsList({
 
            if (departureStopLocation && googleTransitLine) {
              const { lat, lng } = { lat: departureStopLocation.lat(), lng: departureStopLocation.lng() };
-             const closestStop = await findClosestStmStop(lat, lng);
-             
-             if (closestStop) {
-                const stmLinesForStop = await getLinesForStop(closestStop.busstopId);
-                // Verify that the Google-suggested line is actually served by this stop according to STM
-                if (stmLinesForStop.some(l => l.line === googleTransitLine)) {
-                     return {
-                       stopId: closestStop.busstopId,
-                       line: googleTransitLine,
-                       lineDestination,
-                       departureStopLocation: { lat, lng },
-                       arrival: null,
-                     };
-                }
-             }
+             return {
+               stopId: null, // We don't need the STM stop ID for this logic anymore
+               line: googleTransitLine,
+               lineDestination,
+               departureStopLocation: { lat, lng },
+               arrival: null,
+             };
            }
            return null;
         });
@@ -405,105 +426,65 @@ export default function RouteOptionsList({
     }
 
     const fetchAllArrivals = async () => {
-      const primaryLines = Object.values(stmInfoByRoute).flat().map(info => ({
-        line: info.line,
-        destination: info.lineDestination,
-      }));
-
-      const transferLines = Object.values(transferInfoByRoute).filter(Boolean).flatMap(info => 
-        info!.alternativeLines.map(alt => ({ line: alt.line, destination: alt.destination }))
-      );
-
-      const linesToFetch = [...primaryLines, ...transferLines].filter(l => l.line);
+      // Collect lines from primary route steps
+      const primaryLines = Object.values(stmInfoByRoute).flat().map(info => info.line);
+      const transferLines = Object.values(transferInfoByRoute).filter(Boolean).flatMap(info => info!.alternativeLines.map(alt => alt.line));
+      const linesToFetch = [...new Set([...primaryLines, ...transferLines])].filter(Boolean);
       if (linesToFetch.length === 0) return;
 
       try {
         const locations = await getBusLocation(linesToFetch);
         
-        const findArrivalForStop = async (
-            line: string, 
-            lineDestination: string | null,
-            stopLocation: google.maps.LatLngLiteral
-        ): Promise<ArrivalInfo | null> => {
-            if (!isGoogleMapsLoaded) return null;
-
-            const normalize = (str: string | null) => str ? str.toUpperCase().replace(/\s/g, '') : null;
-            const normalizedLineDest = normalize(lineDestination);
-
-            const liveBus = locations.find(l => {
-                const normalizedBusDest = normalize(l.destination);
-                const lineMatch = l.line === line;
-                const destMatch = !normalizedLineDest || (normalizedBusDest && normalizedBusDest.includes(normalizedLineDest));
-                return lineMatch && destMatch;
-            });
-            
-            if (liveBus) {
-                try {
-                    const response = await fetch('/api/eta', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            busLocation: { lat: liveBus.location.coordinates[1], lng: liveBus.location.coordinates[0] },
-                            stopLocation: stopLocation
-                        })
-                    });
-                    if (!response.ok) return null;
-                    const data = await response.json();
-                    if (data.eta !== null) {
-                        return { eta: data.eta, timestamp: liveBus.timestamp };
-                    }
-                } catch (e) {
-                    console.error("Error fetching ETA from server", e);
-                }
-            }
-            return null;
-        }
-
         // Update primary route arrivals with persistence logic
-        setStmInfoByRoute(async (currentStmInfo) => {
-            const newStmInfo: Record<number, StmInfo[]> = {};
-            for (const routeIndex in currentStmInfo) {
-              newStmInfo[routeIndex] = await Promise.all(currentStmInfo[routeIndex].map(async (info) => {
-                const newInfo = { ...info };
-                if (newInfo.departureStopLocation) {
-                  const newArrival = await findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation);
-                  const oldSignalAge = getSignalAge(newInfo.arrival);
-                  if (newArrival) {
-                    newInfo.arrival = newArrival;
-                  } else if (oldSignalAge === null || oldSignalAge > 90) { 
-                    newInfo.arrival = null;
+        setStmInfoByRoute(currentStmInfo => {
+            const newStmInfo: Record<number, StmInfo[]> = { ...currentStmInfo };
+            Object.keys(newStmInfo).forEach(async routeIndexStr => {
+              const routeIndex = parseInt(routeIndexStr, 10);
+              const infoList = newStmInfo[routeIndex];
+              const updatedInfoListPromises = infoList.map(async info => {
+                  const newInfo = { ...info };
+                  if (newInfo.departureStopLocation && newInfo.lineDestination) {
+                      const newArrival = await findArrivalForStop(newInfo.line, newInfo.lineDestination, newInfo.departureStopLocation, locations);
+                      const oldSignalAge = getSignalAge(newInfo.arrival);
+                      if (newArrival) {
+                          newInfo.arrival = newArrival;
+                      } else if (oldSignalAge === null || oldSignalAge > 90) { // Clear if no new signal and old is too old
+                          newInfo.arrival = null;
+                      }
                   }
-                }
-                return newInfo;
-              }));
-            }
+                  return newInfo;
+              });
+              newStmInfo[routeIndex] = await Promise.all(updatedInfoListPromises);
+            });
             return newStmInfo;
         });
 
         // Update transfer alternatives arrivals
-        setTransferInfoByRoute(async (currentTransferInfo) => {
-            const newTransferInfo: Record<number, TransferInfo | null> = {};
-            for (const routeIndex in currentTransferInfo) {
-              const currentInfo = currentTransferInfo[routeIndex];
+        setTransferInfoByRoute(currentTransferInfo => {
+            const newTransferInfo: Record<number, TransferInfo | null> = { ...currentTransferInfo };
+            Object.keys(newTransferInfo).forEach(async routeIndexStr => {
+              const routeIndex = parseInt(routeIndexStr, 10);
+              const currentInfo = newTransferInfo[routeIndex];
               if (currentInfo) {
-                newTransferInfo[routeIndex] = {
-                  ...currentInfo,
-                  alternativeLines: await Promise.all(currentInfo.alternativeLines.map(async (alt) => {
-                    const newAlt = { ...alt };
-                    const newArrival = await findArrivalForStop(newAlt.line, newAlt.destination, currentInfo.stopLocation);
-                    const oldSignalAge = getSignalAge(newAlt.arrival);
-                    if (newArrival) {
-                      newAlt.arrival = newArrival;
-                    } else if (oldSignalAge === null || oldSignalAge > 90) { 
-                      newAlt.arrival = null;
-                    }
-                    return newAlt;
-                  })),
-                };
-              } else {
-                newTransferInfo[routeIndex] = null;
+                  const updatedAlternativesPromises = currentInfo.alternativeLines.map(async alt => {
+                      const newAlt = { ...alt };
+                      if (alt.destination) {
+                        const newArrival = await findArrivalForStop(alt.line, alt.destination, currentInfo.stopLocation, locations);
+                        const oldSignalAge = getSignalAge(alt.arrival);
+                        if (newArrival) {
+                            newAlt.arrival = newArrival;
+                        } else if (oldSignalAge === null || oldSignalAge > 90) {
+                            newAlt.arrival = null;
+                        }
+                      }
+                      return newAlt;
+                  });
+                  newTransferInfo[routeIndex] = {
+                      ...currentInfo,
+                      alternativeLines: await Promise.all(updatedAlternativesPromises)
+                  };
               }
-            }
+            });
             return newTransferInfo;
         });
 
@@ -513,10 +494,10 @@ export default function RouteOptionsList({
     };
 
     fetchAllArrivals(); // Initial fetch
-    const intervalId = setInterval(fetchAllArrivals, 30000); // Update every 30 seconds
+    const intervalId = setInterval(fetchAllArrivals, 20000); // Update every 20 seconds
 
     return () => clearInterval(intervalId);
-  }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded]);
+  }, [isLoading, stmInfoByRoute, transferInfoByRoute, isApiConnected, isGoogleMapsLoaded, findArrivalForStop]);
   
 
   if (isLoading) {
