@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
+import { getUpcomingBuses, findClosestStmStop, BusLocation } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
@@ -45,7 +45,7 @@ const ArrivalInfoLegend = () => {
 
 const getArrivalText = (arrivalInfo: ArrivalInfo | null) => {
     if (!arrivalInfo) return null;
-    if (arrivalInfo.eta < 1) return "Llegando";
+    if (arrivalInfo.eta <= 0) return "Llegando";
     const arrivalMinutes = Math.round(arrivalInfo.eta);
     return `Llega en ${arrivalMinutes} min`;
 };
@@ -179,12 +179,12 @@ export default function RouteOptionsList({
   routes, 
   onSelectRoute, 
   isApiConnected,
-  isGoogleMapsLoaded,
+  busLocations
 }: {
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
-  isGoogleMapsLoaded: boolean;
+  busLocations: BusLocation[];
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -194,14 +194,15 @@ export default function RouteOptionsList({
       setIsLoading(false);
       return;
     }
-
+    
+    // Set initial structure for stmInfo based on Google's route.
     const initialStmInfo: Record<number, StmInfo[]> = {};
     routes.forEach((route, index) => {
       const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
       initialStmInfo[index] = transitSteps.map(step => ({
         stopId: null,
         line: step.transit!.line.short_name!,
-        lineVariantId: null,
+        lineVariantId: null, // We'll try to find this
         lineDestination: step.transit!.headsign || null,
         departureStopLocation: {
           lat: step.transit!.departure_stop.location!.lat(),
@@ -210,24 +211,29 @@ export default function RouteOptionsList({
         arrival: null,
       }));
     });
-    setStmInfoByRoute(initialStmInfo);
 
     const enrichedStmInfo = { ...initialStmInfo };
+    // This promise will handle all the async work for all routes.
     const allPromises = routes.map(async (route, index) => {
-      // We only care about the first bus for the options list
       const firstBusStep = enrichedStmInfo[index]?.[0];
       if (!firstBusStep || !firstBusStep.line || !firstBusStep.departureStopLocation) return;
         
-      const closestStop = await findClosestStmStop(firstBusStep.departureStopLocation.lat, firstBusStep.departureStopLocation.lng);
-      if (closestStop) {
-        firstBusStep.stopId = closestStop.busstopId;
-        const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStep.line, null);
-        if (upcomingBus?.arrival) {
-          firstBusStep.arrival = {
-              eta: upcomingBus.arrival.minutes,
-              timestamp: upcomingBus.arrival.lastUpdate,
-          };
+      try {
+        const closestStop = await findClosestStmStop(firstBusStep.departureStopLocation.lat, firstBusStep.departureStopLocation.lng);
+        if (closestStop) {
+          firstBusStep.stopId = closestStop.busstopId;
+          // Now that we have a stop, get upcoming buses for that stop and line.
+          const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStep.line, null);
+          if (upcomingBus?.arrival) {
+            firstBusStep.arrival = {
+                eta: upcomingBus.arrival.minutes,
+                timestamp: upcomingBus.arrival.lastUpdate,
+            };
+            firstBusStep.lineVariantId = upcomingBus.lineVariantId;
+          }
         }
+      } catch (error) {
+        console.error(`Error processing arrivals for route ${index}, line ${firstBusStep.line}`, error);
       }
     });
 
@@ -248,7 +254,6 @@ export default function RouteOptionsList({
     } else {
         setIsLoading(false);
     }
-
   }, [routes, fetchAllArrivals]);
   
 
@@ -299,5 +304,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    

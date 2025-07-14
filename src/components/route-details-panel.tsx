@@ -267,22 +267,25 @@ export default function RouteDetailsPanel({
   const [liveStmInfo, setLiveStmInfo] = useState<StmInfo[]>(stmInfo);
 
   useEffect(() => {
-    // Initialize with passed stmInfo from props
+    // Initialize with passed stmInfo from props, but clear old arrivals
     setLiveStmInfo(stmInfo.map(s => ({ ...s, arrival: null })));
   }, [stmInfo]);
+
 
   useEffect(() => {
     let isMounted = true;
     const fetchEtas = async () => {
-        if (busLocations.length === 0 || liveStmInfo.length === 0) return;
+        if (busLocations.length === 0 || stmInfo.length === 0) return;
         
-        const updatedStmInfoPromises = liveStmInfo.map(async (info) => {
+        const updatedStmInfoPromises = stmInfo.map(async (info) => {
+            if (!info.line || !info.departureStopLocation) return info;
+
             const busForLine = busLocations.find(b => 
                 b.line === info.line &&
                 (!info.lineDestination || b.destination?.toLowerCase().includes(info.lineDestination.toLowerCase()))
             );
             
-            if (busForLine && info.departureStopLocation) {
+            if (busForLine) {
                 try {
                     const res = await fetch('/api/eta', {
                         method: 'POST',
@@ -301,7 +304,7 @@ export default function RouteDetailsPanel({
                                 ...info,
                                 arrival: {
                                     eta: etaMinutes,
-                                    timestamp: new Date().toISOString()
+                                    timestamp: new Date().toISOString() // Use current time as timestamp for fetched ETA
                                 }
                             };
                         }
@@ -325,7 +328,7 @@ export default function RouteDetailsPanel({
         isMounted = false;
     };
 
-  }, [busLocations]); // Rerun whenever bus locations change
+  }, [busLocations, stmInfo]);
 
   useEffect(() => {
     if (mapRef.current && userLocation) {

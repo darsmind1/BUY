@@ -146,8 +146,8 @@ export async function checkApiConnection(): Promise<boolean> {
     }
 }
 
-export async function getBusLocation(lines: {line?: string, destination?: string | null}[]): Promise<BusLocation[]> {
-    const uniqueLineNumbers = [...new Set(lines.filter(l => l.line).map(l => l.line))];
+export async function getBusLocation(lines: {line: string, destination?: string | null}[]): Promise<BusLocation[]> {
+    const uniqueLineNumbers = [...new Set(lines.map(l => l.line))];
     if (uniqueLineNumbers.length === 0) return [];
     
     const lineParams = uniqueLineNumbers.join(',');
@@ -162,19 +162,25 @@ export async function getBusLocation(lines: {line?: string, destination?: string
             return [];
         }
 
-        // Now, filter by destination if provided
         const allBuses: BusLocation[] = data.map((bus: any) => ({
             ...bus,
             line: (bus.line?.value ?? bus.line).toString(),
             id: (bus.id)?.toString(),
+            lineVariantId: bus.lineVariantId,
+            destination: bus.destination
         }));
-
-        const requestedDestinations = lines.map(l => l.destination?.toLowerCase()).filter(Boolean);
-
-        if (requestedDestinations.length > 0) {
-            return allBuses.filter(bus => 
-                bus.destination && requestedDestinations.some(dest => bus.destination!.toLowerCase().includes(dest!))
-            );
+        
+        // Filter by destination if provided for any of the lines
+        const linesWithDestinations = lines.filter(l => l.destination);
+        if (linesWithDestinations.length > 0) {
+            return allBuses.filter(bus => {
+                const requestedLine = linesWithDestinations.find(l => l.line === bus.line);
+                if (requestedLine && bus.destination && requestedLine.destination) {
+                    return bus.destination.toLowerCase().includes(requestedLine.destination.toLowerCase());
+                }
+                // If the bus line wasn't one with a specific destination, include it
+                return !linesWithDestinations.some(l => l.line === bus.line);
+            });
         }
 
         return allBuses;
@@ -231,12 +237,19 @@ export async function getLineRoute(line: string): Promise<StmLineRoute | null> {
     }
 }
 
-
 export async function getUpcomingBuses(busstopId: number, line: string, lineVariantId: number | null): Promise<UpcomingBus | null> {
-    // Prefer the more specific lineVariantId if available
-    const idParam = lineVariantId ? `lineVariantIds=${lineVariantId}` : `lines=${line}`;
+    let path = `/buses/busstops/${busstopId}/upcomingbuses?`;
     
-    const path = `/buses/busstops/${busstopId}/upcomingbuses?${idParam}&amountperline=1`;
+    const params = new URLSearchParams();
+    if (lineVariantId) {
+        params.append('lineVariantIds', lineVariantId.toString());
+    } else {
+        params.append('lines', line);
+    }
+    params.append('amountperline', '1');
+    
+    path += params.toString();
+
     try {
         const data = await stmApiFetch(path);
         // The API returns an array, we want the first element
@@ -245,7 +258,7 @@ export async function getUpcomingBuses(busstopId: number, line: string, lineVari
         }
         return null;
     } catch (error) {
-        console.error(`Error in getUpcomingBuses for stop ${busstopId} and params '${idParam}':`, error);
+        console.error(`Error in getUpcomingBuses for stop ${busstopId} and params '${params.toString()}':`, error);
         return null;
     }
 }

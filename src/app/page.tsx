@@ -61,71 +61,42 @@ export default function Home() {
     verifyApiConnection();
   }, [toast]);
 
-  const getSignalAge = useCallback((arrivalInfo: ArrivalInfo | null) => {
-    if (!arrivalInfo) return null;
-    const now = new Date().getTime();
-    const signalTimestamp = new Date(arrivalInfo.timestamp).getTime();
-    return (now - signalTimestamp) / 1000; // age in seconds
-  }, []);
-
-  // Effect to update bus locations and arrival times for the detailed view
+  // Effect to update bus locations for the options or details view
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
   
     const updateRealtimeData = async () => {
-      if (!selectedRoute || apiStatus !== 'connected' || selectedRouteStmInfo.length === 0 || !isGoogleMapsLoaded) {
+      // Don't run if we are in search view, api is down, or maps aren't loaded
+      if (view === 'search' || apiStatus !== 'connected' || !isGoogleMapsLoaded || !directionsResponse) {
+        setBusLocations([]);
+        return;
+      }
+      
+      // Collect all unique lines from all route options
+      const linesToFetch = directionsResponse.routes.flatMap(route => 
+          route.legs[0].steps
+              .filter(step => step.travel_mode === 'TRANSIT' && step.transit?.line.short_name)
+              .map(step => ({ line: step.transit!.line.short_name!, destination: step.transit!.headsign }))
+      );
+      
+      const uniqueLines = Array.from(new Map(linesToFetch.map(item => [item.line, item])).values());
+
+      if (uniqueLines.length === 0) {
         setBusLocations([]);
         return;
       }
   
-      const linesToFetch = selectedRouteStmInfo.map(info => ({
-        line: info.line,
-        destination: info.lineDestination
-      }));
-  
       try {
-        const locations = await getBusLocation(linesToFetch);
+        const locations = await getBusLocation(uniqueLines);
         setBusLocations(locations);
-  
-        const findArrivalForStop = (line: string, stopLocation: google.maps.LatLngLiteral): ArrivalInfo | null => {
-            const liveBus = locations.find(l => l.line === line); // No destination filter for now
-            if (liveBus) {
-                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
-                    new window.google.maps.LatLng(liveBus.location.coordinates[1], liveBus.location.coordinates[0]),
-                    new window.google.maps.LatLng(stopLocation)
-                );
-                // Rough ETA: 30km/h average speed => 8.33 m/s
-                const eta = distance / 8.33; 
-                return { eta, timestamp: liveBus.timestamp };
-            }
-            return null;
-        }
-
-        // Update arrival times for the selected route
-        setSelectedRouteStmInfo(currentStmInfo => {
-            return currentStmInfo.map(info => {
-              const newInfo = { ...info };
-              if (newInfo.departureStopLocation) {
-                const newArrival = findArrivalForStop(newInfo.line, newInfo.departureStopLocation);
-                const oldSignalAge = getSignalAge(newInfo.arrival);
-
-                if (newArrival) {
-                  newInfo.arrival = newArrival;
-                } else if (oldSignalAge === null || oldSignalAge > 90) { 
-                  newInfo.arrival = null;
-                }
-              }
-              return newInfo;
-            });
-        });
-  
       } catch (error) {
-        console.error(`Error fetching real-time data for details view:`, error);
-        setBusLocations([]);
+        console.error(`Error fetching real-time data:`, error);
+        setBusLocations([]); // Clear locations on error to avoid stale data
       }
     };
   
-    if (view === 'details' && selectedRoute) {
+    // Run only when we have options or details to show
+    if (view === 'options' || view === 'details') {
       updateRealtimeData(); 
       intervalId = setInterval(updateRealtimeData, 20000); // Update every 20 seconds
     } else {
@@ -137,7 +108,7 @@ export default function Home() {
         clearInterval(intervalId);
       }
     };
-  }, [view, selectedRoute, apiStatus, isGoogleMapsLoaded, getSignalAge, selectedRouteStmInfo]);
+  }, [view, apiStatus, isGoogleMapsLoaded, directionsResponse]);
 
 
   useEffect(() => {
@@ -263,12 +234,13 @@ export default function Home() {
       setView('options');
       setSelectedRoute(null);
       setSelectedRouteStmInfo([]);
-      setBusLocations([]);
+      // Don't clear bus locations, they are still relevant for options view
       setLineRoutes({});
       setMobileView('panel');
     } else if (view === 'options') {
       setView('search');
       setDirectionsResponse(null);
+      setBusLocations([]); // Clear locations when going back to search
     }
   };
   
@@ -334,7 +306,7 @@ export default function Home() {
                   routes={directionsResponse.routes} 
                   onSelectRoute={handleSelectRoute}
                   isApiConnected={apiStatus === 'connected'}
-                  isGoogleMapsLoaded={isGoogleMapsLoaded}
+                  busLocations={busLocations}
                 />
               )}
               {view === 'details' && selectedRoute && (
