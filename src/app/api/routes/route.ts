@@ -26,7 +26,7 @@ function toDirectionsResult(routesApiResponse: any): any {
         ...step,
         travel_mode: step.travelMode || 'TRANSIT',
         duration: step.duration ? { text: step.duration.replace('s',' seg'), value: parseInt(step.duration.replace('s', ''), 10) } : undefined,
-        distance: step.distanceMeters ? { text: `${step.distanceMeters} m`, value: step.distanceMeters } : undefined,
+        distance: step.distanceMeters ? { text: `${leg.distanceMeters} m`, value: leg.distanceMeters } : undefined,
         instructions: step.navigationInstruction?.instructions || step.instruction,
         transit: step.transitDetails ? {
           ...step.transitDetails,
