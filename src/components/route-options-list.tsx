@@ -193,43 +193,49 @@ export default function RouteOptionsList({
       return;
     }
     
-    // Set initial structure for stmInfo based on Google's route.
+    // Initialize a structure to hold all the STM info we gather.
     const initialStmInfo: Record<number, StmInfo[]> = {};
     routes.forEach((route, index) => {
-      const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
-      initialStmInfo[index] = transitSteps.map(step => ({
-        stopId: null,
-        line: step.transit!.line.short_name!,
-        lineVariantId: null,
-        lineDestination: step.transit!.headsign || null,
-        departureStopLocation: {
-          lat: step.transit!.departure_stop.location!.lat(),
-          lng: step.transit!.departure_stop.location!.lng()
-        },
-        arrival: null,
-      }));
+        initialStmInfo[index] = route.legs[0]?.steps
+            .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
+            .map(step => ({
+                stopId: null,
+                line: step.transit!.line.short_name!,
+                lineVariantId: null,
+                lineDestination: step.transit!.headsign || null,
+                departureStopLocation: {
+                    lat: step.transit!.departure_stop.location!.lat(),
+                    lng: step.transit!.departure_stop.location!.lng()
+                },
+                arrival: null,
+            })) || [];
     });
     
     const enrichedStmInfo = { ...initialStmInfo };
+
     // This promise will handle all the async work for all routes.
     const allPromises = routes.map(async (route, index) => {
-      const firstBusStep = enrichedStmInfo[index]?.[0];
-      if (!firstBusStep || !firstBusStep.line || !firstBusStep.departureStopLocation) return;
+      // We only care about the *first* bus the user has to take for this view.
+      const firstBusStepInfo = enrichedStmInfo[index]?.[0];
+      if (!firstBusStepInfo || !firstBusStepInfo.line || !firstBusStepInfo.departureStopLocation) {
+        return; // No bus step in this route option.
+      }
         
       try {
-        const closestStop = await findClosestStmStop(firstBusStep.departureStopLocation.lat, firstBusStep.departureStopLocation.lng);
+        const closestStop = await findClosestStmStop(firstBusStepInfo.departureStopLocation.lat, firstBusStepInfo.departureStopLocation.lng);
         if (closestStop) {
-          firstBusStep.stopId = closestStop.busstopId;
-          const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStep.line, null);
+          firstBusStepInfo.stopId = closestStop.busstopId;
+          const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStepInfo.line, null);
+          
           if (upcomingBus?.arrival) {
-            firstBusStep.arrival = {
+            firstBusStepInfo.arrival = {
                 eta: upcomingBus.arrival.minutes,
                 timestamp: upcomingBus.arrival.lastUpdate,
             };
           }
         }
       } catch (error) {
-        console.error(`Error processing arrivals for route ${index}, line ${firstBusStep.line}`, error);
+        console.error(`Error processing arrivals for route ${index}, line ${firstBusStepInfo.line}`, error);
       }
     });
 
