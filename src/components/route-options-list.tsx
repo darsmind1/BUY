@@ -191,9 +191,9 @@ export default function RouteOptionsList({
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchAllArrivals = useCallback(async () => {
+  const fetchAllArrivals = useCallback(async (isInitialLoad = false) => {
     if (!isApiConnected || !isGoogleMapsLoaded) {
-      setIsLoading(false);
+      if (isInitialLoad) setIsLoading(false);
       return;
     }
 
@@ -248,11 +248,11 @@ export default function RouteOptionsList({
     } catch (error) {
         console.error("Error fetching arrivals:", error);
     } finally {
-        if (isLoading) {
+        if (isInitialLoad) {
             setIsLoading(false);
         }
     }
-  }, [routes, isApiConnected, isGoogleMapsLoaded, isLoading]);
+  }, [routes, isApiConnected, isGoogleMapsLoaded]);
 
 
   useEffect(() => {
@@ -261,7 +261,7 @@ export default function RouteOptionsList({
         return;
     }
     
-    // Set initial structure based on Google routes
+    setIsLoading(true);
     const initialStmInfo: Record<number, StmInfo[]> = {};
     routes.forEach((route, index) => {
         const transitSteps = route.legs[0]?.steps.filter(step => step.travel_mode === 'TRANSIT' && step.transit);
@@ -274,14 +274,11 @@ export default function RouteOptionsList({
         }));
     });
     setStmInfoByRoute(initialStmInfo);
-    setIsLoading(true);
     
-    // Perform initial fetch and then set up interval
-    fetchAllArrivals();
-    const intervalId = setInterval(fetchAllArrivals, 30000);
+    fetchAllArrivals(true);
+    const intervalId = setInterval(() => fetchAllArrivals(false), 30000);
 
     return () => clearInterval(intervalId);
-
   }, [routes, isApiConnected, isGoogleMapsLoaded, fetchAllArrivals]);
 
   if (isLoading) {
@@ -331,5 +328,3 @@ export default function RouteOptionsList({
     </div>
   );
 }
-
-    
