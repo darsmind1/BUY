@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Footprints, ChevronsRight, Wifi, Info, AlertTriangle } from 'lucide-react';
-import { getUpcomingBuses, findClosestStmStop } from '@/lib/stm-api';
+import { getUpcomingBuses, findClosestStmStop, BusLocation } from '@/lib/stm-api';
 import type { ArrivalInfo, StmInfo } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
@@ -184,105 +184,109 @@ export default function RouteOptionsList({
   routes: google.maps.DirectionsRoute[];
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stmInfo: StmInfo[]) => void;
   isApiConnected: boolean;
-  busLocations: any[];
+  busLocations: BusLocation[];
 }) {
   const [stmInfoByRoute, setStmInfoByRoute] = useState<Record<number, StmInfo[]>>({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const fetchAllArrivals = useCallback(async () => {
-    console.log(`[TEST] Iniciando fetchAllArrivals para ${routes.length} rutas...`);
-    
-    if (!isApiConnected || routes.length === 0) {
-      setIsLoading(false);
+  // Initialize stmInfoByRoute when routes are first received
+  useEffect(() => {
+    if (routes.length > 0) {
+      const initialStmInfo: Record<number, StmInfo[]> = {};
+      routes.forEach((route, index) => {
+          initialStmInfo[index] = route.legs[0]?.steps
+              .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
+              .map(step => ({
+                  stopId: null,
+                  line: step.transit!.line.short_name!,
+                  lineVariantId: null,
+                  lineDestination: step.transit!.headsign || null,
+                  departureStopLocation: {
+                      lat: step.transit!.departure_stop.location!.lat(),
+                      lng: step.transit!.departure_stop.location!.lng()
+                  },
+                  arrival: null,
+              })) || [];
+      });
+      setStmInfoByRoute(initialStmInfo);
+    }
+  }, [routes]);
+
+  // Effect to calculate ETA based on bus locations
+  useEffect(() => {
+    let isMounted = true;
+    if (routes.length === 0 || busLocations.length === 0 || Object.keys(stmInfoByRoute).length === 0) {
       return;
     }
     
-    const initialStmInfo: Record<number, StmInfo[]> = {};
-    routes.forEach((route, index) => {
-        initialStmInfo[index] = route.legs[0]?.steps
-            .filter(step => step.travel_mode === 'TRANSIT' && step.transit)
-            .map(step => ({
-                stopId: null,
-                line: step.transit!.line.short_name!,
-                lineVariantId: null,
-                lineDestination: step.transit!.headsign || null,
-                departureStopLocation: {
-                    lat: step.transit!.departure_stop.location!.lat(),
-                    lng: step.transit!.departure_stop.location!.lng()
-                },
-                arrival: null,
-            })) || [];
-    });
-    
-    const enrichedStmInfo = { ...initialStmInfo };
+    const fetchEtas = async () => {
+        const newStmInfo: Record<number, StmInfo[]> = JSON.parse(JSON.stringify(stmInfoByRoute)); // Deep copy
+        let hasChanged = false;
 
-    const allPromises = routes.map(async (route, index) => {
-      const firstBusStepInfo = enrichedStmInfo[index]?.[0];
-      console.log(`[TEST] Ruta ${index}: Procesando primer tramo de bus.`, firstBusStepInfo);
+        for (const index in newStmInfo) {
+            const routeStmInfo = newStmInfo[index];
+            if (!routeStmInfo || routeStmInfo.length === 0) continue;
 
-      if (!firstBusStepInfo || !firstBusStepInfo.line || !firstBusStepInfo.departureStopLocation) {
-        console.log(`[TEST] Ruta ${index}: No hay información de bus o parada. Saltando.`);
-        return; 
-      }
-        
-      try {
-        const closestStop = await findClosestStmStop(firstBusStepInfo.departureStopLocation.lat, firstBusStepInfo.departureStopLocation.lng);
-        console.log(`[TEST] Ruta ${index}: Resultado de findClosestStmStop:`, closestStop);
-        
-        if (closestStop) {
-          firstBusStepInfo.stopId = closestStop.busstopId;
-          console.log(`[TEST] Ruta ${index}: Llamando a getUpcomingBuses con stopId=${closestStop.busstopId}, line=${firstBusStepInfo.line}`);
-          const upcomingBus = await getUpcomingBuses(closestStop.busstopId, firstBusStepInfo.line, null);
-          console.log(`[TEST] Ruta ${index}: Resultado de getUpcomingBuses:`, upcomingBus);
-          
-          if (upcomingBus?.arrival) {
-            firstBusStepInfo.arrival = {
-                eta: upcomingBus.arrival.minutes,
-                timestamp: upcomingBus.arrival.lastUpdate,
-            };
-          }
+            const firstBusStepInfo = routeStmInfo[0];
+            if (!firstBusStepInfo.line || !firstBusStepInfo.departureStopLocation) continue;
+
+            const busForLine = busLocations.find(b => 
+                b.line === firstBusStepInfo.line &&
+                (!firstBusStepInfo.lineDestination || b.destination?.toLowerCase().includes(firstBusStepInfo.lineDestination.toLowerCase()))
+            );
+
+            if (busForLine) {
+                try {
+                    const res = await fetch('/api/eta', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            busLocation: { lat: busForLine.location.coordinates[1], lng: busForLine.location.coordinates[0] },
+                            stopLocation: firstBusStepInfo.departureStopLocation
+                        })
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.eta !== null) {
+                            const etaMinutes = Math.round(data.eta / 60);
+                            firstBusStepInfo.arrival = { 
+                                eta: etaMinutes,
+                                timestamp: new Date().toISOString()
+                            };
+                            hasChanged = true;
+                        } else {
+                            if (firstBusStepInfo.arrival) {
+                                firstBusStepInfo.arrival = null;
+                                hasChanged = true;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error fetching ETA for line", firstBusStepInfo.line, error);
+                     if (firstBusStepInfo.arrival) {
+                        firstBusStepInfo.arrival = null;
+                        hasChanged = true;
+                    }
+                }
+            } else {
+                 if (firstBusStepInfo.arrival) {
+                    firstBusStepInfo.arrival = null;
+                    hasChanged = true;
+                }
+            }
         }
-      } catch (error) {
-        console.error(`[TEST] Ruta ${index}: Error procesando arribos para linea ${firstBusStepInfo.line}`, error);
-      }
-    });
+        
+        if (isMounted && hasChanged) {
+            setStmInfoByRoute(newStmInfo);
+        }
+    };
 
-    await Promise.all(allPromises);
-    console.log("[TEST] Proceso finalizado. Actualizando estado con:", enrichedStmInfo);
-    setStmInfoByRoute(enrichedStmInfo);
-    setIsLoading(false);
+    fetchEtas();
 
-  }, [routes, isApiConnected]);
+    return () => { isMounted = false };
 
-
-  useEffect(() => {
-    if (routes.length > 0) {
-      setIsLoading(true);
-      fetchAllArrivals();
-      
-      const intervalId = setInterval(fetchAllArrivals, 30000); 
-      return () => clearInterval(intervalId);
-    } else {
-        setIsLoading(false);
-    }
-  }, [routes, fetchAllArrivals]);
-  
-
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {routes.map((_, index) => (
-            <Card key={index} className="p-4">
-                <div className="flex justify-between items-center mb-2">
-                    <Skeleton className="h-5 w-3/5" />
-                    <Skeleton className="h-4 w-1/5" />
-                </div>
-                <Skeleton className="h-4 w-2/5" />
-            </Card>
-        ))}
-      </div>
-    );
-  }
+  }, [busLocations, routes, stmInfoByRoute]);
   
   const hasTransitRoutes = routes.some(r => r.legs[0].steps.some(s => s.travel_mode === 'TRANSIT'));
 
