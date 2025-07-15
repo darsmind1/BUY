@@ -170,7 +170,7 @@ const RouteOptionItem = ({
                 <Clock className="h-3 w-3" />
                 <span>
                   {scheduledArrival.prefix}{' '}
-                  <span className={cn(arrivalInfo ? "text-green-400 font-medium" : "")}>
+                  <span className={cn(arrivalInfo && "text-green-400 font-medium")}>
                     {scheduledArrival.time}
                   </span>
                 </span>
