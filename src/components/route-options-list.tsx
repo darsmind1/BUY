@@ -1,7 +1,9 @@
+
 "use client";
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { StmBusStop, getAllBusStops, UpcomingBus, getUpcomingBuses } from '@/lib/stm-api';
 import { haversineDistance, cn } from '@/lib/utils';
 
@@ -174,7 +176,7 @@ const RouteOptionItem = ({
                 </span>
               </div>
             ) : firstTransitStep ? (
-              <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
+              <Badge variant="outline" className="text-xs">Sin arribos</Badge>
             ) : null}
 
           </div>
@@ -347,3 +349,5 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     </div>
   );
 }
+
+    
