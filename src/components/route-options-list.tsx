@@ -1,7 +1,6 @@
-
+"use client";
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
 import { StmBusStop, getAllBusStops, UpcomingBus, getUpcomingBuses } from '@/lib/stm-api';
 import { haversineDistance, cn } from '@/lib/utils';
@@ -169,13 +168,13 @@ const RouteOptionItem = ({
                 <Clock className="h-3 w-3" />
                 <span>
                   {scheduledArrival.prefix}{' '}
-                  <span className={cn(arrivalInfo && "text-green-400 font-medium")}>
+                  <span className={cn(arrivalInfo ? "text-green-400 font-medium" : "")}>
                     {scheduledArrival.time}
                   </span>
                 </span>
               </div>
             ) : firstTransitStep ? (
-              <Badge variant="outline" className="text-xs">Sin arribos</Badge>
+              <Badge variant="outline-secondary" className="text-xs">Sin arribos</Badge>
             ) : null}
 
           </div>
