@@ -4,9 +4,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info } from 'lucide-react';
-import { StmBusStop, getAllBusStops, UpcomingBus, getUpcomingBuses } from '@/lib/stm-api';
+import { Clock, ArrowRight, Footprints, ChevronsRight, Wifi, Loader2, Info, BrainCircuit } from 'lucide-react';
+import { StmBusStop, getAllBusStops, UpcomingBus, getUpcomingBuses, getBusLocation, BusLocation } from '@/lib/stm-api';
 import { haversineDistance, cn } from '@/lib/utils';
+import { calculateArrival } from '@/ai/flows/calculate-arrival-flow';
 
 interface RouteOptionsListProps {
   routes: google.maps.DirectionsRoute[];
@@ -27,11 +28,18 @@ interface StmStopMapping {
 
 interface ArrivalInfo {
   bus: UpcomingBus;
-  // eta is now arrivalTime in minutes from the API
+}
+
+interface AiArrivalInfo {
+    durationMinutes: number;
 }
 
 interface BusArrivalsState {
     [routeIndex: number]: ArrivalInfo | null;
+}
+
+interface AiArrivalsState {
+    [routeIndex: number]: AiArrivalInfo | null;
 }
 
 const ArrivalInfoLegend = () => {
@@ -43,7 +51,11 @@ const ArrivalInfoLegend = () => {
          </div>
         <div className="flex items-center gap-2">
            <Wifi className="h-3.5 w-3.5 text-primary" />
-           <span>Arribo en tiempo real.</span>
+           <span>Arribo en tiempo real (STM).</span>
+        </div>
+        <div className="flex items-center gap-2">
+           <BrainCircuit className="h-3.5 w-3.5 text-primary" />
+           <span>Arribo estimado por IA.</span>
         </div>
          <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-primary" />
@@ -59,26 +71,22 @@ const RouteOptionItem = ({
   index, 
   onSelectRoute,
   arrivalInfo,
+  aiArrivalInfo,
   stmInfo
 }: { 
   route: google.maps.DirectionsRoute, 
   index: number, 
   onSelectRoute: (route: google.maps.DirectionsRoute, index: number, stopId: number | null, lineDestination: string | null) => void,
   arrivalInfo: ArrivalInfo | null,
+  aiArrivalInfo: AiArrivalInfo | null,
   stmInfo: StmInfo | null,
 }) => {
-  const [currentTime, setCurrentTime] = useState(new Date());
   const leg = route.legs[0];
   
   const firstTransitStep = leg.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
   const scheduledDepartureTimeValue = firstTransitStep?.transit?.departure_time?.value;
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update time every minute
-    return () => clearInterval(timer);
-  }, []);
-
-  const getArrivalText = () => {
+  const getStmArrivalText = () => {
     if (!arrivalInfo?.bus.arrivalTime) return null;
     const arrivalMinutes = arrivalInfo.bus.arrivalTime;
     if (arrivalMinutes <= 1) {
@@ -87,12 +95,20 @@ const RouteOptionItem = ({
     return `Llega en ${arrivalMinutes} min`;
   };
 
-  const getArrivalColorClass = () => {
-    if (!arrivalInfo?.bus.arrivalTime) return 'text-primary';
-    const arrivalMinutes = arrivalInfo.bus.arrivalTime;
-    if (arrivalMinutes < 5) {
+  const getAiArrivalText = () => {
+    if (!aiArrivalInfo?.durationMinutes) return null;
+    const arrivalMinutes = aiArrivalInfo.durationMinutes;
+     if (arrivalMinutes <= 1) {
+      return `Llegando`;
+    }
+    return `Llega en ${arrivalMinutes} min`;
+  }
+
+  const getArrivalColorClass = (minutes: number | undefined) => {
+    if (!minutes) return 'text-primary';
+    if (minutes < 5) {
         return 'text-green-400';
-    } else if (arrivalMinutes <= 10) {
+    } else if (minutes <= 10) {
         return 'text-yellow-400';
     } else {
         return 'text-red-500';
@@ -102,6 +118,7 @@ const RouteOptionItem = ({
   const getScheduledArrival = () => {
       if (!scheduledDepartureTimeValue) return null;
       const departureTime = new Date(scheduledDepartureTimeValue);
+      const currentTime = new Date();
       const diffMs = departureTime.getTime() - currentTime.getTime();
       const diffMins = Math.round(diffMs / 60000);
 
@@ -111,8 +128,11 @@ const RouteOptionItem = ({
       return { prefix: 'Sale en', time: `${diffMins} min` };
   };
 
-  const arrivalText = getArrivalText();
+  const stmArrivalText = getStmArrivalText();
+  const aiArrivalText = getAiArrivalText();
   const scheduledArrival = getScheduledArrival();
+
+  const hasRealtimeArrival = !!stmArrivalText || !!aiArrivalText;
     
   const renderableSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT' || (step.distance && step.distance.value > 0));
 
@@ -161,17 +181,22 @@ const RouteOptionItem = ({
               <span>{getTotalDuration(route.legs)} min</span>
             </div>
             
-            {arrivalText ? (
-              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass())}>
+            {stmArrivalText ? (
+              <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass(arrivalInfo?.bus.arrivalTime))}>
                   <Wifi className="h-3 w-3" />
-                  <span>{arrivalText}</span>
+                  <span>{stmArrivalText}</span>
+              </div>
+            ) : aiArrivalText ? (
+                 <div className={cn("flex items-center gap-2 text-xs font-medium", getArrivalColorClass(aiArrivalInfo?.durationMinutes))}>
+                  <BrainCircuit className="h-3 w-3" />
+                  <span>{aiArrivalText}</span>
               </div>
             ) : scheduledArrival ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 <span>
                   {scheduledArrival.prefix}{' '}
-                  <span className={cn(arrivalInfo ? "text-green-400 font-medium" : "")}>
+                  <span className={cn(hasRealtimeArrival && "text-green-400 font-medium")}>
                     {scheduledArrival.time}
                   </span>
                 </span>
@@ -202,6 +227,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
   const [stmStopMappings, setStmStopMappings] = useState<StmStopMapping | null>(null);
   const [isMappingStops, setIsMappingStops] = useState(true);
   const [busArrivals, setBusArrivals] = useState<BusArrivalsState>({});
+  const [aiArrivals, setAiArrivals] = useState<AiArrivalsState>({});
 
   const mapStops = useCallback(async (allStops: StmBusStop[]) => {
       const newMappings: StmStopMapping = {};
@@ -270,47 +296,73 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
 
 
   useEffect(() => {
+    const fetchBusLocationsAndCalculateEta = async (routeIndex: number, line: string, stopLocation: google.maps.LatLng) => {
+      try {
+        const locations = await getBusLocation(line);
+        if (locations && locations.length > 0) {
+            const busLocation = locations[0].location.coordinates;
+            const origin = { lat: busLocation[1], lng: busLocation[0] };
+            const destination = { lat: stopLocation.lat(), lng: stopLocation.lng() };
+
+            const result = await calculateArrival({ origin, destination });
+
+            if (result.durationMinutes !== undefined) {
+                setAiArrivals(prev => ({ ...prev, [routeIndex]: { durationMinutes: result.durationMinutes! } }));
+            }
+        }
+      } catch (error) {
+        console.error(`Error calculating AI ETA for line ${line}`, error);
+      }
+    };
+    
     const fetchAllArrivals = async () => {
       if (!isApiConnected || !stmStopMappings) {
         return;
       }
 
-      // Group routes by bus stop ID to make fewer API calls
-      const stopsToQuery: { [stopId: number]: string[] } = {};
-      const routeIndicesByStop: { [stopId: number]: number[] } = {};
+      const stopsToQuery: { [stopId: number]: { lines: string[], routeIndices: number[] } } = {};
 
-      Object.entries(stmStopMappings).forEach(([routeIndex, info]) => {
+      Object.entries(stmStopMappings).forEach(([routeIndexStr, info]) => {
+          const routeIndex = parseInt(routeIndexStr);
           if (info.stopId && info.line) {
               if (!stopsToQuery[info.stopId]) {
-                  stopsToQuery[info.stopId] = [];
-                  routeIndicesByStop[info.stopId] = [];
+                  stopsToQuery[info.stopId] = { lines: [], routeIndices: [] };
               }
-              if (!stopsToQuery[info.stopId].includes(info.line)) {
-                  stopsToQuery[info.stopId].push(info.line);
+              if (!stopsToQuery[info.stopId].lines.includes(info.line)) {
+                  stopsToQuery[info.stopId].lines.push(info.line);
               }
-              routeIndicesByStop[info.stopId].push(parseInt(routeIndex));
+              stopsToQuery[info.stopId].routeIndices.push(routeIndex);
           }
       });
       
       const newArrivals: BusArrivalsState = {};
-      const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopId, lines]) => {
-          const stopIdNum = parseInt(stopId);
+      const arrivalPromises = Object.entries(stopsToQuery).map(async ([stopIdStr, { lines, routeIndices }]) => {
+          const stopIdNum = parseInt(stopIdStr);
           try {
               const upcomingBuses = await getUpcomingBuses(stopIdNum, lines, 2);
               
+              const busesFoundForStop = new Set<string>();
               if (upcomingBuses && upcomingBuses.length > 0) {
-                  routeIndicesByStop[stopIdNum].forEach(routeIndex => {
+                  routeIndices.forEach(routeIndex => {
                       const routeLine = stmStopMappings[routeIndex]?.line;
                       const bestUpcomingBus = upcomingBuses.find(bus => bus.line === routeLine);
                       if (bestUpcomingBus) {
                           newArrivals[routeIndex] = { bus: bestUpcomingBus };
-                      } else {
-                           newArrivals[routeIndex] = null;
+                          busesFoundForStop.add(routeLine!);
                       }
                   });
               }
+
+              // For lines where no upcoming bus was found, try to get location and use AI
+              routeIndices.forEach(routeIndex => {
+                const routeInfo = stmStopMappings[routeIndex];
+                if (routeInfo && routeInfo.line && !busesFoundForStop.has(routeInfo.line) && routeInfo.departureStopLocation) {
+                    fetchBusLocationsAndCalculateEta(routeIndex, routeInfo.line, routeInfo.departureStopLocation);
+                }
+              });
+
           } catch (error) {
-              console.error(`Error fetching upcoming buses for stop ${stopId}:`, error);
+              console.error(`Error fetching upcoming buses for stop ${stopIdNum}:`, error);
           }
       });
 
@@ -344,11 +396,10 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
             index={index} 
             onSelectRoute={onSelectRoute}
             arrivalInfo={busArrivals[index] ?? null}
+            aiArrivalInfo={aiArrivals[index] ?? null}
             stmInfo={stmStopMappings ? stmStopMappings[index] : null}
         />
       ))}
     </div>
   );
 }
-
-    
