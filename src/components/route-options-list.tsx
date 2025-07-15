@@ -103,7 +103,7 @@ const RouteOptionItem = ({
   };
 
   const getArrivalColorClass = (minutes: number | undefined) => {
-    if (!minutes) return 'text-primary';
+    if (minutes === undefined) return 'text-primary';
     if (minutes < 5) {
         return 'text-green-400';
     } else if (minutes <= 10) {
@@ -302,7 +302,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
     if (!isApiConnected || !stmStopMappings) {
         return;
     }
-  
+
     const fetchAllArrivals = async () => {
         const stopsToQuery: { [stopId: number]: { lines: string[], routeIndices: number[] } } = {};
   
@@ -335,7 +335,8 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                     });
                 }
             } catch (error) {
-                console.error(`Error fetching upcoming buses for stop ${stopIdNum}:`, error);
+                // This is a warning because it's expected that some stop/line combos might not return data from the API
+                console.warn(`Could not fetch upcoming buses for stop ${stopIdNum}:`, error);
             }
         });
   
@@ -370,7 +371,7 @@ export default function RouteOptionsList({ routes, onSelectRoute, isApiConnected
                             }
                         }
                     } catch (err) {
-                        console.error(`Error calculating AI arrival for route ${routeIndex}`, err);
+                        console.warn(`Could not calculate AI arrival for route ${routeIndex}`, err);
                     }
                 }
             }
