@@ -13,7 +13,7 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, checkApiConnection, getUpcomingBuses } from '@/lib/stm-api';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -31,6 +31,8 @@ export default function Home() {
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [lastBusUpdate, setLastBusUpdate] = useState<Date | null>(null);
+  const [isBusLoading, setIsBusLoading] = useState(false);
   const { toast } = useToast();
   
   const { isLoaded: isGoogleMapsLoaded } = useJsApiLoader({
@@ -59,46 +61,96 @@ export default function Home() {
 
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let pollingInterval = 10000; // 10s inicial
+    let lastLocations: BusLocation[] = [];
+    let retryCount = 0;
+    let isFetching = false;
+    let pollingActive = false;
 
     const fetchBusLocations = async () => {
       if (!selectedRoute || apiStatus !== 'connected') {
         setBusLocations([]);
+        setIsBusLoading(false);
         return;
       }
-      
+      if (isFetching) return;
+      isFetching = true;
+      setIsBusLoading(true);
       const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
       if (!firstTransitStep) {
         setBusLocations([]);
+        setIsBusLoading(false);
+        isFetching = false;
         return;
       }
-      
       const lineName = firstTransitStep.transit?.line.short_name;
       if (!lineName) {
          setBusLocations([]);
+         setIsBusLoading(false);
+         isFetching = false;
          return;
       }
-      
       try {
         const locations = await getBusLocation(lineName, selectedLineDestination ?? undefined);
         setBusLocations(locations);
+        setLastBusUpdate(new Date());
+        setIsBusLoading(false);
+        // Si la ubicación no cambió, aumenta el intervalo
+        if (JSON.stringify(locations) === JSON.stringify(lastLocations)) {
+          pollingInterval = Math.min(pollingInterval + 5000, 30000); // hasta 30s
+        } else {
+          pollingInterval = 10000; // vuelve a 10s si hay cambios
+        }
+        lastLocations = locations;
+        retryCount = 0;
       } catch (error) {
-        console.error(`Error fetching locations for line ${lineName}:`, error);
-        setBusLocations([]);
+        retryCount++;
+        setIsBusLoading(false);
+        if (retryCount <= 3) {
+          pollingInterval = Math.min(2 ** retryCount * 1000, 30000); // backoff exponencial
+        } else {
+          setBusLocations([]);
+        }
+      } finally {
+        isFetching = false;
+        if (pollingActive) {
+          timeoutId = setTimeout(fetchBusLocations, pollingInterval);
+        }
       }
     };
-    
-    if (view === 'details' && selectedRoute) {
-        fetchBusLocations(); 
-        intervalId = setInterval(fetchBusLocations, 30000); 
-    } else {
-        setBusLocations([]);
-    }
 
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+    const startPolling = () => {
+      if (!pollingActive) {
+        pollingActive = true;
+        fetchBusLocations();
       }
+    };
+    const stopPolling = () => {
+      pollingActive = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    if (view === 'details' && selectedRoute) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      startPolling();
+    } else {
+      setBusLocations([]);
+      setIsBusLoading(false);
+      stopPolling();
+    }
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [view, selectedRoute, selectedLineDestination, apiStatus]);
 
@@ -232,6 +284,91 @@ export default function Home() {
 
   const showBackButton = view !== 'search';
 
+  // Mostrar los dos buses más próximos a la parada de origen
+  const [upcomingBusLocations, setUpcomingBusLocations] = useState<BusLocation[]>([]);
+  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(17);
+
+  // Función para calcular distancia entre dos puntos (Haversine)
+  function haversineDistance([lng1, lat1]: [number, number], [lng2, lat2]: [number, number]) {
+    const toRad = (x: number) => x * Math.PI / 180;
+    const R = 6371000; // metros
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  useEffect(() => {
+    // Solo buscar los buses próximos si estamos en detalles y hay ruta seleccionada
+    const fetchUpcomingBuses = async () => {
+      if (view !== 'details' || !selectedRoute || apiStatus !== 'connected') {
+        setUpcomingBusLocations([]);
+        setMapCenter(null);
+        return;
+      }
+      const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+      if (!firstTransitStep) {
+        setUpcomingBusLocations([]);
+        setMapCenter(null);
+        return;
+      }
+      const lineName = firstTransitStep.transit?.line.short_name;
+      const departureStop = firstTransitStep.transit?.departure_stop;
+      if (!lineName || !departureStop) {
+        setUpcomingBusLocations([]);
+        setMapCenter(null);
+        return;
+      }
+      // Centrar el mapa en la parada de origen
+      const stopLat = departureStop.location.lat();
+      const stopLng = departureStop.location.lng();
+      setMapCenter({ lat: stopLat, lng: stopLng });
+      setMapZoom(17);
+      try {
+        // Buscar los próximos arribos (máximo 2)
+        const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
+        const allBuses = await getBusLocation(lineName);
+        console.log('Buses en tiempo real de la línea:', allBuses);
+        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (comparación flexible)
+        const paradaCoords = [stopLng, stopLat];
+        const busesToShow = upcoming.map(arrival => {
+          const candidates = allBuses.filter(bus =>
+            bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
+            (String(bus.lineVariantId) === String(arrival.lineVariantId) || !arrival.lineVariantId) &&
+            bus.destination?.toLowerCase() === arrival.destination?.toLowerCase() &&
+            bus.origin?.toLowerCase() === arrival.origin?.toLowerCase()
+          );
+          candidates.sort((a, b) => {
+            const distA = haversineDistance(a.location.coordinates, paradaCoords);
+            const distB = haversineDistance(b.location.coordinates, paradaCoords);
+            return distA - distB;
+          });
+          return candidates[0];
+        }).filter(Boolean);
+        // Fallback: si no hay buses coincidentes, muestra todos los de la línea
+        if (busesToShow.length === 0 && allBuses.length > 0) {
+          console.warn('No se encontraron buses coincidentes, mostrando todos los de la línea como fallback');
+          setUpcomingBusLocations(allBuses);
+        } else {
+          console.log('Buses a mostrar en el mapa:', busesToShow);
+          setUpcomingBusLocations(busesToShow);
+        }
+      } catch {
+        setUpcomingBusLocations([]);
+      }
+    };
+    fetchUpcomingBuses();
+  }, [view, selectedRoute, selectedLineDestination, apiStatus, lastBusUpdate]);
+
+  // Solo pasar los buses próximos a los componentes de visualización
+  const filteredBusLocations = React.useMemo(() => {
+    return upcomingBusLocations;
+  }, [upcomingBusLocations]);
+
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
         <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
@@ -277,11 +414,13 @@ export default function Home() {
               {view === 'details' && selectedRoute && (
                 <RouteDetailsPanel 
                   route={selectedRoute}
-                  busLocations={busLocations}
+                  busLocations={filteredBusLocations}
                   isGoogleMapsLoaded={isGoogleMapsLoaded}
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
+                  lastBusUpdate={lastBusUpdate}
+                  isBusLoading={isBusLoading}
                 />
               )}
           </main>
@@ -299,8 +438,10 @@ export default function Home() {
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
               selectedRoute={selectedRoute}
-              busLocations={busLocations}
+              busLocations={filteredBusLocations}
               view={view}
+              center={mapCenter}
+              zoom={mapZoom}
             />
         </div>
       </div>
