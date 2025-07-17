@@ -326,81 +326,80 @@ export default function RouteDetailsPanel({
               />
             </div>
         </div>
-
-      <div className="p-4 space-y-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2">
-                  {busLines.map((bus) => (
-                    <Badge key={bus} variant="outline" className="text-sm font-mono">{bus}</Badge>
-                  ))}
-                  {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
-                    <Badge variant="outline" className="text-sm">A pie</Badge>
-                  )}
-              </div>
-              <div className="flex items-center gap-3 text-sm font-normal">
-                <div className="flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{duration} min</span>
-                </div>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-1">
-             <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
-             <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
-            {liveBusData && <BusFeatures bus={liveBusData} />}
-          </CardContent>
-        </Card>
-
-        <div>
-          <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
-          <Accordion type="multiple" className="w-full space-y-1">
-            {leg.steps.map((step, index) => {
-              const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
-              
-              if (hasDetailedWalkingSteps) {
-                return (
-                  <AccordionItem value={`item-${index}`} key={index} className="border-none">
-                     <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
-                       <div className="mt-0.5">
-                          <StepIcon type={step.travel_mode} />
-                       </div>
-                       <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
-                          <div className="flex-1 space-y-0.5">
-                            <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                            <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
-                          </div>
-                       </AccordionTrigger>
-                     </div>
-                    <AccordionContent className="py-2 pl-10 pr-4 border-l ml-4">
-                        <div className="space-y-2 text-xs">
-                          {step.steps!.map((subStep, subIndex) => (
-                             <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
-                          ))}
-                        </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              }
-
-              return (
-                <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="mt-0.5">
-                        <StepIcon type={step.travel_mode} />
-                    </div>
-                    <div className="flex-1 space-y-0.5">
-                        <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
-                        <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
-                    </div>
-                    {step.travel_mode === 'TRANSIT' && step.transit && (
-                      <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name || step.transit.line.name}</Badge>
+        <div className="p-4 space-y-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <div className="flex items-center gap-2">
+                    {busLines.map((bus) => (
+                      <Badge key={bus} variant="outline" className="text-sm font-mono">{bus}</Badge>
+                    ))}
+                    {busLines.length === 0 && leg.steps.some(s => s.travel_mode === 'WALKING') && (
+                      <Badge variant="outline" className="text-sm">A pie</Badge>
                     )}
                 </div>
-              )
-            })}
-          </Accordion>
+                <div className="flex items-center gap-3 text-sm font-normal">
+                  <div className="flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>{duration} min</span>
+                  </div>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-1">
+               <AddressDisplay prefix="Desde" location={leg.start_location} fallbackAddress={leg.start_address} />
+               <AddressDisplay prefix="Hasta" location={leg.end_location} fallbackAddress={leg.end_address} />
+              {liveBusData && <BusFeatures bus={liveBusData} />}
+            </CardContent>
+          </Card>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold text-muted-foreground px-1">Indicaciones</h3>
+            <Accordion type="multiple" className="w-full space-y-1">
+              {leg.steps.map((step, index) => {
+                const hasDetailedWalkingSteps = step.travel_mode === 'WALKING' && step.steps && step.steps.length > 0;
+                
+                if (hasDetailedWalkingSteps) {
+                  return (
+                    <AccordionItem value={`item-${index}`} key={index} className="border-none">
+                       <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
+                         <div className="mt-0.5">
+                            <StepIcon type={step.travel_mode} />
+                         </div>
+                         <AccordionTrigger className="flex-1 text-left p-0 hover:no-underline">
+                            <div className="flex-1 space-y-0.5">
+                              <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                              <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
+                            </div>
+                         </AccordionTrigger>
+                       </div>
+                      <AccordionContent className="py-2 pl-10 pr-4 border-l ml-4">
+                          <div className="space-y-2 text-xs">
+                            {step.steps!.map((subStep, subIndex) => (
+                               <p key={subIndex} dangerouslySetInnerHTML={{ __html: subStep.instructions || '' }} />
+                            ))}
+                          </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  )
+                }
+
+                return (
+                  <div key={index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                      <div className="mt-0.5">
+                          <StepIcon type={step.travel_mode} />
+                      </div>
+                      <div className="flex-1 space-y-0.5">
+                          <p className="font-medium text-xs leading-tight" dangerouslySetInnerHTML={{ __html: step.instructions || '' }} />
+                          <p className="text-xs text-muted-foreground">{step.duration?.text}</p>
+                      </div>
+                      {step.travel_mode === 'TRANSIT' && step.transit && (
+                        <Badge variant="default" className="font-mono text-xs">{step.transit.line.short_name || step.transit.line.name}</Badge>
+                      )}
+                  </div>
+                )
+              })}
+            </Accordion>
+          </div>
         </div>
       </div>
     </div>
