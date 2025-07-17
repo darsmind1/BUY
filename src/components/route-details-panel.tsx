@@ -319,15 +319,45 @@ export default function RouteDetailsPanel({
                 options={mapOptions}
               >
                 {tramoEspecial.length > 1 && (
-                  <Polyline
-                    path={tramoEspecial.map(([lat, lng]) => ({ lat, lng }))}
-                    options={{
-                      strokeColor: "#A40034",
-                      strokeOpacity: 0.9,
-                      strokeWeight: 6,
-                      zIndex: 10,
-                    }}
-                  />
+                  <>
+                    <Polyline
+                      path={tramoEspecial.map(([lat, lng]) => ({ lat, lng }))}
+                      options={{
+                        strokeColor: "#A40034",
+                        strokeOpacity: 0.9,
+                        strokeWeight: 6,
+                        zIndex: 10,
+                      }}
+                    />
+                    {/* Marcador de inicio */}
+                    <Marker
+                      position={{ lat: tramoEspecial[0][0], lng: tramoEspecial[0][1] }}
+                      icon={{
+                        path: window.google?.maps?.SymbolPath.CIRCLE || 0,
+                        scale: 7,
+                        fillColor: "#00B894",
+                        fillOpacity: 1,
+                        strokeWeight: 2,
+                        strokeColor: "#ffffff",
+                      }}
+                      zIndex={110}
+                      label={{ text: "Inicio", color: "#00B894", fontWeight: "bold", fontSize: "14px" }}
+                    />
+                    {/* Marcador de llegada */}
+                    <Marker
+                      position={{ lat: tramoEspecial[tramoEspecial.length - 1][0], lng: tramoEspecial[tramoEspecial.length - 1][1] }}
+                      icon={{
+                        path: window.google?.maps?.SymbolPath.CIRCLE || 0,
+                        scale: 7,
+                        fillColor: "#d63031",
+                        fillOpacity: 1,
+                        strokeWeight: 2,
+                        strokeColor: "#ffffff",
+                      }}
+                      zIndex={110}
+                      label={{ text: "Llegada", color: "#d63031", fontWeight: "bold", fontSize: "14px" }}
+                    />
+                  </>
                 )}
                 {busLocations.map((bus) => (
                   <Marker 
