@@ -361,8 +361,6 @@ export default function Home() {
 
         if (isTramoEspecial) {
           // Sobrescribe el trayecto: fuerza los puntos A y B
-          setDirectionsResponse(null);
-          setSelectedRoute(null);
           setMapCenter({ lat: -34.90514509476023, lng: -56.19996327179591 }); // Punto A
           setMapZoom(16);
           // Filtra buses en tiempo real sobre el tramo especial
