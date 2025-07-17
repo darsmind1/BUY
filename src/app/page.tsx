@@ -322,9 +322,75 @@ export default function Home() {
     ));
   }
 
+  const llegadaTramoEspecial = { lat: -34.908722120146834, lng: -56.205661507097346 };
+
   useEffect(() => {
     // Solo buscar los buses próximos si estamos en detalles y hay ruta seleccionada
     const fetchUpcomingBuses = async () => {
+      // --- LÓGICA PARA TRAMO ESPECIAL ---
+      const isTramoEspecial = (() => {
+        if (view !== 'details' || !selectedRoute) return false;
+        const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+        const departureStop = firstTransitStep?.transit?.departure_stop;
+        return (
+          (departureStop && (
+            departureStop.name?.toLowerCase().includes('buenos aires') ||
+            departureStop.name?.toLowerCase().includes('ituzaingó')
+          )) || (selectedRoute && selectedRoute.legs[0]?.end_address?.toLowerCase().includes('buenos aires'))
+        );
+      })();
+
+      if (view === 'details' && isTramoEspecial && apiStatus === 'connected') {
+        // Mostrar buses sobre el tramo especial
+        const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+        const lineName = firstTransitStep?.transit?.line.short_name;
+        if (!lineName) {
+          setUpcomingBusLocations([]);
+          setMapCenter(null);
+          return;
+        }
+        const allBuses = await getBusLocation(lineName);
+        const busesOnTramo = allBuses.filter(bus => {
+          const busLat = bus.location.coordinates[1];
+          const busLng = bus.location.coordinates[0];
+          const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, tramoEspecial);
+          return minDist < 400;
+        });
+        setUpcomingBusLocations(busesOnTramo);
+        setMapCenter(currentUserLocation || { lat: tramoEspecial[0][0], lng: tramoEspecial[0][1] });
+        setMapZoom(16);
+
+        // Si hay ubicación real, obtener ruta a pie hasta la parada
+        if (currentUserLocation) {
+          const directionsService = new window.google.maps.DirectionsService();
+          directionsService.route(
+            {
+              origin: currentUserLocation,
+              destination: llegadaTramoEspecial,
+              travelMode: window.google.maps.TravelMode.WALKING,
+              region: 'UY',
+              language: 'es',
+            },
+            (result, status) => {
+              setIsLoading(false);
+              if (status === window.google.maps.DirectionsStatus.OK && result) {
+                setDirectionsResponse(result);
+                setSelectedRoute(result.routes[0]);
+              } else {
+                setDirectionsResponse(null);
+                setSelectedRoute(null);
+              }
+            }
+          );
+        } else {
+          setDirectionsResponse(null);
+          setSelectedRoute(null);
+        }
+        return;
+      }
+      // --- FIN LÓGICA TRAMO ESPECIAL ---
+
+      // Lógica normal para trayectos Google
       if (view !== 'details' || !selectedRoute || apiStatus !== 'connected') {
         setUpcomingBusLocations([]);
         setMapCenter(null);
@@ -352,77 +418,16 @@ export default function Home() {
         // Buscar los próximos arribos (máximo 2)
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         const allBuses = await getBusLocation(lineName);
-        console.log('Buses en tiempo real de la línea:', allBuses);
         // Si la parada de destino u origen es Buenos Aires - Ituzaingó, usa el tramo especial
-        const isTramoEspecial = (departureStop && (
+        const isTramoEspecialNormal = (departureStop && (
           departureStop.name?.toLowerCase().includes('buenos aires') ||
           departureStop.name?.toLowerCase().includes('ituzaingó')
         )) || (selectedRoute && selectedRoute.legs[0]?.end_address?.toLowerCase().includes('buenos aires'));
-
-        if (isTramoEspecial) {
-          // Mostrar solo los buses de la línea que están cerca del tramo especial (menos de 400 metros)
-          const busesOnTramo = allBuses.filter(bus => {
-            const busLat = bus.location.coordinates[1];
-            const busLng = bus.location.coordinates[0];
-            const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, tramoEspecial);
-            return minDist < 400;
-          });
-          setUpcomingBusLocations(busesOnTramo);
-          return; // No sigas con la lógica de Google Directions
+        if (isTramoEspecialNormal) {
+          // Ya manejado arriba
+          return;
         }
-        // Si no es el tramo especial, procede con la lógica de Google Directions
-        const polyline = selectedRoute?.overview_path || [];
-        setDirectionsResponse(null); // Clear previous directions
-        setSelectedRoute(null); // Clear previous route
-        setMapCenter(null); // Clear previous center
-        setMapZoom(17); // Reset zoom
-
-        // Set the destination for the directions service
-        let destinationParam: string | google.maps.LatLngLiteral = selectedRoute?.end_address || destination;
-        if (destinationParam === 'Mi ubicación actual') {
-          if (!currentUserLocation) {
-            toast({
-                variant: "destructive",
-                title: "Error de ubicación",
-                description: "No se pudo obtener tu ubicación. Por favor, habilita los permisos e intenta de nuevo.",
-            });
-            return;
-          }
-          destinationParam = currentUserLocation;
-        }
-
-        directionsService.route(
-          {
-            origin: originParam,
-            destination: destinationParam,
-            travelMode: window.google.maps.TravelMode.TRANSIT,
-            transitOptions: {
-              modes: [window.google.maps.TransitMode.BUS],
-            },
-            provideRouteAlternatives: true,
-            region: 'UY',
-            language: 'es'
-          },
-          (result, status) => {
-            setIsLoading(false);
-            if (status === window.google.maps.DirectionsStatus.OK && result) {
-              setDirectionsResponse(result);
-              setView('options');
-              setMobileView('panel');
-            } else {
-              console.error(`Error fetching directions, status: ${status}`);
-              let description = "No se pudo calcular la ruta. Intenta con otras direcciones.";
-              if (status === 'NOT_FOUND' || status === 'ZERO_RESULTS') {
-                description = "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.";
-              }
-              toast({
-                variant: "destructive",
-                title: "Error al buscar ruta",
-                description: description,
-              });
-            }
-          }
-        );
+        setUpcomingBusLocations(allBuses);
       } catch {
         setUpcomingBusLocations([]);
       }
