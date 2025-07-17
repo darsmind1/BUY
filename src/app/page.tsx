@@ -333,27 +333,20 @@ export default function Home() {
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         const allBuses = await getBusLocation(lineName);
         console.log('Buses en tiempo real de la línea:', allBuses);
-        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (filtro perfecto)
-        const paradaCoords = [stopLng, stopLat];
-        // Mostrar en el mapa el/los bus(es) en tiempo real más cercanos a la parada de origen, para la línea y destino correctos
-        let busesToShow: BusLocation[] = [];
-        upcoming.forEach(arrival => {
-          const candidates = allBuses.filter(bus =>
-            bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
-            bus.destination?.toLowerCase() === arrival.destination?.toLowerCase()
-          );
-          candidates.sort((a, b) => {
-            const distA = haversineDistance(a.location.coordinates, paradaCoords);
-            const distB = haversineDistance(b.location.coordinates, paradaCoords);
-            return distA - distB;
-          });
-          if (candidates[0] && haversineDistance(candidates[0].location.coordinates, paradaCoords) < 500) {
-            busesToShow.push(candidates[0]);
-          }
+        // Mostrar solo los buses que están sobre el trayecto trazado en el mapa (polilínea)
+        const polyline = selectedRoute?.overview_path || [];
+        function minDistanceToPolyline(point, polyline) {
+          return Math.min(...polyline.map(polyPoint =>
+            haversineDistance([point.lng, point.lat], [polyPoint.lng(), polyPoint.lat()])
+          ));
+        }
+        const busesOnRoute = allBuses.filter(bus => {
+          const busLat = bus.location.coordinates[1];
+          const busLng = bus.location.coordinates[0];
+          const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, polyline);
+          return minDist < 200; // metros
         });
-        // Elimina duplicados por id
-        const uniqueBuses = Array.from(new Map(busesToShow.map(bus => [bus.id, bus])).values());
-        setUpcomingBusLocations(uniqueBuses);
+        setUpcomingBusLocations(busesOnRoute);
       } catch {
         setUpcomingBusLocations([]);
       }
