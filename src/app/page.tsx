@@ -360,6 +360,11 @@ export default function Home() {
         )) || (selectedRoute && selectedRoute.legs[0]?.end_address?.toLowerCase().includes('buenos aires'));
 
         if (isTramoEspecial) {
+          // Sobrescribe el trayecto: fuerza los puntos A y B
+          setDirectionsResponse(null);
+          setSelectedRoute(null);
+          setMapCenter({ lat: -34.90514509476023, lng: -56.19996327179591 }); // Punto A
+          setMapZoom(16);
           // Filtra buses en tiempo real sobre el tramo especial
           const busesOnTramo = allBuses.filter(bus => {
             const busLat = bus.location.coordinates[1];
@@ -368,23 +373,67 @@ export default function Home() {
             return minDist < 200;
           });
           setUpcomingBusLocations(busesOnTramo);
-        } else {
-          // Mostrar solo los buses que están sobre el trayecto trazado en el mapa (polilínea)
-          const polyline = selectedRoute?.overview_path || [];
-          const busesOnRoute = allBuses.filter(bus => {
-            const busLat = bus.location.coordinates[1];
-            const busLng = bus.location.coordinates[0];
-            const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, polyline);
-            return minDist < 200; // metros
-          });
-          setUpcomingBusLocations(busesOnRoute);
+          return; // No sigas con la lógica de Google Directions
         }
+        // Si no es el tramo especial, procede con la lógica de Google Directions
+        const polyline = selectedRoute?.overview_path || [];
+        setDirectionsResponse(null); // Clear previous directions
+        setSelectedRoute(null); // Clear previous route
+        setMapCenter(null); // Clear previous center
+        setMapZoom(17); // Reset zoom
+
+        // Set the destination for the directions service
+        const destinationParam: string | google.maps.LatLngLiteral = selectedRoute?.end_address || destination;
+        if (destinationParam === 'Mi ubicación actual') {
+          if (!currentUserLocation) {
+            toast({
+                variant: "destructive",
+                title: "Error de ubicación",
+                description: "No se pudo obtener tu ubicación. Por favor, habilita los permisos e intenta de nuevo.",
+            });
+            return;
+          }
+          destinationParam = currentUserLocation;
+        }
+
+        directionsService.route(
+          {
+            origin: originParam,
+            destination: destinationParam,
+            travelMode: window.google.maps.TravelMode.TRANSIT,
+            transitOptions: {
+              modes: [window.google.maps.TransitMode.BUS],
+            },
+            provideRouteAlternatives: true,
+            region: 'UY',
+            language: 'es'
+          },
+          (result, status) => {
+            setIsLoading(false);
+            if (status === window.google.maps.DirectionsStatus.OK && result) {
+              setDirectionsResponse(result);
+              setView('options');
+              setMobileView('panel');
+            } else {
+              console.error(`Error fetching directions, status: ${status}`);
+              let description = "No se pudo calcular la ruta. Intenta con otras direcciones.";
+              if (status === 'NOT_FOUND' || status === 'ZERO_RESULTS') {
+                description = "No se encontraron rutas de ómnibus para el origen y destino ingresados. Verifica las direcciones o prueba con puntos cercanos.";
+              }
+              toast({
+                variant: "destructive",
+                title: "Error al buscar ruta",
+                description: description,
+              });
+            }
+          }
+        );
       } catch {
         setUpcomingBusLocations([]);
       }
     };
     fetchUpcomingBuses();
-  }, [view, selectedRoute, selectedLineDestination, apiStatus, lastBusUpdate]);
+  }, [view, selectedRoute, selectedLineDestination, apiStatus, lastBusUpdate, currentUserLocation]);
 
   // Solo pasar los buses próximos a los componentes de visualización
   const filteredBusLocations = React.useMemo(() => {
