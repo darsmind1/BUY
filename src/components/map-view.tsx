@@ -1,7 +1,7 @@
 
 "use client";
 
-import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api';
+import { GoogleMap, DirectionsRenderer, Marker, Polyline } from '@react-google-maps/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BusLocation } from '@/lib/stm-api';
@@ -33,6 +33,7 @@ interface MapViewProps {
   view: string;
   center?: google.maps.LatLngLiteral | null;
   zoom?: number;
+  specialPolyline?: [number, number][];
 }
 
 const mapContainerStyle = {
@@ -167,7 +168,7 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view, center, zoom }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view, center, zoom, specialPolyline }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -285,6 +286,18 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
                     ...directionsRendererOptions,
                 }} 
              />
+          )}
+
+          {specialPolyline && (
+            <Polyline
+              path={specialPolyline.map(([lat, lng]) => ({ lat, lng }))}
+              options={{
+                strokeColor: "#A40034",
+                strokeOpacity: 0.9,
+                strokeWeight: 6,
+                zIndex: 10,
+              }}
+            />
           )}
 
           {userLocation && userMarkerIcon && (

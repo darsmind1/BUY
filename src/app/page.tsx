@@ -511,6 +511,7 @@ export default function Home() {
               view={view}
               center={mapCenter}
               zoom={mapZoom}
+              specialPolyline={view === 'details' && selectedRoute == null ? tramoEspecial : undefined}
             />
         </div>
       </div>
