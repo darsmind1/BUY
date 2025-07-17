@@ -284,50 +284,79 @@ export default function Home() {
 
   const showBackButton = view !== 'search';
 
-  // Filtrar buses: solo mostrar el bus de la línea seleccionada que arriba primero a la parada de origen
-  const [upcomingBusLocation, setUpcomingBusLocation] = useState<BusLocation | null>(null);
+  // Mostrar los dos buses más próximos a la parada de origen
+  const [upcomingBusLocations, setUpcomingBusLocations] = useState<BusLocation[]>([]);
+  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(17);
+
+  // Función para calcular distancia entre dos puntos (Haversine)
+  function haversineDistance([lng1, lat1]: [number, number], [lng2, lat2]: [number, number]) {
+    const toRad = (x: number) => x * Math.PI / 180;
+    const R = 6371000; // metros
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
 
   useEffect(() => {
-    // Solo buscar el bus próximo si estamos en detalles y hay ruta seleccionada
-    const fetchUpcomingBus = async () => {
+    // Solo buscar los buses próximos si estamos en detalles y hay ruta seleccionada
+    const fetchUpcomingBuses = async () => {
       if (view !== 'details' || !selectedRoute || apiStatus !== 'connected') {
-        setUpcomingBusLocation(null);
+        setUpcomingBusLocations([]);
+        setMapCenter(null);
         return;
       }
       const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
       if (!firstTransitStep) {
-        setUpcomingBusLocation(null);
+        setUpcomingBusLocations([]);
+        setMapCenter(null);
         return;
       }
       const lineName = firstTransitStep.transit?.line.short_name;
       const departureStop = firstTransitStep.transit?.departure_stop;
       if (!lineName || !departureStop) {
-        setUpcomingBusLocation(null);
+        setUpcomingBusLocations([]);
+        setMapCenter(null);
         return;
       }
+      // Centrar el mapa en la parada de origen
+      const stopLat = departureStop.location.lat();
+      const stopLng = departureStop.location.lng();
+      setMapCenter({ lat: stopLat, lng: stopLng });
+      setMapZoom(17);
       try {
-        // Buscar el próximo bus de la línea que arriba a la parada de origen
-        const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 1);
+        // Buscar los próximos buses de la línea que arriban a la parada de origen (máximo 2)
+        const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         if (upcoming && upcoming.length > 0) {
-          // Buscar la ubicación de ese bus
-          const busId = upcoming[0].busId;
+          // Buscar la ubicación de esos buses
+          const busIds = upcoming.map(b => b.busId);
           const locations = await getBusLocation(lineName);
-          const found = locations.find(bus => bus.busId === busId || bus.id === busId?.toString());
-          setUpcomingBusLocation(found || null);
+          // Filtrar por cercanía a la parada (300 metros) y por busId
+          const filtered = locations.filter(bus => {
+            if (!bus.location?.coordinates) return false;
+            const dist = haversineDistance(bus.location.coordinates, [stopLng, stopLat]);
+            return busIds.includes(bus.busId) && dist < 300;
+          });
+          // Si hay menos de 2 buses en el radio, igual muestra los que haya
+          setUpcomingBusLocations(filtered.slice(0, 2));
         } else {
-          setUpcomingBusLocation(null);
+          setUpcomingBusLocations([]);
         }
       } catch {
-        setUpcomingBusLocation(null);
+        setUpcomingBusLocations([]);
       }
     };
-    fetchUpcomingBus();
+    fetchUpcomingBuses();
   }, [view, selectedRoute, selectedLineDestination, apiStatus, lastBusUpdate]);
 
-  // Solo pasar el bus próximo a los componentes de visualización
+  // Solo pasar los buses próximos a los componentes de visualización
   const filteredBusLocations = React.useMemo(() => {
-    return upcomingBusLocation ? [upcomingBusLocation] : [];
-  }, [upcomingBusLocation]);
+    return upcomingBusLocations;
+  }, [upcomingBusLocations]);
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
@@ -400,6 +429,8 @@ export default function Home() {
               selectedRoute={selectedRoute}
               busLocations={filteredBusLocations}
               view={view}
+              center={mapCenter}
+              zoom={mapZoom}
             />
         </div>
       </div>

@@ -31,6 +31,8 @@ interface MapViewProps {
   selectedRoute: google.maps.DirectionsRoute | null;
   busLocations: BusLocation[];
   view: string;
+  center?: google.maps.LatLngLiteral | null;
+  zoom?: number;
 }
 
 const mapContainerStyle = {
@@ -165,7 +167,7 @@ const mapOptions: google.maps.MapOptions = {
   gestureHandling: 'auto',
 };
 
-export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view }: MapViewProps) {
+export default function MapView({ isLoaded, directionsResponse, routeIndex, userLocation, selectedRoute, busLocations, view, center, zoom }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const customPolylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -269,8 +271,8 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
     <div className={cn("w-full h-full bg-gray-300 relative overflow-hidden")}>
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
-          center={defaultCenter}
-          zoom={12}
+          center={center || userLocation || defaultCenter}
+          zoom={zoom || 16.5}
           options={mapOptions}
           onLoad={onLoad}
           onUnmount={onUnmount}
