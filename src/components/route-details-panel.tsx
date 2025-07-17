@@ -49,7 +49,7 @@ async function getFormattedAddress(lat: number, lng: number): Promise<string> {
 
 
 interface RouteDetailsPanelProps {
-  route: google.maps.DirectionsRoute;
+  route?: google.maps.DirectionsRoute;
   busLocations?: BusLocation[];
   isGoogleMapsLoaded: boolean;
   directionsResponse: google.maps.DirectionsResult | null;
@@ -57,6 +57,8 @@ interface RouteDetailsPanelProps {
   userLocation: google.maps.LatLngLiteral | null;
   lastBusUpdate?: Date | null;
   isBusLoading?: boolean;
+  isTramoEspecial?: boolean;
+  tramoEspecial?: [number, number][];
 }
 
 const mapContainerStyle = {
@@ -284,14 +286,95 @@ export default function RouteDetailsPanel({
   userLocation,
   lastBusUpdate,
   isBusLoading,
+  isTramoEspecial = false,
+  tramoEspecial = [],
 }: RouteDetailsPanelProps) {
+  if (isTramoEspecial) {
+    // Panel especial para tramo manual
+    return (
+      <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 min-h-[1.5em]">
+          {isBusLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Actualizando...
+            </>
+          ) : lastBusUpdate ? (
+            <>
+              Actualizado hace {Math.floor((Date.now() - lastBusUpdate.getTime()) / 1000)} segundos
+            </>
+          ) : null}
+        </div>
+        <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
+          <div className="md:hidden">
+            <div className="flex items-center gap-2 p-4 pb-2 text-sm font-medium text-primary">
+              <Bus className="h-4 w-4" />
+              <span>Tramo especial: Buenos Aires - Ituzaingó</span>
+            </div>
+            <div className="relative h-[200px] bg-muted">
+              <GoogleMap
+                mapContainerStyle={{ width: '100%', height: '100%' }}
+                center={{ lat: -34.90514509476023, lng: -56.19996327179591 }}
+                zoom={16}
+                options={mapOptions}
+              >
+                {tramoEspecial.length > 1 && (
+                  <Polyline
+                    path={tramoEspecial.map(([lat, lng]) => ({ lat, lng }))}
+                    options={{
+                      strokeColor: "#A40034",
+                      strokeOpacity: 0.9,
+                      strokeWeight: 6,
+                      zIndex: 10,
+                    }}
+                  />
+                )}
+                {busLocations.map((bus) => (
+                  <Marker 
+                    key={bus.id || `${bus.line}-${bus.location?.coordinates?.join('-')}-${bus.timestamp || Math.random()}`}
+                    position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
+                    zIndex={100}
+                    icon={{
+                        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"24\">
+                                <rect x=\"0\" y=\"0\" width=\"100%\" height=\"100%\" rx=\"8\" ry=\"8\" fill=\"#212F3D\" stroke=\"#ffffff\" stroke-width=\"2\"/>
+                                <text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" font-family=\"monospace\" font-size=\"12\" font-weight=\"bold\" fill=\"#ffffff\">${bus.line}</text>
+                            </svg>
+                        `)}`,
+                        scaledSize: new window.google.maps.Size(40, 24),
+                        anchor: new window.google.maps.Point(20, 12),
+                    }}
+                  />
+                ))}
+              </GoogleMap>
+            </div>
+          </div>
+          <div className="p-4 space-y-3">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bus className="h-5 w-5 text-primary" />
+                  <span>Tramo especial: Buenos Aires - Ituzaingó</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-1">
+                <p className="text-xs text-muted-foreground">Solo se muestran los ómnibus que están circulando actualmente sobre este tramo especial.</p>
+                {busLocations.length === 0 && (
+                  <p className="text-xs text-warning-foreground">No hay buses en tiempo real sobre el tramo en este momento.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!route) return null;
   const leg = route.legs[0];
   const busLines = getBusLines(leg.steps);
   const duration = getTotalDuration(route.legs);
-
   const isBusLive = busLocations.length > 0;
   const liveBusData = isBusLive ? busLocations[0] : null; 
-  
   if (!leg) return null;
 
   return (
