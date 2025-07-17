@@ -368,8 +368,10 @@ export default function Home() {
             const busLat = bus.location.coordinates[1];
             const busLng = bus.location.coordinates[0];
             const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, tramoEspecial);
-            return minDist < 200;
+            console.log(`Bus ${bus.id || bus.line}: distancia al tramo especial = ${minDist} metros`);
+            return minDist < 400; // Subido de 200 a 400 metros
           });
+          console.log('Buses filtrados sobre el tramo especial:', busesOnTramo);
           setUpcomingBusLocations(busesOnTramo);
           return; // No sigas con la lógica de Google Directions
         }
