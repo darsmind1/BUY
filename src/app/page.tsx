@@ -332,14 +332,15 @@ export default function Home() {
         // Buscar los próximos arribos (máximo 2)
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         const allBuses = await getBusLocation(lineName);
-        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen
+        console.log('Buses en tiempo real de la línea:', allBuses);
+        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (comparación flexible)
         const paradaCoords = [stopLng, stopLat];
         const busesToShow = upcoming.map(arrival => {
           const candidates = allBuses.filter(bus =>
-            bus.line === arrival.line &&
-            (bus.lineVariantId === (arrival.lineVariantId?.toString() ?? bus.lineVariantId)) &&
-            bus.destination === arrival.destination &&
-            bus.origin === arrival.origin
+            bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
+            (String(bus.lineVariantId) === String(arrival.lineVariantId) || !arrival.lineVariantId) &&
+            bus.destination?.toLowerCase() === arrival.destination?.toLowerCase() &&
+            bus.origin?.toLowerCase() === arrival.origin?.toLowerCase()
           );
           candidates.sort((a, b) => {
             const distA = haversineDistance(a.location.coordinates, paradaCoords);
@@ -348,7 +349,14 @@ export default function Home() {
           });
           return candidates[0];
         }).filter(Boolean);
-        setUpcomingBusLocations(busesToShow);
+        // Fallback: si no hay buses coincidentes, muestra todos los de la línea
+        if (busesToShow.length === 0 && allBuses.length > 0) {
+          console.warn('No se encontraron buses coincidentes, mostrando todos los de la línea como fallback');
+          setUpcomingBusLocations(allBuses);
+        } else {
+          console.log('Buses a mostrar en el mapa:', busesToShow);
+          setUpcomingBusLocations(busesToShow);
+        }
       } catch {
         setUpcomingBusLocations([]);
       }
