@@ -13,7 +13,7 @@ import MapView from '@/components/map-view';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getBusLocation, BusLocation, checkApiConnection } from '@/lib/stm-api';
+import { getBusLocation, BusLocation, checkApiConnection, getUpcomingBuses } from '@/lib/stm-api';
 
 
 const googleMapsApiKey = "AIzaSyD1R-HlWiKZ55BMDdv1KP5anE5T5MX4YkU";
@@ -284,22 +284,50 @@ export default function Home() {
 
   const showBackButton = view !== 'search';
 
-  // Filtrar buses por línea y sentido antes de pasarlos a la UI
-  const filteredBusLocations = React.useMemo(() => {
-    if (!selectedRoute || !busLocations.length) return [];
-    const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
-    if (!firstTransitStep) return [];
-    const lineName = firstTransitStep.transit?.line.short_name;
-    const destination = selectedLineDestination;
-    return busLocations.filter(bus => {
-      const sameLine = bus.line === lineName;
-      // Si hay destino seleccionado, filtra también por destino
-      if (destination && bus.destination) {
-        return sameLine && bus.destination.toLowerCase() === destination.toLowerCase();
+  // Filtrar buses: solo mostrar el bus de la línea seleccionada que arriba primero a la parada de origen
+  const [upcomingBusLocation, setUpcomingBusLocation] = useState<BusLocation | null>(null);
+
+  useEffect(() => {
+    // Solo buscar el bus próximo si estamos en detalles y hay ruta seleccionada
+    const fetchUpcomingBus = async () => {
+      if (view !== 'details' || !selectedRoute || apiStatus !== 'connected') {
+        setUpcomingBusLocation(null);
+        return;
       }
-      return sameLine;
-    });
-  }, [busLocations, selectedRoute, selectedLineDestination]);
+      const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+      if (!firstTransitStep) {
+        setUpcomingBusLocation(null);
+        return;
+      }
+      const lineName = firstTransitStep.transit?.line.short_name;
+      const departureStop = firstTransitStep.transit?.departure_stop;
+      if (!lineName || !departureStop) {
+        setUpcomingBusLocation(null);
+        return;
+      }
+      try {
+        // Buscar el próximo bus de la línea que arriba a la parada de origen
+        const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 1);
+        if (upcoming && upcoming.length > 0) {
+          // Buscar la ubicación de ese bus
+          const busId = upcoming[0].busId;
+          const locations = await getBusLocation(lineName);
+          const found = locations.find(bus => bus.busId === busId || bus.id === busId?.toString());
+          setUpcomingBusLocation(found || null);
+        } else {
+          setUpcomingBusLocation(null);
+        }
+      } catch {
+        setUpcomingBusLocation(null);
+      }
+    };
+    fetchUpcomingBus();
+  }, [view, selectedRoute, selectedLineDestination, apiStatus, lastBusUpdate]);
+
+  // Solo pasar el bus próximo a los componentes de visualización
+  const filteredBusLocations = React.useMemo(() => {
+    return upcomingBusLocation ? [upcomingBusLocation] : [];
+  }, [upcomingBusLocation]);
 
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
