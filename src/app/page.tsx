@@ -333,7 +333,7 @@ export default function Home() {
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         const allBuses = await getBusLocation(lineName);
         console.log('Buses en tiempo real de la línea:', allBuses);
-        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (comparación flexible)
+        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (filtro perfecto)
         const paradaCoords = [stopLng, stopLat];
         const busesToShow = upcoming.map(arrival => {
           const candidates = allBuses.filter(bus =>
@@ -349,14 +349,8 @@ export default function Home() {
           });
           return candidates[0];
         }).filter(Boolean);
-        // Fallback: si no hay buses coincidentes, muestra todos los de la línea
-        if (busesToShow.length === 0 && allBuses.length > 0) {
-          console.warn('No se encontraron buses coincidentes, mostrando todos los de la línea como fallback');
-          setUpcomingBusLocations(allBuses);
-        } else {
-          console.log('Buses a mostrar en el mapa:', busesToShow);
-          setUpcomingBusLocations(busesToShow);
-        }
+        // Solo muestra los buses que están arribando, si no hay ninguno, no muestres ningún bus
+        setUpcomingBusLocations(busesToShow);
       } catch {
         setUpcomingBusLocations([]);
       }
