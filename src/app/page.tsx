@@ -335,7 +335,10 @@ export default function Home() {
         console.log('Buses en tiempo real de la línea:', allBuses);
         // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (filtro perfecto)
         const paradaCoords = [stopLng, stopLat];
-        const busesToShow = upcoming.map(arrival => {
+        // Filtrado progresivo: de más estricto a más relajado
+        let busesToShow: BusLocation[] = [];
+        // 1. Filtro estricto
+        busesToShow = upcoming.map(arrival => {
           const candidates = allBuses.filter(bus =>
             bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
             (String(bus.lineVariantId) === String(arrival.lineVariantId) || !arrival.lineVariantId) &&
@@ -349,7 +352,51 @@ export default function Home() {
           });
           return candidates[0];
         }).filter(Boolean);
-        // Solo muestra los buses que están arribando, si no hay ninguno, no muestres ningún bus
+        // 2. Relaja a line, origin, destination
+        if (busesToShow.length === 0) {
+          busesToShow = upcoming.map(arrival => {
+            const candidates = allBuses.filter(bus =>
+              bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
+              bus.destination?.toLowerCase() === arrival.destination?.toLowerCase() &&
+              bus.origin?.toLowerCase() === arrival.origin?.toLowerCase()
+            );
+            candidates.sort((a, b) => {
+              const distA = haversineDistance(a.location.coordinates, paradaCoords);
+              const distB = haversineDistance(b.location.coordinates, paradaCoords);
+              return distA - distB;
+            });
+            return candidates[0];
+          }).filter(Boolean);
+        }
+        // 3. Relaja a line, destination
+        if (busesToShow.length === 0) {
+          busesToShow = upcoming.map(arrival => {
+            const candidates = allBuses.filter(bus =>
+              bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
+              bus.destination?.toLowerCase() === arrival.destination?.toLowerCase()
+            );
+            candidates.sort((a, b) => {
+              const distA = haversineDistance(a.location.coordinates, paradaCoords);
+              const distB = haversineDistance(b.location.coordinates, paradaCoords);
+              return distA - distB;
+            });
+            return candidates[0];
+          }).filter(Boolean);
+        }
+        // 4. Relaja a solo line
+        if (busesToShow.length === 0) {
+          busesToShow = upcoming.map(arrival => {
+            const candidates = allBuses.filter(bus =>
+              bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase()
+            );
+            candidates.sort((a, b) => {
+              const distA = haversineDistance(a.location.coordinates, paradaCoords);
+              const distB = haversineDistance(b.location.coordinates, paradaCoords);
+              return distA - distB;
+            });
+            return candidates[0];
+          }).filter(Boolean);
+        }
         setUpcomingBusLocations(busesToShow);
       } catch {
         setUpcomingBusLocations([]);
