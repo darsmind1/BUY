@@ -297,7 +297,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
 
           {busLocations.map((bus) => (
              <Marker 
-                key={bus.id}
+                key={bus.id || `${bus.line}-${bus.location?.coordinates?.join('-')}-${bus.timestamp || Math.random()}`}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 zIndex={100}
                 icon={{
