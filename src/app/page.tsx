@@ -31,6 +31,7 @@ export default function Home() {
   const [currentUserLocation, setCurrentUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [lastBusUpdate, setLastBusUpdate] = useState<Date | null>(null);
   const { toast } = useToast();
   
   const { isLoaded: isGoogleMapsLoaded } = useJsApiLoader({
@@ -60,45 +61,64 @@ export default function Home() {
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
+    let pollingActive = false;
 
     const fetchBusLocations = async () => {
       if (!selectedRoute || apiStatus !== 'connected') {
         setBusLocations([]);
         return;
       }
-      
       const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
       if (!firstTransitStep) {
         setBusLocations([]);
         return;
       }
-      
       const lineName = firstTransitStep.transit?.line.short_name;
       if (!lineName) {
          setBusLocations([]);
          return;
       }
-      
       try {
         const locations = await getBusLocation(lineName, selectedLineDestination ?? undefined);
         setBusLocations(locations);
+        setLastBusUpdate(new Date());
       } catch (error) {
         console.error(`Error fetching locations for line ${lineName}:`, error);
         setBusLocations([]);
       }
     };
-    
-    if (view === 'details' && selectedRoute) {
-        fetchBusLocations(); 
-        intervalId = setInterval(fetchBusLocations, 30000); 
-    } else {
-        setBusLocations([]);
-    }
 
-    return () => {
+    const startPolling = () => {
+      if (!pollingActive) {
+        pollingActive = true;
+        fetchBusLocations();
+        intervalId = setInterval(fetchBusLocations, 15000); // 15s
+      }
+    };
+    const stopPolling = () => {
+      pollingActive = false;
       if (intervalId) {
         clearInterval(intervalId);
+        intervalId = null;
       }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    if (view === 'details' && selectedRoute) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      startPolling();
+    } else {
+      setBusLocations([]);
+      stopPolling();
+    }
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [view, selectedRoute, selectedLineDestination, apiStatus]);
 
@@ -282,6 +302,7 @@ export default function Home() {
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
+                  lastBusUpdate={lastBusUpdate}
                 />
               )}
           </main>
