@@ -32,6 +32,7 @@ export default function Home() {
   const [busLocations, setBusLocations] = useState<BusLocation[]>([]);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [lastBusUpdate, setLastBusUpdate] = useState<Date | null>(null);
+  const [isBusLoading, setIsBusLoading] = useState(false);
   const { toast } = useToast();
   
   const { isLoaded: isGoogleMapsLoaded } = useJsApiLoader({
@@ -60,31 +61,62 @@ export default function Home() {
 
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let pollingInterval = 10000; // 10s inicial
+    let lastLocations: BusLocation[] = [];
+    let retryCount = 0;
+    let isFetching = false;
     let pollingActive = false;
 
     const fetchBusLocations = async () => {
       if (!selectedRoute || apiStatus !== 'connected') {
         setBusLocations([]);
+        setIsBusLoading(false);
         return;
       }
+      if (isFetching) return;
+      isFetching = true;
+      setIsBusLoading(true);
       const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
       if (!firstTransitStep) {
         setBusLocations([]);
+        setIsBusLoading(false);
+        isFetching = false;
         return;
       }
       const lineName = firstTransitStep.transit?.line.short_name;
       if (!lineName) {
          setBusLocations([]);
+         setIsBusLoading(false);
+         isFetching = false;
          return;
       }
       try {
         const locations = await getBusLocation(lineName, selectedLineDestination ?? undefined);
         setBusLocations(locations);
         setLastBusUpdate(new Date());
+        setIsBusLoading(false);
+        // Si la ubicación no cambió, aumenta el intervalo
+        if (JSON.stringify(locations) === JSON.stringify(lastLocations)) {
+          pollingInterval = Math.min(pollingInterval + 5000, 30000); // hasta 30s
+        } else {
+          pollingInterval = 10000; // vuelve a 10s si hay cambios
+        }
+        lastLocations = locations;
+        retryCount = 0;
       } catch (error) {
-        console.error(`Error fetching locations for line ${lineName}:`, error);
-        setBusLocations([]);
+        retryCount++;
+        setIsBusLoading(false);
+        if (retryCount <= 3) {
+          pollingInterval = Math.min(2 ** retryCount * 1000, 30000); // backoff exponencial
+        } else {
+          setBusLocations([]);
+        }
+      } finally {
+        isFetching = false;
+        if (pollingActive) {
+          timeoutId = setTimeout(fetchBusLocations, pollingInterval);
+        }
       }
     };
 
@@ -92,14 +124,13 @@ export default function Home() {
       if (!pollingActive) {
         pollingActive = true;
         fetchBusLocations();
-        intervalId = setInterval(fetchBusLocations, 15000); // 15s
       }
     };
     const stopPolling = () => {
       pollingActive = false;
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
       }
     };
     const handleVisibilityChange = () => {
@@ -114,6 +145,7 @@ export default function Home() {
       startPolling();
     } else {
       setBusLocations([]);
+      setIsBusLoading(false);
       stopPolling();
     }
     return () => {
@@ -303,6 +335,7 @@ export default function Home() {
                   routeIndex={selectedRouteIndex}
                   userLocation={currentUserLocation}
                   lastBusUpdate={lastBusUpdate}
+                  isBusLoading={isBusLoading}
                 />
               )}
           </main>

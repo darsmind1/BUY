@@ -56,6 +56,7 @@ interface RouteDetailsPanelProps {
   routeIndex: number;
   userLocation: google.maps.LatLngLiteral | null;
   lastBusUpdate?: Date | null;
+  isBusLoading?: boolean;
 }
 
 const mapContainerStyle = {
@@ -282,6 +283,7 @@ export default function RouteDetailsPanel({
   routeIndex,
   userLocation,
   lastBusUpdate,
+  isBusLoading,
 }: RouteDetailsPanelProps) {
   const leg = route.legs[0];
   const busLines = getBusLines(leg.steps);
@@ -294,12 +296,19 @@ export default function RouteDetailsPanel({
 
   return (
     <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
-      {/* Indicador de última actualización */}
-      {lastBusUpdate && (
-        <div className="text-xs text-muted-foreground mb-2">
-          Última actualización: {lastBusUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-        </div>
-      )}
+      {/* Indicador de actualización en tiempo real */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 min-h-[1.5em]">
+        {isBusLoading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Actualizando...
+          </>
+        ) : lastBusUpdate ? (
+          <>
+            Actualizado hace {Math.floor((Date.now() - lastBusUpdate.getTime()) / 1000)} segundos
+          </>
+        ) : null}
+      </div>
       <div className="space-y-3 animate-in fade-in-0 slide-in-from-right-4 duration-500 -m-4 md:m-0">
         <div className="md:hidden">
             {isBusLive && (
