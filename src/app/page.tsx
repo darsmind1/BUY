@@ -383,7 +383,7 @@ export default function Home() {
         setMapZoom(17); // Reset zoom
 
         // Set the destination for the directions service
-        const destinationParam: string | google.maps.LatLngLiteral = selectedRoute?.end_address || destination;
+        let destinationParam: string | google.maps.LatLngLiteral = selectedRoute?.end_address || destination;
         if (destinationParam === 'Mi ubicación actual') {
           if (!currentUserLocation) {
             toast({
