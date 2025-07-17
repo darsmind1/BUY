@@ -134,24 +134,24 @@ const mapStyle = [
     "stylers": [{ "color": "#9e9e9e" }]
   },
   {
-    "transit.line",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#e5e5e5" }]
+    featureType: "transit.line",
+    elementType: "geometry",
+    stylers: [{ color: "#e5e5e5" }]
   },
   {
-    "transit.station",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#eeeeee" }]
+    featureType: "transit.station",
+    elementType: "geometry",
+    stylers: [{ color: "#eeeeee" }]
   },
   {
-    "water",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#c9dcec" }]
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#c9dcec" }]
   },
   {
-    "water",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#9e9e9e" }]
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9e9e9e" }]
   }
 ];
 
