@@ -329,20 +329,15 @@ export default function Home() {
       setMapCenter({ lat: stopLat, lng: stopLng });
       setMapZoom(17);
       try {
-        // Buscar los próximos buses de la línea que arriban a la parada de origen (máximo 2)
+        // Buscar los próximos buses de la línea que arriban a la parada de origen (máximo 2, en orden de arribo)
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         if (upcoming && upcoming.length > 0) {
-          // Buscar la ubicación de esos buses
+          // Buscar la ubicación de esos buses por busId
           const busIds = upcoming.map(b => b.busId);
           const locations = await getBusLocation(lineName);
-          // Filtrar por cercanía a la parada (300 metros) y por busId
-          const filtered = locations.filter(bus => {
-            if (!bus.location?.coordinates) return false;
-            const dist = haversineDistance(bus.location.coordinates, [stopLng, stopLat]);
-            return busIds.includes(bus.busId) && dist < 300;
-          });
-          // Si hay menos de 2 buses en el radio, igual muestra los que haya
-          setUpcomingBusLocations(filtered.slice(0, 2));
+          // Solo mostrar los buses cuyo busId está en los dos primeros arribos (en el mismo orden)
+          const filtered = busIds.map(busId => locations.find(bus => bus.busId === busId || bus.id === busId?.toString())).filter(Boolean) as BusLocation[];
+          setUpcomingBusLocations(filtered);
         } else {
           setUpcomingBusLocations([]);
         }
