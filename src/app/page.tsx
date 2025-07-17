@@ -360,19 +360,8 @@ export default function Home() {
         )) || (selectedRoute && selectedRoute.legs[0]?.end_address?.toLowerCase().includes('buenos aires'));
 
         if (isTramoEspecial) {
-          // Sobrescribe el trayecto: fuerza los puntos A y B
-          setMapCenter({ lat: -34.90514509476023, lng: -56.19996327179591 }); // Punto A
-          setMapZoom(16);
-          // Filtra buses en tiempo real sobre el tramo especial
-          const busesOnTramo = allBuses.filter(bus => {
-            const busLat = bus.location.coordinates[1];
-            const busLng = bus.location.coordinates[0];
-            const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, tramoEspecial);
-            console.log(`Bus ${bus.id || bus.line}: distancia al tramo especial = ${minDist} metros`);
-            return minDist < 400; // Subido de 200 a 400 metros
-          });
-          console.log('Buses filtrados sobre el tramo especial:', busesOnTramo);
-          setUpcomingBusLocations(busesOnTramo);
+          // Mostrar todos los buses de la línea en el tramo especial, sin filtrar por proximidad
+          setUpcomingBusLocations(allBuses);
           return; // No sigas con la lógica de Google Directions
         }
         // Si no es el tramo especial, procede con la lógica de Google Directions
