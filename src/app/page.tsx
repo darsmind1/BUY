@@ -438,6 +438,19 @@ export default function Home() {
     return upcomingBusLocations;
   }, [upcomingBusLocations]);
 
+  // Definir isTramoEspecial en el componente principal
+  const isTramoEspecial = (() => {
+    if (view !== 'details' || !selectedRoute) return false;
+    const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+    const departureStop = firstTransitStep?.transit?.departure_stop;
+    return (
+      (departureStop && (
+        departureStop.name?.toLowerCase().includes('buenos aires') ||
+        departureStop.name?.toLowerCase().includes('ituzaingó')
+      )) || (selectedRoute && selectedRoute.legs[0]?.end_address?.toLowerCase().includes('buenos aires'))
+    );
+  })();
+
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
         <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
@@ -480,7 +493,7 @@ export default function Home() {
                   isApiConnected={apiStatus === 'connected'}
                 />
               )}
-              {view === 'details' && selectedRoute && (
+              {view === 'details' && (selectedRoute || isTramoEspecial) && (
                 <RouteDetailsPanel 
                   route={selectedRoute}
                   busLocations={filteredBusLocations}
@@ -490,6 +503,8 @@ export default function Home() {
                   userLocation={currentUserLocation}
                   lastBusUpdate={lastBusUpdate}
                   isBusLoading={isBusLoading}
+                  isTramoEspecial={isTramoEspecial}
+                  tramoEspecial={tramoEspecial}
                 />
               )}
           </main>
