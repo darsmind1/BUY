@@ -284,6 +284,23 @@ export default function Home() {
 
   const showBackButton = view !== 'search';
 
+  // Filtrar buses por línea y sentido antes de pasarlos a la UI
+  const filteredBusLocations = React.useMemo(() => {
+    if (!selectedRoute || !busLocations.length) return [];
+    const firstTransitStep = selectedRoute.legs[0]?.steps.find(step => step.travel_mode === 'TRANSIT' && step.transit);
+    if (!firstTransitStep) return [];
+    const lineName = firstTransitStep.transit?.line.short_name;
+    const destination = selectedLineDestination;
+    return busLocations.filter(bus => {
+      const sameLine = bus.line === lineName;
+      // Si hay destino seleccionado, filtra también por destino
+      if (destination && bus.destination) {
+        return sameLine && bus.destination.toLowerCase() === destination.toLowerCase();
+      }
+      return sameLine;
+    });
+  }, [busLocations, selectedRoute, selectedLineDestination]);
+
   return (
       <div className="flex h-dvh w-full bg-background text-foreground flex-col md:flex-row">
         <aside className={`${mobileView === 'map' ? 'hidden' : 'flex'} w-full md:w-[390px] md:border-r md:shadow-2xl md:flex flex-col h-full`}>
@@ -329,7 +346,7 @@ export default function Home() {
               {view === 'details' && selectedRoute && (
                 <RouteDetailsPanel 
                   route={selectedRoute}
-                  busLocations={busLocations}
+                  busLocations={filteredBusLocations}
                   isGoogleMapsLoaded={isGoogleMapsLoaded}
                   directionsResponse={directionsResponse}
                   routeIndex={selectedRouteIndex}
@@ -353,7 +370,7 @@ export default function Home() {
               routeIndex={selectedRouteIndex}
               userLocation={currentUserLocation}
               selectedRoute={selectedRoute}
-              busLocations={busLocations}
+              busLocations={filteredBusLocations}
               view={view}
             />
         </div>

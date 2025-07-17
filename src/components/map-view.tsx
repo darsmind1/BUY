@@ -132,22 +132,22 @@ const mapStyle = [
     "stylers": [{ "color": "#9e9e9e" }]
   },
   {
-    "featureType": "transit.line",
+    "transit.line",
     "elementType": "geometry",
     "stylers": [{ "color": "#e5e5e5" }]
   },
   {
-    "featureType": "transit.station",
+    "transit.station",
     "elementType": "geometry",
     "stylers": [{ "color": "#eeeeee" }]
   },
   {
-    "featureType": "water",
+    "water",
     "elementType": "geometry",
     "stylers": [{ "color": "#c9dcec" }]
   },
   {
-    "featureType": "water",
+    "water",
     "elementType": "labels.text.fill",
     "stylers": [{ "color": "#9e9e9e" }]
   }
@@ -295,7 +295,7 @@ export default function MapView({ isLoaded, directionsResponse, routeIndex, user
 
           {busLocations.map((bus) => (
              <Marker 
-                key={`${bus.line}-${bus.location.coordinates[1]}-${bus.location.coordinates[0]}`}
+                key={bus.id}
                 position={{ lat: bus.location.coordinates[1], lng: bus.location.coordinates[0] }}
                 zIndex={100}
                 icon={{
