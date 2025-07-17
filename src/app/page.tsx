@@ -329,18 +329,26 @@ export default function Home() {
       setMapCenter({ lat: stopLat, lng: stopLng });
       setMapZoom(17);
       try {
-        // Buscar los próximos buses de la línea que arriban a la parada de origen (máximo 2, en orden de arribo)
+        // Buscar los próximos arribos (máximo 2)
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
-        if (upcoming && upcoming.length > 0) {
-          // Buscar la ubicación de esos buses por busId
-          const busIds = upcoming.map(b => b.busId);
-          const locations = await getBusLocation(lineName);
-          // Solo mostrar los buses cuyo busId está en los dos primeros arribos (en el mismo orden)
-          const filtered = busIds.map(busId => locations.find(bus => bus.busId === busId || bus.id === busId?.toString())).filter(Boolean) as BusLocation[];
-          setUpcomingBusLocations(filtered);
-        } else {
-          setUpcomingBusLocations([]);
-        }
+        const allBuses = await getBusLocation(lineName);
+        // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen
+        const paradaCoords = [stopLng, stopLat];
+        const busesToShow = upcoming.map(arrival => {
+          const candidates = allBuses.filter(bus =>
+            bus.line === arrival.line &&
+            (bus.lineVariantId === (arrival.lineVariantId?.toString() ?? bus.lineVariantId)) &&
+            bus.destination === arrival.destination &&
+            bus.origin === arrival.origin
+          );
+          candidates.sort((a, b) => {
+            const distA = haversineDistance(a.location.coordinates, paradaCoords);
+            const distB = haversineDistance(b.location.coordinates, paradaCoords);
+            return distA - distB;
+          });
+          return candidates[0];
+        }).filter(Boolean);
+        setUpcomingBusLocations(busesToShow);
       } catch {
         setUpcomingBusLocations([]);
       }
