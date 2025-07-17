@@ -345,7 +345,7 @@ export default function RouteDetailsPanel({
                     />
                     {/* Marcador de llegada */}
                     <Marker
-                      position={{ lat: tramoEspecial[tramoEspecial.length - 1][0], lng: tramoEspecial[tramoEspecial.length - 1][1] }}
+                      position={{ lat: -34.908722120146834, lng: -56.205661507097346 }}
                       icon={{
                         path: window.google?.maps?.SymbolPath.CIRCLE || 0,
                         scale: 7,
