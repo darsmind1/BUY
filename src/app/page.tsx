@@ -289,6 +289,20 @@ export default function Home() {
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral | null>(null);
   const [mapZoom, setMapZoom] = useState<number>(17);
 
+  // Polilínea especial para el tramo Buenos Aires - Ituzaingó
+  const tramoEspecial = [
+    [-34.90514509476023, -56.19996327179591],
+    [-34.90408484172328, -56.20059090870147],
+    [-34.904498386030006, -56.20159405486676],
+    [-34.903680094215005, -56.201932013200526],
+    [-34.904005652157586, -56.203074634243194],
+    [-34.905624623823584, -56.20789188162772],
+    [-34.90751191734933, -56.2134386898646],
+    [-34.9095531370282, -56.21293443457813],
+    [-34.91046815008008, -56.210928142243326],
+    [-34.90814100554586, -56.20372372884025]
+  ];
+
   // Función para calcular distancia entre dos puntos (Haversine)
   function haversineDistance([lng1, lat1]: [number, number], [lng2, lat2]: [number, number]) {
     const toRad = (x: number) => x * Math.PI / 180;
@@ -300,6 +314,12 @@ export default function Home() {
               Math.sin(dLng/2) * Math.sin(dLng/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
+  }
+
+  function minDistanceToPolyline(point: google.maps.LatLngLiteral, polyline: [number, number][]): number {
+    return Math.min(...polyline.map(polyPoint =>
+      haversineDistance([point.lng, point.lat], polyPoint)
+    ));
   }
 
   useEffect(() => {
@@ -333,20 +353,32 @@ export default function Home() {
         const upcoming = await getUpcomingBuses(departureStop.stop_id, [lineName], 2);
         const allBuses = await getBusLocation(lineName);
         console.log('Buses en tiempo real de la línea:', allBuses);
-        // Mostrar solo los buses que están sobre el trayecto trazado en el mapa (polilínea)
-        const polyline = selectedRoute?.overview_path || [];
-        function minDistanceToPolyline(point, polyline) {
-          return Math.min(...polyline.map(polyPoint =>
-            haversineDistance([point.lng, point.lat], [polyPoint.lng(), polyPoint.lat()])
-          ));
+        // Si la parada de destino u origen es Buenos Aires - Ituzaingó, usa el tramo especial
+        const isTramoEspecial = (departureStop && (
+          departureStop.name?.toLowerCase().includes('buenos aires') ||
+          departureStop.name?.toLowerCase().includes('ituzaingó')
+        )) || (selectedRoute && selectedRoute.legs[0]?.end_address?.toLowerCase().includes('buenos aires'));
+
+        if (isTramoEspecial) {
+          // Filtra buses en tiempo real sobre el tramo especial
+          const busesOnTramo = allBuses.filter(bus => {
+            const busLat = bus.location.coordinates[1];
+            const busLng = bus.location.coordinates[0];
+            const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, tramoEspecial);
+            return minDist < 200;
+          });
+          setUpcomingBusLocations(busesOnTramo);
+        } else {
+          // Mostrar solo los buses que están sobre el trayecto trazado en el mapa (polilínea)
+          const polyline = selectedRoute?.overview_path || [];
+          const busesOnRoute = allBuses.filter(bus => {
+            const busLat = bus.location.coordinates[1];
+            const busLng = bus.location.coordinates[0];
+            const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, polyline);
+            return minDist < 200; // metros
+          });
+          setUpcomingBusLocations(busesOnRoute);
         }
-        const busesOnRoute = allBuses.filter(bus => {
-          const busLat = bus.location.coordinates[1];
-          const busLng = bus.location.coordinates[0];
-          const minDist = minDistanceToPolyline({ lat: busLat, lng: busLng }, polyline);
-          return minDist < 200; // metros
-        });
-        setUpcomingBusLocations(busesOnRoute);
       } catch {
         setUpcomingBusLocations([]);
       }
