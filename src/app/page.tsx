@@ -335,69 +335,25 @@ export default function Home() {
         console.log('Buses en tiempo real de la línea:', allBuses);
         // Para cada arribo, buscar el bus más cercano que coincida en variante, destino y origen (filtro perfecto)
         const paradaCoords = [stopLng, stopLat];
-        // Filtrado progresivo: de más estricto a más relajado
+        // Mostrar en el mapa el/los bus(es) en tiempo real más cercanos a la parada de origen, para la línea y destino correctos
         let busesToShow: BusLocation[] = [];
-        // 1. Filtro estricto
-        busesToShow = upcoming.map(arrival => {
+        upcoming.forEach(arrival => {
           const candidates = allBuses.filter(bus =>
             bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
-            (String(bus.lineVariantId) === String(arrival.lineVariantId) || !arrival.lineVariantId) &&
-            bus.destination?.toLowerCase() === arrival.destination?.toLowerCase() &&
-            bus.origin?.toLowerCase() === arrival.origin?.toLowerCase()
+            bus.destination?.toLowerCase() === arrival.destination?.toLowerCase()
           );
           candidates.sort((a, b) => {
             const distA = haversineDistance(a.location.coordinates, paradaCoords);
             const distB = haversineDistance(b.location.coordinates, paradaCoords);
             return distA - distB;
           });
-          return candidates[0];
-        }).filter(Boolean);
-        // 2. Relaja a line, origin, destination
-        if (busesToShow.length === 0) {
-          busesToShow = upcoming.map(arrival => {
-            const candidates = allBuses.filter(bus =>
-              bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
-              bus.destination?.toLowerCase() === arrival.destination?.toLowerCase() &&
-              bus.origin?.toLowerCase() === arrival.origin?.toLowerCase()
-            );
-            candidates.sort((a, b) => {
-              const distA = haversineDistance(a.location.coordinates, paradaCoords);
-              const distB = haversineDistance(b.location.coordinates, paradaCoords);
-              return distA - distB;
-            });
-            return candidates[0];
-          }).filter(Boolean);
-        }
-        // 3. Relaja a line, destination
-        if (busesToShow.length === 0) {
-          busesToShow = upcoming.map(arrival => {
-            const candidates = allBuses.filter(bus =>
-              bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase() &&
-              bus.destination?.toLowerCase() === arrival.destination?.toLowerCase()
-            );
-            candidates.sort((a, b) => {
-              const distA = haversineDistance(a.location.coordinates, paradaCoords);
-              const distB = haversineDistance(b.location.coordinates, paradaCoords);
-              return distA - distB;
-            });
-            return candidates[0];
-          }).filter(Boolean);
-        }
-        // 4. Relaja a solo line
-        if (busesToShow.length === 0) {
-          busesToShow = upcoming.map(arrival => {
-            const candidates = allBuses.filter(bus =>
-              bus.line?.toString().toLowerCase() === arrival.line?.toString().toLowerCase()
-            );
-            candidates.sort((a, b) => {
-              const distA = haversineDistance(a.location.coordinates, paradaCoords);
-              const distB = haversineDistance(b.location.coordinates, paradaCoords);
-              return distA - distB;
-            });
-            return candidates[0];
-          }).filter(Boolean);
-        }
-        setUpcomingBusLocations(busesToShow);
+          if (candidates[0] && haversineDistance(candidates[0].location.coordinates, paradaCoords) < 500) {
+            busesToShow.push(candidates[0]);
+          }
+        });
+        // Elimina duplicados por id
+        const uniqueBuses = Array.from(new Map(busesToShow.map(bus => [bus.id, bus])).values());
+        setUpcomingBusLocations(uniqueBuses);
       } catch {
         setUpcomingBusLocations([]);
       }
